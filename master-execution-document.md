@@ -1,8 +1,8 @@
-# ERP System – Master Execution Document (v1)
+# ERP System – Master Execution Document (v2)
 
 ---
 
-# 1. Project Mission
+## 1. Project Mission
 
 Build a **production-ready ERP web application** that manages:
 
@@ -17,30 +17,30 @@ Build a **production-ready ERP web application** that manages:
 
 ---
 
-# 2. Core Principles (Non-Negotiable)
+## 2. Core Principles (Non-Negotiable)
 
-1. **Server is the source of truth**
-2. **Posting is always server-side**
-3. **No direct edits on posted data**
-4. **All effects must go through ledgers**
-5. **Offline = Draft only**
-6. **All critical operations must be idempotent**
-7. **All financial and stock data must be auditable**
+1. Server is the source of truth
+2. Posting is always server-side
+3. No direct edits on posted data
+4. All effects must go through ledgers
+5. Offline = Draft only
+6. All critical operations must be idempotent
+7. All financial and stock data must be auditable
 
 ---
 
-# 3. System Type
+## 3. System Architecture Summary
 
 * Web Application (Responsive)
-* Mobile accessible via browser
+* Mobile via browser
 * Optional PWA support
 * Centralized backend
 
 ---
 
-# 4. Tech Stack
+## 4. Tech Stack
 
-## Backend
+### Backend
 
 * ASP.NET Core Web API
 * SQL Server
@@ -48,35 +48,35 @@ Build a **production-ready ERP web application** that manages:
 * FluentValidation
 * xUnit
 
-## Frontend
+### Frontend
 
 * React + TypeScript
 * React Query
 * React Hook Form
 
-## Offline
+### Offline
 
-* IndexedDB (Drafts only)
+* IndexedDB (Draft storage only)
 * Service Worker (basic caching)
 
 ---
 
-# 5. Development Strategy
+## 5. Development Strategy
 
-## Approach
+### Approach
 
 * Modular Monolith
 * Domain-driven structure
 * Feature-by-feature delivery
 * End-to-end completion per module
 
-## Rule
+### Execution Rule
 
-> Never start a module unless it can be finished end-to-end
+> Never start a module unless it can be completed end-to-end (API + DB + UI + validation + tests)
 
 ---
 
-# 6. Project Structure
+## 6. Project Structure
 
 ```text
 /src
@@ -90,7 +90,7 @@ Build a **production-ready ERP web application** that manages:
 /docs
   business-document.md
   architecture.md
-  implementation-plan.md
+  master-execution-document.md
   mvp-scope.md
   posting-matrix.md
   domain-model.md
@@ -103,27 +103,27 @@ README.md
 
 ---
 
-# 7. Development Phases
+## 7. Development Roadmap
 
 ---
 
-## Phase 0 — Foundation
+### Phase 0 — Foundation
 
-### Goal
+#### Goal
 
-Prepare working environment
+Prepare full working development environment
 
-### Tasks
+#### Tasks
 
-* Setup repo
+* Initialize repo
 * Setup backend & frontend
-* Setup DB connection
-* Base migration
-* Health check API
-* Basic UI layout
-* AGENTS.md creation
+* Setup database connection
+* Create base migration
+* Add health check endpoint
+* Create base UI shell
+* Add AGENTS.md
 
-### Done When
+#### Done When
 
 * Backend runs
 * Frontend runs
@@ -132,9 +132,9 @@ Prepare working environment
 
 ---
 
-## Phase 1 — Master Data
+### Phase 1 — Master Data
 
-### Modules
+#### Modules
 
 * Suppliers
 * Customers
@@ -146,19 +146,19 @@ Prepare working environment
 * Shortage Reason Codes
 * Commission Rules
 
-### Done When
+#### Done When
 
-* CRUD APIs
-* UI forms
-* Validation rules
-* Search & filter
-* Audit fields implemented
+* CRUD APIs complete
+* UI forms available
+* Validation rules applied
+* Search/filter implemented
+* Audit fields present
 
 ---
 
-## Phase 2 — Procurement & Inventory Core
+### Phase 2 — Procurement & Inventory Core
 
-### Modules
+#### Modules
 
 * Purchase Orders
 * Purchase Receipts
@@ -167,163 +167,163 @@ Prepare working environment
 * Shortage Detection
 * Shortage Ledger
 
-### Services
+#### Core Services
 
 * PurchaseReceiptPostingService
 * StockLedgerService
 * ShortageDetectionService
 
-### Done When
+#### Done When
 
-* Draft → Post → Cancel works
-* Stock ledger entries generated
-* Shortage entries generated
-* Validation enforced
+* Draft → Post → Cancel flow works
+* Stock ledger entries generated correctly
+* Shortage entries generated correctly
+* Validation rules enforced
 
 ---
 
-## Phase 3 — Supplier Statement
+### Phase 3 — Supplier Statement
 
-### Modules
+#### Modules
 
 * Supplier Statement Entries
-* Balance tracking
+* Balance calculation
 
-### Rules
+#### Rules
 
 * No manual entries
-* Generated from documents only
+* Generated only from documents
 
-### Done When
+#### Done When
 
-* Supplier balance correct
-* Statement traceable to source docs
+* Supplier balance accurate
+* Statement traceable to source documents
 
 ---
 
-## Phase 4 — Sales Core
+### Phase 4 — Sales Core
 
-### Modules
+#### Modules
 
 * Sales Invoices
 * Customer Statement Entries
 
-### Services
+#### Core Service
 
 * SalesInvoicePostingService
 
-### Done When
+#### Done When
 
-* Sales posting creates:
+* Posting creates:
 
-  * stock out
-  * customer debit
+  * Stock out entries
+  * Customer debit entries
 
 ---
 
-## Phase 5 — Payments & Allocation
+### Phase 5 — Payments & Allocation
 
-### Modules
+#### Modules
 
 * Payments
 * Payment Allocations
 
-### Services
+#### Core Services
 
 * PaymentPostingService
 * PaymentAllocationService
 
-### Done When
+#### Done When
 
-* Partial payments work
-* Multiple allocations supported
+* Partial payments supported
+* Multi-allocation supported
 * Over-allocation prevented
 
 ---
 
-## Phase 6 — Returns
+### Phase 6 — Returns
 
-### Modules
+#### Modules
 
 * Purchase Returns
 * Sales Returns
 
-### Done When
+#### Done When
 
-* Stock reversed
+* Stock reversed correctly
 * Balances corrected
 * Linked to original documents
 
 ---
 
-## Phase 7 — Shortage Resolution
+### Phase 7 — Shortage Resolution
 
-### Modules
+#### Modules
 
 * Shortage Resolutions
-* Allocation per shortage
+* Resolution Allocations
 
-### Done When
+#### Done When
 
 * FIFO allocation works
 * Shortages close correctly
-* Financial/physical handled
+* Physical and financial resolutions handled
 
 ---
 
-## Phase 8 — Commission Engine
+### Phase 8 — Commission Engine
 
-### Modules
+#### Modules
 
 * Commission Rules
 * Commission Entries
 
-### Done When
+#### Done When
 
-* Commission generated on sales
+* Commission generated on eligible sales
 * Reversed on returns
 * Fully traceable
 
 ---
 
-## Phase 9 — HR & Payroll
+### Phase 9 — HR & Payroll
 
-### Modules
+#### Modules
 
 * Employee Advances
 * Salary Slips
 * Payroll Runs
 
-### Done When
+#### Done When
 
 * Salary calculation works
 * Advances deducted automatically
 
 ---
 
-## Phase 10 — Offline Draft Support
+### Phase 10 — Offline Draft Support
 
-### Rules
+#### Rules
 
 * Offline = Draft only
 * No posting offline
 
-### Features
+#### Features
 
-* Save Draft locally
+* Local draft storage (IndexedDB)
 * Pending drafts screen
-* Manual submit
+* Manual submission
 
-### Done When
+#### Done When
 
 * Draft survives refresh/restart
-* Submit works after reconnect
+* Draft can be submitted after reconnect
 
 ---
 
-## Phase 11 — Reporting
+### Phase 11 — Reporting
 
-### Reports
+#### Reports
 
 * Supplier Statement
 * Customer Statement
@@ -333,32 +333,32 @@ Prepare working environment
 * Payment Status
 * Commission Report
 
-### Done When
+#### Done When
 
-* Reports reflect posted data only
+* Reports are accurate and based on posted data only
 
 ---
 
-## Phase 12 — Production Hardening
+### Phase 12 — Production Hardening
 
-### Tasks
+#### Tasks
 
-* Role-based access
-* Logging
+* Role-based access control
+* Logging and monitoring
 * Error handling
 * Performance tuning
 * Backup strategy
 * Deployment pipeline
 
-### Done When
+#### Done When
 
-* System deployable
+* System is deployable
 * Stable under load
 * Secure
 
 ---
 
-# 8. Posting Rules (Critical)
+## 8. Posting Rules (Critical)
 
 Each document must:
 
@@ -381,20 +381,20 @@ Each document must:
 
 ---
 
-# 9. Offline Strategy
+## 9. Offline Strategy Summary
 
-## Allowed Offline
+### Allowed Offline
 
 * Draft creation
 * Draft editing
 
-## Not Allowed Offline
+### Not Allowed Offline
 
 * Posting
 * Stock updates
 * Financial updates
 
-## Sync Flow
+### Sync Flow
 
 * Store locally (IndexedDB)
 * Show pending drafts
@@ -402,7 +402,7 @@ Each document must:
 
 ---
 
-# 10. Definition of Done (Global)
+## 10. Global Definition of Done
 
 A feature is complete only if:
 
@@ -412,52 +412,52 @@ A feature is complete only if:
 * Validation added
 * Tests written
 * Documentation updated
-* No broken flows
+* No regression introduced
 
 ---
 
-# 11. Coding Rules
+## 11. Coding Rules
 
 * No business logic in controllers
-* Use services for posting
+* Use services for workflows and posting
 * Validate all inputs
 * Never edit posted data directly
-* Use clear naming
-* Keep code simple and readable
+* Use clear and explicit naming
+* Prefer simplicity over abstraction
 
 ---
 
-# 12. Testing Strategy
+## 12. Testing Strategy
 
-* Unit tests for:
+### Unit Tests
 
-  * posting logic
-  * allocation logic
-  * shortage logic
+* Posting logic
+* Allocation logic
+* Shortage logic
 
-* Integration tests for:
+### Integration Tests
 
-  * document flows
+* End-to-end document flows
 
 ---
 
-# 13. Execution Rule with Codex
+## 13. Execution Rules with Codex
 
 Each task must include:
 
-* Context files to read
+* Context files (docs)
 * Clear requirements
-* Expected outputs
+* Expected deliverables
 * Definition of done
 
 ---
 
-# 14. First 10 Tasks
+## 14. Initial Execution Tasks
 
 1. Setup project structure
 2. Setup backend
 3. Setup frontend
-4. Setup DB
+4. Setup database
 5. Implement suppliers
 6. Implement warehouses
 7. Implement UOMs
@@ -467,7 +467,7 @@ Each task must include:
 
 ---
 
-# 15. Final Goal
+## 15. Final Goal
 
 Deliver a system that is:
 
@@ -480,4 +480,3 @@ Deliver a system that is:
 ---
 
 # End of Document
-

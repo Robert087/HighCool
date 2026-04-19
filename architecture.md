@@ -1,34 +1,45 @@
 # ERP System – Architecture & Offline Strategy (v1)
 
-## 1. System Type
+---
+
+## 1. System Overview
 
 This system is designed as a:
 
-* **Web Application (Responsive)**
-* Accessible from:
+* **Responsive Web Application**
+* Accessible via:
 
   * Desktop browsers
   * Mobile browsers
 * Future-ready to be installed as a **Progressive Web App (PWA)**
 
-### Key Principle
+### Core Principle
 
 > One system, one backend, one source of truth.
 
 ---
 
-## 2. Core Architecture
+## 2. High-Level Architecture
 
 ### Backend
 
-* Centralized API (e.g. ASP.NET Core / Node.js)
-* Relational Database (SQL Server / PostgreSQL)
+* Centralized API (ASP.NET Core / Node.js)
+* Relational database (SQL Server / PostgreSQL)
+* Responsible for:
+
+  * Business logic
+  * Data integrity
+  * Posting workflows
+  * Validation rules
+
+---
 
 ### Frontend
 
 * Responsive Web UI
-* Works across all screen sizes
-* No separate mobile app required
+* Single codebase for all devices
+* No separate mobile application required
+* Communicates with backend via API
 
 ---
 
@@ -36,24 +47,27 @@ This system is designed as a:
 
 > The **server is always the source of truth**.
 
-* All official data lives on the backend
-* Stock, balances, statements, and financial logic are **never finalized locally**
-* Local storage is used only as a temporary buffer
+### Rules
+
+* All official data is stored on the backend
+* Stock, balances, and financial data are **never finalized locally**
+* Local storage is used only as a **temporary buffer**
+* All business decisions must be confirmed by the server
 
 ---
 
-## 4. Offline Strategy (Simplified)
+## 4. Offline Strategy
 
 ### Design Philosophy
 
 > Keep offline simple, predictable, and safe.
 
-We do **NOT** implement full offline-first architecture.
+This system does **NOT** implement full offline-first architecture.
 
 Instead:
 
 * Offline is supported only for **draft creation**
-* All critical operations require server confirmation
+* All critical operations require **server confirmation**
 
 ---
 
@@ -75,8 +89,8 @@ Users can:
 
 Users can ONLY:
 
-* Create Drafts
-* Edit Drafts
+* Create drafts
+* Edit drafts
 
 Users CANNOT:
 
@@ -88,11 +102,11 @@ Users CANNOT:
 
 ---
 
-## 6. Local Storage Mechanism
+## 6. Local Storage Strategy
 
 ### Technology
 
-* **IndexedDB (Browser Local Storage)**
+* **IndexedDB (browser-based storage)**
 
 ### Stored Data
 
@@ -101,32 +115,38 @@ Users CANNOT:
 
 ### Important Rules
 
-* Local data is temporary
-* It is tied to the device/browser
-* It is not guaranteed permanent storage
+* Data is temporary
+* Data is tied to device/browser
+* Data is not guaranteed permanent
+* Data must be synced to backend as soon as possible
 
 ---
 
 ## 7. Draft Lifecycle
 
-### Offline Draft
+### 7.1 Offline Draft Creation
 
-* Created when no internet
-* Stored locally
+When offline:
+
+* Draft is created locally
+* Stored in IndexedDB
 * Marked as:
 
-  * `local_only = true`
-  * `sync_status = pending`
+```text
+local_only = true
+sync_status = pending
+```
 
 ---
 
-### After Internet Restores
+### 7.2 When Internet is Restored
 
 System behavior:
 
-* Detects connection
-* Shows:
-  **"You have pending drafts"**
+* Detect connection automatically
+* Notify user:
+
+> "You have pending drafts"
 
 User actions:
 
@@ -135,20 +155,29 @@ User actions:
 
 ---
 
-### On Submit
+### 7.3 Draft Submission
+
+On submit:
 
 * Draft is sent to backend
-* Backend validates and processes
-* If successful:
+* Backend performs validation
+* Backend processes business logic
 
-  * Stored permanently in database
-  * Local draft marked as synced or removed
+If successful:
+
+* Data is stored permanently in database
+* Local draft is:
+
+  * marked as synced
+  * or removed
 
 ---
 
-## 8. Posting Rules
+## 8. Posting Strategy
 
-> Posting is always server-side.
+> All posting is server-side only.
+
+### Rules
 
 * No posting logic runs offline
 * No stock updates happen locally
@@ -157,8 +186,8 @@ User actions:
 All posting must:
 
 * Go through backend services
-* Follow validation rules
-* Be idempotent
+* Pass validation rules
+* Be idempotent (safe from duplication)
 
 ---
 
@@ -170,30 +199,31 @@ System must:
 
 * Show clear message:
 
-  * "No internet – saved locally as draft"
+  > "No internet – saved locally as draft"
 * Allow continued draft entry
-* Prevent posting actions
+* Disable posting actions
 
 ---
 
-### When Online Returns
+### When Internet Returns
 
 System must:
 
 * Notify user of pending drafts
 * Provide action:
 
-  * "Submit Pending Drafts"
+  * **Submit Pending Drafts**
 
 ---
 
 ## 10. Restart Behavior
 
 * Drafts stored in IndexedDB will **usually survive device restart**
-* However:
 
-  * Clearing browser data will remove them
-  * Switching devices will not carry drafts
+### Limitations
+
+* Clearing browser data will delete drafts
+* Switching devices will not carry drafts
 
 ### Rule
 
@@ -201,15 +231,15 @@ System must:
 
 ---
 
-## 11. What We Explicitly Avoid
+## 11. Explicitly Out of Scope (For Simplicity)
 
 To keep the system simple and stable, we do NOT implement:
 
 * Full offline posting
-* Real-time sync engines
+* Real-time synchronization engines
 * Conflict resolution engines
-* Multi-device offline merge
-* Local database mirroring full system
+* Multi-device offline merging
+* Full local database mirroring
 
 ---
 
@@ -217,7 +247,7 @@ To keep the system simple and stable, we do NOT implement:
 
 | Aspect           | Decision                |
 | ---------------- | ----------------------- |
-| Platform         | Web App                 |
+| Platform         | Web Application         |
 | Mobile Support   | Responsive UI           |
 | Offline Mode     | Draft-only              |
 | Storage          | IndexedDB               |
@@ -231,20 +261,20 @@ To keep the system simple and stable, we do NOT implement:
 
 > Offline is for **continuity**, not **authority**.
 
-* Users can continue working
-* But system integrity is preserved by server-side control
+* Users can continue working during connection loss
+* System integrity is preserved by server-side control
 
 ---
 
-## 14. Future Extension (Optional)
+## 14. Future Extensions (Optional)
 
-This design allows future upgrades:
+This architecture allows safe future upgrades:
 
-* Auto-sync
+* Automatic sync
 * Background sync
 * Partial offline modules
 
-Without breaking current architecture
+Without breaking the current system design
 
 ---
 
