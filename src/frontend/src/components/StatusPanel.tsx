@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Badge, Card } from "./ui";
 
 export function StatusPanel() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
@@ -17,13 +18,18 @@ export function StatusPanel() {
   }, []);
 
   return (
-    <section className="status-panel">
-      <div>
+    <Card className="status-panel hc-status-panel" muted padding="md">
+      <div className="hc-status-panel__status">
         <span className={`status-dot ${isOnline ? "online" : "offline"}`} />
-        <strong>{isOnline ? "Online" : "Offline"}</strong>
+        <div className="hc-status-panel__copy">
+          <p className="hc-status-panel__title">{isOnline ? "Workspace online" : "Workspace offline"}</p>
+          <p className="hc-status-panel__description">Offline support is reserved for draft work only.</p>
+        </div>
       </div>
-      <p>Offline support is reserved for draft work only.</p>
-      <p>Pending drafts: 0</p>
-    </section>
+      <div className="hc-status-panel__meta">
+        <Badge tone={isOnline ? "success" : "warning"}>{isOnline ? "Connected" : "Offline"}</Badge>
+        <Badge tone="neutral">Pending drafts: 0</Badge>
+      </div>
+    </Card>
   );
 }

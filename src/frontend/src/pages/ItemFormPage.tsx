@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, Checkbox, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
 import {
   createItem,
   getItem,
@@ -20,6 +22,7 @@ const initialValues: ItemFormValues = {
 };
 
 export function ItemFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { itemId } = useParams();
   const isEdit = Boolean(itemId);
@@ -29,6 +32,7 @@ export function ItemFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -72,7 +76,7 @@ export function ItemFormPage() {
     return () => {
       active = false;
     };
-  }, [itemId]);
+  }, [itemId, reloadKey]);
 
   function validate(currentValues: ItemFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -112,8 +116,10 @@ export function ItemFormPage() {
 
       if (currentItemId) {
         await updateItem(currentItemId, values);
+        showToast({ tone: "success", title: "Item updated", description: "The item changes were saved successfully." });
       } else {
         await createItem(values);
+        showToast({ tone: "success", title: "Item created", description: "The new item is now available in the catalogue." });
       }
 
       navigate("/items");
@@ -134,75 +140,75 @@ export function ItemFormPage() {
   }
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit item" : "Create item"}</h2>
-          <p className="page-copy">Define item identity, base UOM, and whether the item is sellable, component, or both.</p>
+    <FormPageLayout
+      eyebrow="Master Data"
+      title={isEdit ? "Edit item" : "Create item"}
+      description="Set the core item details and roles."
+      actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/items">Back to items</Link>}
+    >
+      {loading ? (
+        <div className="hc-card hc-card--md">
+          <div className="hc-skeleton-stack">
+            <SkeletonLoader height="2.75rem" variant="rect" />
+            <SkeletonLoader height="2.75rem" variant="rect" />
+            <SkeletonLoader height="8rem" variant="rect" />
+          </div>
         </div>
-        <Link className="secondary-link" to="/items">
-          Back to items
-        </Link>
-      </div>
+      ) : null}
 
-      {loading ? <p className="feedback">Loading item form...</p> : null}
+      {!loading && formError && uoms.length === 0 ? (
+        <div className="hc-card hc-card--md">
+          <EmptyState
+            title="Unable to load item form"
+            description={formError}
+            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>}
+          />
+        </div>
+      ) : null}
 
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
+      {!loading && (!formError || uoms.length > 0) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
 
-          <label className="form-field">
-            <span>Code</span>
-            <input className="text-input" value={values.code} onChange={(event) => setValue("code", event.target.value)} />
-            {errors.code ? <small className="field-error">{errors.code[0]}</small> : null}
-          </label>
+          <FormSection title="Core details" description="Name, code, and base UOM.">
+            <div className="hc-form-grid">
+              <Field label="Code" required>
+                <Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />
+                {errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}
+              </Field>
 
-          <label className="form-field">
-            <span>Name</span>
-            <input className="text-input" value={values.name} onChange={(event) => setValue("name", event.target.value)} />
-            {errors.name ? <small className="field-error">{errors.name[0]}</small> : null}
-          </label>
+              <Field label="Name" required>
+                <Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />
+                {errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}
+              </Field>
+            </div>
 
-          <label className="form-field">
-            <span>Base UOM</span>
-            <select className="select-input" value={values.baseUomId} onChange={(event) => setValue("baseUomId", event.target.value)}>
-              <option value="">Select base UOM</option>
-              {uoms.map((uom) => (
-                <option key={uom.id} value={uom.id}>
-                  {uom.code} - {uom.name}
-                </option>
-              ))}
-            </select>
-            {errors.baseUomId ? <small className="field-error">{errors.baseUomId[0]}</small> : null}
-          </label>
+            <Field label="Base UOM" required hint="Used as the primary quantity unit.">
+              <Select value={values.baseUomId} onChange={(event) => setValue("baseUomId", event.target.value)}>
+                <option value="">Select base UOM</option>
+                {uoms.map((uom) => (
+                  <option key={uom.id} value={uom.id}>
+                    {uom.code} - {uom.name}
+                  </option>
+                ))}
+              </Select>
+              {errors.baseUomId ? <small className="hc-field-error">{errors.baseUomId[0]}</small> : null}
+            </Field>
+          </FormSection>
 
-          <label className="checkbox-field">
-            <input checked={values.isSellable} onChange={(event) => setValue("isSellable", event.target.checked)} type="checkbox" />
-            <span>Sellable item</span>
-          </label>
+          <FormSection title="Roles and status" description="Choose how the item is used.">
+            <Checkbox checked={values.isSellable} label="Sellable item" onChange={(event) => setValue("isSellable", event.target.checked)} />
+            <Checkbox checked={values.isComponent} label="Component item" onChange={(event) => setValue("isComponent", event.target.checked)} />
+            {errors.isSellable ? <small className="hc-field-error">{errors.isSellable[0]}</small> : null}
+            <Checkbox checked={values.isActive} label="Active item" onChange={(event) => setValue("isActive", event.target.checked)} />
+          </FormSection>
 
-          <label className="checkbox-field">
-            <input checked={values.isComponent} onChange={(event) => setValue("isComponent", event.target.checked)} type="checkbox" />
-            <span>Component item</span>
-          </label>
-          {errors.isSellable ? <small className="field-error">{errors.isSellable[0]}</small> : null}
-
-          <label className="checkbox-field">
-            <input checked={values.isActive} onChange={(event) => setValue("isActive", event.target.checked)} type="checkbox" />
-            <span>Active item</span>
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/items">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save item" : "Create item"}
-            </button>
+          <div className="hc-form-actions">
+            <Link className="hc-button hc-button--ghost hc-button--md" to="/items">Cancel</Link>
+            <Button isLoading={saving} type="submit">{isEdit ? "Save item" : "Create item"}</Button>
           </div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }

@@ -34,6 +34,8 @@ dotnet restore
 dotnet run
 ```
 
+In development, the API uses a local SQLite file (`highcool-dev.db`) by default so the master-data screens can run without a local SQL Server instance. Production/default configuration still targets SQL Server.
+
 ### Health Check
 
 ```bash
@@ -86,6 +88,8 @@ npm run build
 ### Default Connection
 
 The default backend connection string is defined in [appsettings.json](/home/botmother/HighCool/src/backend/Api/appsettings.json).
+
+For local development, [appsettings.Development.json](/home/robb/HighCool/src/backend/Api/appsettings.Development.json) switches the provider to SQLite and auto-creates a seeded `highcool-dev.db` file when the API starts.
 
 You can override it from the terminal:
 

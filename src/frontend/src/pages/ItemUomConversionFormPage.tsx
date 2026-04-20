@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, Checkbox, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
 import {
   createItemUomConversion,
   getItemUomConversion,
@@ -26,6 +28,7 @@ const initialValues: ItemUomConversionFormValues = {
 const roundingModes: RoundingMode[] = ["None", "Round", "Floor", "Ceiling"];
 
 export function ItemUomConversionFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { itemUomConversionId } = useParams();
   const isEdit = Boolean(itemUomConversionId);
@@ -36,6 +39,7 @@ export function ItemUomConversionFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -79,7 +83,7 @@ export function ItemUomConversionFormPage() {
     return () => {
       active = false;
     };
-  }, [itemUomConversionId]);
+  }, [itemUomConversionId, reloadKey]);
 
   function validate(currentValues: ItemUomConversionFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -118,8 +122,10 @@ export function ItemUomConversionFormPage() {
       setSaving(true);
       if (currentConversionId) {
         await updateItemUomConversion(currentConversionId, values);
+        showToast({ tone: "success", title: "Conversion updated", description: "The conversion rule was saved successfully." });
       } else {
         await createItemUomConversion(values);
+        showToast({ tone: "success", title: "Conversion created", description: "The new conversion rule is now available." });
       }
       navigate("/item-uom-conversions");
     } catch (submitError) {
@@ -139,101 +145,66 @@ export function ItemUomConversionFormPage() {
   }
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit item UOM conversion" : "Create item UOM conversion"}</h2>
-          <p className="page-copy">Define an item-specific conversion factor and rounding behavior between two UOMs.</p>
-        </div>
-        <Link className="secondary-link" to="/item-uom-conversions">
-          Back to conversions
-        </Link>
-      </div>
-
-      {loading ? <p className="feedback">Loading item UOM conversion form...</p> : null}
-
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
-
-          <label className="form-field">
-            <span>Item</span>
-            <select className="select-input" value={values.itemId} onChange={(event) => setValue("itemId", event.target.value)}>
-              <option value="">Select item</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.code} - {item.name}
-                </option>
-              ))}
-            </select>
-            {errors.itemId ? <small className="field-error">{errors.itemId[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>From UOM</span>
-            <select className="select-input" value={values.fromUomId} onChange={(event) => setValue("fromUomId", event.target.value)}>
-              <option value="">Select from UOM</option>
-              {uoms.map((uom) => (
-                <option key={uom.id} value={uom.id}>
-                  {uom.code} - {uom.name}
-                </option>
-              ))}
-            </select>
-            {errors.fromUomId ? <small className="field-error">{errors.fromUomId[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>To UOM</span>
-            <select className="select-input" value={values.toUomId} onChange={(event) => setValue("toUomId", event.target.value)}>
-              <option value="">Select to UOM</option>
-              {uoms.map((uom) => (
-                <option key={uom.id} value={uom.id}>
-                  {uom.code} - {uom.name}
-                </option>
-              ))}
-            </select>
-            {errors.toUomId ? <small className="field-error">{errors.toUomId[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Factor</span>
-            <input className="text-input" min={0.000001} step="0.000001" type="number" value={values.factor} onChange={(event) => setValue("factor", Number(event.target.value))} />
-            {errors.factor ? <small className="field-error">{errors.factor[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Rounding mode</span>
-            <select className="select-input" value={values.roundingMode} onChange={(event) => setValue("roundingMode", event.target.value as RoundingMode)}>
-              {roundingModes.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="form-field">
-            <span>Min fraction</span>
-            <input className="text-input" min={0} step="0.000001" type="number" value={values.minFraction} onChange={(event) => setValue("minFraction", Number(event.target.value))} />
-            {errors.minFraction ? <small className="field-error">{errors.minFraction[0]}</small> : null}
-          </label>
-
-          <label className="checkbox-field">
-            <input checked={values.isActive} onChange={(event) => setValue("isActive", event.target.checked)} type="checkbox" />
-            <span>Active conversion rule</span>
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/item-uom-conversions">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save conversion" : "Create conversion"}
-            </button>
-          </div>
+    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit item UOM conversion" : "Create item UOM conversion"} description="Set the conversion factor between two item UOMs." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/item-uom-conversions">Back to conversions</Link>}>
+      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && (items.length === 0 || uoms.length === 0) ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load conversion form" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+      {!loading && (!formError || (items.length > 0 && uoms.length > 0)) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
+          <FormSection title="Conversion definition" description="Item, UOM pair, factor, and rounding.">
+            <div className="hc-form-grid">
+              <Field label="Item" required>
+                <Select value={values.itemId} onChange={(event) => setValue("itemId", event.target.value)}>
+                  <option value="">Select item</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.itemId ? <small className="hc-field-error">{errors.itemId[0]}</small> : null}
+              </Field>
+              <Field label="Rounding mode">
+                <Select value={values.roundingMode} onChange={(event) => setValue("roundingMode", event.target.value as RoundingMode)}>
+                  {roundingModes.map((mode) => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div className="hc-form-grid">
+              <Field label="From UOM" required>
+                <Select value={values.fromUomId} onChange={(event) => setValue("fromUomId", event.target.value)}>
+                  <option value="">Select from UOM</option>
+                  {uoms.map((uom) => (
+                    <option key={uom.id} value={uom.id}>
+                      {uom.code} - {uom.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.fromUomId ? <small className="hc-field-error">{errors.fromUomId[0]}</small> : null}
+              </Field>
+              <Field label="To UOM" required>
+                <Select value={values.toUomId} onChange={(event) => setValue("toUomId", event.target.value)}>
+                  <option value="">Select to UOM</option>
+                  {uoms.map((uom) => (
+                    <option key={uom.id} value={uom.id}>
+                      {uom.code} - {uom.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.toUomId ? <small className="hc-field-error">{errors.toUomId[0]}</small> : null}
+              </Field>
+            </div>
+            <div className="hc-form-grid">
+              <Field label="Factor" required><Input min={0.000001} step="0.000001" type="number" value={values.factor} onChange={(event) => setValue("factor", Number(event.target.value))} />{errors.factor ? <small className="hc-field-error">{errors.factor[0]}</small> : null}</Field>
+              <Field label="Min fraction"><Input min={0} step="0.000001" type="number" value={values.minFraction} onChange={(event) => setValue("minFraction", Number(event.target.value))} />{errors.minFraction ? <small className="hc-field-error">{errors.minFraction[0]}</small> : null}</Field>
+            </div>
+            <Checkbox checked={values.isActive} label="Active conversion rule" onChange={(event) => setValue("isActive", event.target.checked)} />
+          </FormSection>
+          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/item-uom-conversions">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save conversion" : "Create conversion"}</Button></div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }

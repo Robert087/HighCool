@@ -143,6 +143,41 @@ For each task:
 
 ---
 
+## Product direction
+This product must look like a modern B2B enterprise SaaS
+UX should be clear, fast, structured, and premium
+Avoid consumer-style playful UI
+Avoid visual clutter and weak hierarchy
+Design principles
+Clean layout
+Strong hierarchy
+Consistent spacing
+Reusable patterns
+Accessibility-aware
+Responsive
+Server-friendly data UX
+Mandatory patterns
+All list pages use the same toolbar pattern
+All tables support search, filters, pagination
+All forms use labels above fields
+All destructive actions require confirmation
+All pages include loading/empty/error states
+All status values use unified badges
+All page headers follow one pattern
+Technical rules
+Reuse components before creating new ones
+No inline styling unless unavoidable
+Use shared tokens only
+Keep components small and composable
+Separate presentational and business logic when possible
+UX rules
+Search visible by default on list pages
+Quick filters visible, advanced filters in popover/drawer
+Pagination always at bottom right/consistent position
+Selected rows count visible in bulk actions
+No modal for long forms; use page or drawer
+Validation inline, not only toast-based
+
 ## Development Commands (Linux)
 
 ### Backend

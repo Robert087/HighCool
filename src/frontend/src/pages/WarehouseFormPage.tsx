@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, useToast } from "../components/ui";
 import {
   createWarehouse,
   getWarehouse,
@@ -16,6 +18,7 @@ const initialValues: WarehouseFormValues = {
 };
 
 export function WarehouseFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { warehouseId } = useParams();
   const isEdit = Boolean(warehouseId);
@@ -24,6 +27,7 @@ export function WarehouseFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!warehouseId) {
@@ -63,7 +67,7 @@ export function WarehouseFormPage() {
     return () => {
       active = false;
     };
-  }, [warehouseId]);
+  }, [warehouseId, reloadKey]);
 
   function validate(currentValues: WarehouseFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -95,8 +99,10 @@ export function WarehouseFormPage() {
 
       if (currentWarehouseId) {
         await updateWarehouse(currentWarehouseId, values);
+        showToast({ tone: "success", title: "Warehouse updated", description: "The warehouse changes were saved successfully." });
       } else {
         await createWarehouse(values);
+        showToast({ tone: "success", title: "Warehouse created", description: "The new warehouse is now available in the register." });
       }
 
       navigate("/warehouses");
@@ -117,61 +123,23 @@ export function WarehouseFormPage() {
   }
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit warehouse" : "Create warehouse"}</h2>
-          <p className="page-copy">Define warehouses that can later participate in stock and receipt operations.</p>
-        </div>
-        <Link className="secondary-link" to="/warehouses">
-          Back to warehouses
-        </Link>
-      </div>
-
-      {loading ? <p className="feedback">Loading warehouse...</p> : null}
-
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
-
-          <label className="form-field">
-            <span>Code</span>
-            <input className="text-input" value={values.code} onChange={(event) => setValue("code", event.target.value)} />
-            {errors.code ? <small className="field-error">{errors.code[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Name</span>
-            <input className="text-input" value={values.name} onChange={(event) => setValue("name", event.target.value)} />
-            {errors.name ? <small className="field-error">{errors.name[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Location</span>
-            <input className="text-input" value={values.location} onChange={(event) => setValue("location", event.target.value)} />
-            {errors.location ? <small className="field-error">{errors.location[0]}</small> : null}
-          </label>
-
-          <label className="checkbox-field">
-            <input
-              checked={values.isActive}
-              onChange={(event) => setValue("isActive", event.target.checked)}
-              type="checkbox"
-            />
-            <span>Active warehouse</span>
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/warehouses">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save warehouse" : "Create warehouse"}
-            </button>
-          </div>
+    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit warehouse" : "Create warehouse"} description="Set the warehouse identity and location." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/warehouses">Back to warehouses</Link>}>
+      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && isEdit ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load warehouse" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+      {!loading && (!formError || !isEdit) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
+          <FormSection title="Warehouse identity" description="Code, name, and optional location.">
+            <div className="hc-form-grid">
+              <Field label="Code" required><Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />{errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}</Field>
+              <Field label="Name" required><Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />{errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}</Field>
+            </div>
+            <Field label="Location" hint="Optional branch, zone, or operational reference."><Input value={values.location} onChange={(event) => setValue("location", event.target.value)} />{errors.location ? <small className="hc-field-error">{errors.location[0]}</small> : null}</Field>
+            <Checkbox checked={values.isActive} label="Active warehouse" onChange={(event) => setValue("isActive", event.target.checked)} />
+          </FormSection>
+          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/warehouses">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save warehouse" : "Create warehouse"}</Button></div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }

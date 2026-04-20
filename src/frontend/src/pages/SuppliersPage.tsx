@@ -1,14 +1,29 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../services/api";
+import { RowActions } from "../components/patterns";
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  Pagination,
+  SkeletonLoader,
+  useToast,
+} from "../components/ui";
+import { MasterDataFilterToolbar, MasterDataPageHeader, StatusBadge } from "../components/masterData";
 import { deactivateSupplier, listSuppliers, type Supplier } from "../services/masterDataApi";
 
+const PAGE_SIZE = 10;
+
 export function SuppliersPage() {
+  const { showToast } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +53,10 @@ export function SuppliersPage() {
     return () => {
       active = false;
     };
+  }, [search, status, reloadKey]);
+
+  useEffect(() => {
+    setPage(1);
   }, [search, status]);
 
   async function handleDeactivate(id: string) {
@@ -48,75 +67,123 @@ export function SuppliersPage() {
           supplier.id === id ? { ...supplier, isActive: false } : supplier,
         ),
       );
+      showToast({ tone: "success", title: "Supplier deactivated", description: "The supplier is now inactive." });
     } catch (actionError) {
       setError(actionError instanceof ApiError ? actionError.message : "Failed to deactivate supplier.");
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(suppliers.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const visibleSuppliers = suppliers.slice(pageStart, pageStart + PAGE_SIZE);
+  const hasFilters = Boolean(search.trim()) || status !== "all";
+  const resultLabel = suppliers.length === 1 ? "1 supplier" : `${suppliers.length} suppliers`;
+
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>Suppliers</h2>
-          <p className="page-copy">Manage supplier identities used for future statements and procurement flows.</p>
+    <section className="hc-list-page">
+      <MasterDataPageHeader
+        title="Suppliers"
+        description="Review supplier records and contacts."
+        actionLabel="New supplier"
+        actionTo="/suppliers/new"
+      />
+
+      <MasterDataFilterToolbar
+        hasFilters={hasFilters}
+        resultLabel={resultLabel}
+        searchLabel="Search"
+        searchPlaceholder="Search suppliers"
+        searchValue={search}
+        statusValue={status}
+        emptyText="All supplier records"
+        filteredText="Filtered supplier records"
+        onSearchChange={setSearch}
+        onStatusChange={setStatus}
+      />
+
+      {error ? (
+        <div className="hc-card hc-card--md">
+          <EmptyState
+            title="Unable to load suppliers"
+            description={error}
+            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>}
+          />
         </div>
-        <Link className="primary-button" to="/suppliers/new">
-          New supplier
-        </Link>
-      </div>
+      ) : null}
 
-      <div className="toolbar">
-        <input
-          className="text-input"
-          placeholder="Search by code, name, or statement name"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <select className="select-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">All</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
-
-      {error ? <p className="feedback error">{error}</p> : null}
-      {loading ? <p className="feedback">Loading suppliers...</p> : null}
-
-      {!loading ? (
-        <div className="data-table">
-          <div className="data-row data-row--head">
-            <span>Supplier</span>
-            <span>Statement Link</span>
-            <span>Contact</span>
-            <span>Status</span>
-            <span>Actions</span>
+      {loading ? (
+        <div className="hc-card hc-card--md hc-table-card">
+          <div className="hc-skeleton-stack">
+            <SkeletonLoader height="2.75rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
           </div>
-          {suppliers.map((supplier) => (
-            <div key={supplier.id} className="data-row">
-              <span>
-                <strong>{supplier.name}</strong>
-                <small>{supplier.code}</small>
-              </span>
-              <span>{supplier.statementName}</span>
-              <span>{supplier.phone || supplier.email || "No contact"}</span>
-              <span className={supplier.isActive ? "status-pill active" : "status-pill inactive"}>
-                {supplier.isActive ? "Active" : "Inactive"}
-              </span>
-              <span className="row-actions">
-                <Link className="text-link-dark" to={`/suppliers/${supplier.id}/edit`}>
-                  Edit
-                </Link>
-                {supplier.isActive ? (
-                  <button className="secondary-button" onClick={() => void handleDeactivate(supplier.id)} type="button">
-                    Deactivate
-                  </button>
-                ) : null}
-              </span>
-            </div>
-          ))}
-          {!suppliers.length ? <p className="feedback">No suppliers found for the current filter.</p> : null}
         </div>
+      ) : null}
+
+      {!loading && !error ? (
+        <DataTable
+          hasData={suppliers.length > 0}
+          columns={
+            <tr>
+              <th scope="col">Supplier</th>
+              <th scope="col">Statement name</th>
+              <th scope="col">Contact</th>
+              <th scope="col">Status</th>
+              <th scope="col" className="hc-table__head-actions" aria-label="Actions" />
+            </tr>
+          }
+          rows={visibleSuppliers.map((supplier) => (
+            <tr key={supplier.id} className="hc-table__row">
+              <td>
+                <div className="hc-table__cell-strong">
+                  <span className="hc-table__title">{supplier.name}</span>
+                  <span className="hc-table__subtitle">{supplier.code}</span>
+                </div>
+              </td>
+              <td>
+                <div className="hc-table__cell-strong">
+                  <span className="hc-table__title">{supplier.statementName}</span>
+                  <span className="hc-table__subtitle">Statement identity</span>
+                </div>
+              </td>
+              <td>
+                <div className="hc-table__meta-list">
+                  <span className="hc-table__subtitle">{supplier.phone || "No phone"}</span>
+                  <span className="hc-table__subtitle">{supplier.email || "No email"}</span>
+                </div>
+              </td>
+              <td><StatusBadge isActive={supplier.isActive} /></td>
+              <td className="hc-table__cell-actions">
+                <RowActions>
+                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/suppliers/${supplier.id}/edit`}>Edit</Link>
+                  {supplier.isActive ? (
+                    <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(supplier.id)}>Deactivate</Button>
+                  ) : null}
+                </RowActions>
+              </td>
+            </tr>
+          ))}
+          footer={
+            <>
+              <p className="hc-table__footer-note">Client-side pagination for the current result set.</p>
+              <Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={suppliers.length} totalPages={totalPages} />
+            </>
+          }
+          emptyState={
+            hasFilters ? (
+              <EmptyState title="No suppliers match the current filters" description="Try a broader search or reset the filters." />
+            ) : (
+              <EmptyState
+                title="No suppliers yet"
+                description="Add your first supplier to start the directory."
+                action={<Link className="hc-button hc-button--primary hc-button--md" to="/suppliers/new">Create supplier</Link>}
+              />
+            )
+          }
+        />
       ) : null}
     </section>
   );

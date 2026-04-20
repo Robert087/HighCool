@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, useToast } from "../components/ui";
 import {
   createUom,
   getUom,
@@ -17,6 +19,7 @@ const initialValues: UomFormValues = {
 };
 
 export function UomFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { uomId } = useParams();
   const isEdit = Boolean(uomId);
@@ -25,6 +28,7 @@ export function UomFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!uomId) {
@@ -65,7 +69,7 @@ export function UomFormPage() {
     return () => {
       active = false;
     };
-  }, [uomId]);
+  }, [uomId, reloadKey]);
 
   function validate(currentValues: UomFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -101,8 +105,10 @@ export function UomFormPage() {
 
       if (currentUomId) {
         await updateUom(currentUomId, values);
+        showToast({ tone: "success", title: "UOM updated", description: "The UOM changes were saved successfully." });
       } else {
         await createUom(values);
+        showToast({ tone: "success", title: "UOM created", description: "The new UOM is now available in the catalogue." });
       }
 
       navigate("/uoms");
@@ -123,77 +129,24 @@ export function UomFormPage() {
   }
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit UOM" : "Create UOM"}</h2>
-          <p className="page-copy">Define the code, precision, and fraction behavior for future inventory usage.</p>
-        </div>
-        <Link className="secondary-link" to="/uoms">
-          Back to UOMs
-        </Link>
-      </div>
-
-      {loading ? <p className="feedback">Loading UOM...</p> : null}
-
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
-
-          <label className="form-field">
-            <span>Code</span>
-            <input className="text-input" value={values.code} onChange={(event) => setValue("code", event.target.value)} />
-            {errors.code ? <small className="field-error">{errors.code[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Name</span>
-            <input className="text-input" value={values.name} onChange={(event) => setValue("name", event.target.value)} />
-            {errors.name ? <small className="field-error">{errors.name[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Precision</span>
-            <input
-              className="text-input"
-              max={6}
-              min={0}
-              type="number"
-              value={values.precision}
-              onChange={(event) => setValue("precision", Number(event.target.value))}
-            />
-            {errors.precision ? <small className="field-error">{errors.precision[0]}</small> : null}
-          </label>
-
-          <label className="checkbox-field">
-            <input
-              checked={values.allowsFraction}
-              onChange={(event) => setValue("allowsFraction", event.target.checked)}
-              type="checkbox"
-            />
-            <span>Allows fractional quantities</span>
-          </label>
-
-          <label className="checkbox-field">
-            <input
-              checked={values.isActive}
-              onChange={(event) => setValue("isActive", event.target.checked)}
-              type="checkbox"
-            />
-            <span>Active UOM</span>
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/uoms">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save UOM" : "Create UOM"}
-            </button>
-          </div>
+    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit UOM" : "Create UOM"} description="Set the measurement code and precision rules." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/uoms">Back to UOMs</Link>}>
+      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && isEdit ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load UOM" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+      {!loading && (!formError || !isEdit) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
+          <FormSection title="Measurement definition" description="Code, name, and fraction rules.">
+            <div className="hc-form-grid">
+              <Field label="Code" required><Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />{errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}</Field>
+              <Field label="Name" required><Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />{errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}</Field>
+            </div>
+            <Field label="Precision" required hint="Allowed range is 0 to 6 decimal places."><Input max={6} min={0} type="number" value={values.precision} onChange={(event) => setValue("precision", Number(event.target.value))} />{errors.precision ? <small className="hc-field-error">{errors.precision[0]}</small> : null}</Field>
+            <Checkbox checked={values.allowsFraction} label="Allows fractional quantities" onChange={(event) => setValue("allowsFraction", event.target.checked)} />
+            <Checkbox checked={values.isActive} label="Active UOM" onChange={(event) => setValue("isActive", event.target.checked)} />
+          </FormSection>
+          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/uoms">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save UOM" : "Create UOM"}</Button></div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }

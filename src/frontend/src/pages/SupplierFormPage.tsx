@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, useToast } from "../components/ui";
 import {
   createSupplier,
   getSupplier,
@@ -18,6 +20,7 @@ const initialValues: SupplierFormValues = {
 };
 
 export function SupplierFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { supplierId } = useParams();
   const isEdit = Boolean(supplierId);
@@ -26,6 +29,7 @@ export function SupplierFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!supplierId) {
@@ -67,7 +71,7 @@ export function SupplierFormPage() {
     return () => {
       active = false;
     };
-  }, [supplierId]);
+  }, [supplierId, reloadKey]);
 
   function validate(currentValues: SupplierFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -107,8 +111,10 @@ export function SupplierFormPage() {
 
       if (currentSupplierId) {
         await updateSupplier(currentSupplierId, values);
+        showToast({ tone: "success", title: "Supplier updated", description: "The supplier changes were saved successfully." });
       } else {
         await createSupplier(values);
+        showToast({ tone: "success", title: "Supplier created", description: "The new supplier is now available in the register." });
       }
 
       navigate("/suppliers");
@@ -129,77 +135,29 @@ export function SupplierFormPage() {
   }
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit supplier" : "Create supplier"}</h2>
-          <p className="page-copy">Capture the supplier identity fields needed for future statement linkage.</p>
-        </div>
-        <Link className="secondary-link" to="/suppliers">
-          Back to suppliers
-        </Link>
-      </div>
-
-      {loading ? <p className="feedback">Loading supplier...</p> : null}
-
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
-
-          <label className="form-field">
-            <span>Code</span>
-            <input className="text-input" value={values.code} onChange={(event) => setValue("code", event.target.value)} />
-            {errors.code ? <small className="field-error">{errors.code[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Name</span>
-            <input className="text-input" value={values.name} onChange={(event) => setValue("name", event.target.value)} />
-            {errors.name ? <small className="field-error">{errors.name[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Statement Name</span>
-            <input
-              className="text-input"
-              value={values.statementName}
-              onChange={(event) => setValue("statementName", event.target.value)}
-            />
-            {errors.statementName ? <small className="field-error">{errors.statementName[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Phone</span>
-            <input className="text-input" value={values.phone} onChange={(event) => setValue("phone", event.target.value)} />
-            {errors.phone ? <small className="field-error">{errors.phone[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Email</span>
-            <input className="text-input" value={values.email} onChange={(event) => setValue("email", event.target.value)} />
-            {errors.email ? <small className="field-error">{errors.email[0]}</small> : null}
-          </label>
-
-          <label className="checkbox-field">
-            <input
-              checked={values.isActive}
-              onChange={(event) => setValue("isActive", event.target.checked)}
-              type="checkbox"
-            />
-            <span>Active supplier</span>
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/suppliers">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save supplier" : "Create supplier"}
-            </button>
-          </div>
+    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit supplier" : "Create supplier"} description="Set the supplier record and contact details." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/suppliers">Back to suppliers</Link>}>
+      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && isEdit ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load supplier" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+      {!loading && (!formError || !isEdit) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
+          <FormSection title="Supplier identity" description="Core naming and reference fields.">
+            <div className="hc-form-grid">
+              <Field label="Code" required><Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />{errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}</Field>
+              <Field label="Name" required><Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />{errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}</Field>
+            </div>
+            <Field label="Statement name" required hint="Shown on supplier statements."><Input value={values.statementName} onChange={(event) => setValue("statementName", event.target.value)} />{errors.statementName ? <small className="hc-field-error">{errors.statementName[0]}</small> : null}</Field>
+          </FormSection>
+          <FormSection title="Contact and status" description="Keep the record reachable and current.">
+            <div className="hc-form-grid">
+              <Field label="Phone"><Input value={values.phone} onChange={(event) => setValue("phone", event.target.value)} />{errors.phone ? <small className="hc-field-error">{errors.phone[0]}</small> : null}</Field>
+              <Field label="Email"><Input value={values.email} onChange={(event) => setValue("email", event.target.value)} />{errors.email ? <small className="hc-field-error">{errors.email[0]}</small> : null}</Field>
+            </div>
+            <Checkbox checked={values.isActive} label="Active supplier" onChange={(event) => setValue("isActive", event.target.checked)} />
+          </FormSection>
+          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/suppliers">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save supplier" : "Create supplier"}</Button></div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }

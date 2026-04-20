@@ -1,14 +1,29 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../services/api";
+import { RowActions } from "../components/patterns";
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  Pagination,
+  SkeletonLoader,
+  useToast,
+} from "../components/ui";
+import { MasterDataFilterToolbar, MasterDataPageHeader, StatusBadge } from "../components/masterData";
 import { deactivateUom, listUoms, type Uom } from "../services/masterDataApi";
 
+const PAGE_SIZE = 10;
+
 export function UomsPage() {
+  const { showToast } = useToast();
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +53,10 @@ export function UomsPage() {
     return () => {
       active = false;
     };
+  }, [search, status, reloadKey]);
+
+  useEffect(() => {
+    setPage(1);
   }, [search, status]);
 
   async function handleDeactivate(id: string) {
@@ -46,75 +65,81 @@ export function UomsPage() {
       setUoms((current) =>
         current.map((uom) => (uom.id === id ? { ...uom, isActive: false } : uom)),
       );
+      showToast({ tone: "success", title: "UOM deactivated", description: "The UOM is now inactive." });
     } catch (actionError) {
       setError(actionError instanceof ApiError ? actionError.message : "Failed to deactivate UOM.");
     }
   }
 
+  const totalPages = Math.max(1, Math.ceil(uoms.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const visibleUoms = uoms.slice(pageStart, pageStart + PAGE_SIZE);
+  const hasFilters = Boolean(search.trim()) || status !== "all";
+  const resultLabel = uoms.length === 1 ? "1 UOM" : `${uoms.length} UOMs`;
+
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>Units of Measure</h2>
-          <p className="page-copy">Manage the controlled UOM catalogue used by future item and conversion rules.</p>
-        </div>
-        <Link className="primary-button" to="/uoms/new">
-          New UOM
-        </Link>
-      </div>
+    <section className="hc-list-page">
+      <MasterDataPageHeader title="Units of Measure" description="Review the shared measurement catalog." actionLabel="New UOM" actionTo="/uoms/new" />
 
-      <div className="toolbar">
-        <input
-          className="text-input"
-          placeholder="Search by code or name"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <select className="select-input" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">All</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </div>
+      <MasterDataFilterToolbar
+        hasFilters={hasFilters}
+        resultLabel={resultLabel}
+        searchLabel="Search"
+        searchPlaceholder="Search UOMs"
+        searchValue={search}
+        statusValue={status}
+        emptyText="All UOM records"
+        filteredText="Filtered UOM records"
+        onSearchChange={setSearch}
+        onStatusChange={setStatus}
+      />
 
-      {error ? <p className="feedback error">{error}</p> : null}
-      {loading ? <p className="feedback">Loading UOMs...</p> : null}
+      {error ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load UOMs" description={error} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
 
-      {!loading ? (
-        <div className="data-table">
-          <div className="data-row data-row--head">
-            <span>UOM</span>
-            <span>Precision</span>
-            <span>Fractions</span>
-            <span>Status</span>
-            <span>Actions</span>
+      {loading ? (
+        <div className="hc-card hc-card--md hc-table-card">
+          <div className="hc-skeleton-stack">
+            <SkeletonLoader height="2.75rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
+            <SkeletonLoader height="3.5rem" variant="rect" />
           </div>
-          {uoms.map((uom) => (
-            <div key={uom.id} className="data-row">
-              <span>
-                <strong>{uom.name}</strong>
-                <small>{uom.code}</small>
-              </span>
-              <span>{uom.precision}</span>
-              <span>{uom.allowsFraction ? "Allowed" : "Whole numbers only"}</span>
-              <span className={uom.isActive ? "status-pill active" : "status-pill inactive"}>
-                {uom.isActive ? "Active" : "Inactive"}
-              </span>
-              <span className="row-actions">
-                <Link className="text-link-dark" to={`/uoms/${uom.id}/edit`}>
-                  Edit
-                </Link>
-                {uom.isActive ? (
-                  <button className="secondary-button" onClick={() => void handleDeactivate(uom.id)} type="button">
-                    Deactivate
-                  </button>
-                ) : null}
-              </span>
-            </div>
-          ))}
-          {!uoms.length ? <p className="feedback">No UOMs found for the current filter.</p> : null}
         </div>
+      ) : null}
+
+      {!loading && !error ? (
+        <DataTable
+          hasData={uoms.length > 0}
+          columns={<tr><th scope="col">UOM</th><th scope="col">Precision</th><th scope="col">Fractions</th><th scope="col">Status</th><th scope="col" className="hc-table__head-actions" aria-label="Actions" /></tr>}
+          rows={visibleUoms.map((uom) => (
+            <tr key={uom.id} className="hc-table__row">
+              <td><div className="hc-table__cell-strong"><span className="hc-table__title">{uom.name}</span><span className="hc-table__subtitle">{uom.code}</span></div></td>
+              <td><div className="hc-table__cell-strong"><span className="hc-table__title">{uom.precision}</span><span className="hc-table__subtitle">Decimal places</span></div></td>
+              <td><span className="hc-table__subtitle">{uom.allowsFraction ? "Allowed" : "Whole numbers only"}</span></td>
+              <td><StatusBadge isActive={uom.isActive} /></td>
+              <td className="hc-table__cell-actions">
+                <RowActions>
+                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/uoms/${uom.id}/edit`}>Edit</Link>
+                  {uom.isActive ? <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(uom.id)}>Deactivate</Button> : null}
+                </RowActions>
+              </td>
+            </tr>
+          ))}
+          footer={
+            <>
+              <p className="hc-table__footer-note">Client-side pagination for the current result set.</p>
+              <Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={uoms.length} totalPages={totalPages} />
+            </>
+          }
+          emptyState={
+            hasFilters ? (
+              <EmptyState title="No UOMs match the current filters" description="Try a broader search or reset the filters." />
+            ) : (
+              <EmptyState title="No UOMs yet" description="Add your first unit of measure." action={<Link className="hc-button hc-button--primary hc-button--md" to="/uoms/new">Create UOM</Link>} />
+            )
+          }
+        />
       ) : null}
     </section>
   );

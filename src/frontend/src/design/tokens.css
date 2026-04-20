@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light;
+
+  --hc-color-background-canvas: #f5f7fb;
+  --hc-color-background-subtle: #edf2f8;
+  --hc-color-surface-default: #ffffff;
+  --hc-color-surface-muted: #f8fafc;
+  --hc-color-surface-emphasis: #f1f5f9;
+  --hc-color-border-subtle: #e3eaf2;
+  --hc-color-border-strong: #cdd8e5;
+
+  --hc-color-text-primary: #142235;
+  --hc-color-text-secondary: #425467;
+  --hc-color-text-muted: #6a7a8c;
+  --hc-color-text-inverse: #f8fbff;
+
+  --hc-color-primary: #2563eb;
+  --hc-color-primary-hover: #1d4ed8;
+  --hc-color-primary-soft: #edf4ff;
+  --hc-color-success: #157f50;
+  --hc-color-success-soft: #eaf7f0;
+  --hc-color-warning: #b45309;
+  --hc-color-warning-soft: #fff5e8;
+  --hc-color-danger: #c24137;
+  --hc-color-danger-soft: #fef1f0;
+  --hc-color-focus-ring: rgba(37, 99, 235, 0.18);
+
+  --hc-font-family-base: "Manrope", "Segoe UI Variable Text", "Segoe UI", "Noto Sans", sans-serif;
+  --hc-font-weight-regular: 400;
+  --hc-font-weight-medium: 500;
+  --hc-font-weight-semibold: 600;
+  --hc-font-weight-bold: 700;
+
+  --hc-font-size-page-title: 2.125rem;
+  --hc-font-size-section-title: 1.1875rem;
+  --hc-font-size-body: 0.9375rem;
+  --hc-font-size-small: 0.8125rem;
+  --hc-font-size-label: 0.875rem;
+  --hc-line-height-tight: 1.15;
+  --hc-line-height-base: 1.5;
+  --hc-line-height-relaxed: 1.7;
+
+  --hc-space-1: 0.25rem;
+  --hc-space-2: 0.5rem;
+  --hc-space-3: 0.75rem;
+  --hc-space-4: 1rem;
+  --hc-space-5: 1.25rem;
+  --hc-space-6: 1.5rem;
+  --hc-space-8: 2rem;
+  --hc-space-10: 2.5rem;
+  --hc-space-12: 3rem;
+
+  --hc-radius-sm: 0.625rem;
+  --hc-radius-md: 0.875rem;
+  --hc-radius-lg: 1.125rem;
+  --hc-radius-xl: 1.5rem;
+  --hc-radius-pill: 999px;
+
+  --hc-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --hc-shadow-md: 0 10px 24px rgba(15, 23, 42, 0.06);
+  --hc-shadow-lg: 0 20px 40px rgba(15, 23, 42, 0.08);
+
+  --hc-transition-fast: 140ms ease;
+  --hc-transition-slow: 220ms ease;
+}
+
+body {
+  font-family: var(--hc-font-family-base);
+  font-size: var(--hc-font-size-body);
+  line-height: var(--hc-line-height-base);
+  color: var(--hc-color-text-primary);
+  background: var(--hc-color-background-canvas);
+}

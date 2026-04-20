@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
+import { FormPageLayout, FormSection } from "../components/patterns";
+import { Button, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
 import {
   createItemComponent,
   getItemComponent,
@@ -17,6 +19,7 @@ const initialValues: ItemComponentFormValues = {
 };
 
 export function ItemComponentFormPage() {
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const { itemComponentId } = useParams();
   const isEdit = Boolean(itemComponentId);
@@ -26,6 +29,7 @@ export function ItemComponentFormPage() {
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -63,7 +67,7 @@ export function ItemComponentFormPage() {
     return () => {
       active = false;
     };
-  }, [itemComponentId]);
+  }, [itemComponentId, reloadKey]);
 
   function validate(currentValues: ItemComponentFormValues): ValidationErrors {
     const nextErrors: ValidationErrors = {};
@@ -96,8 +100,10 @@ export function ItemComponentFormPage() {
       setSaving(true);
       if (currentRowId) {
         await updateItemComponent(currentRowId, values);
+        showToast({ tone: "success", title: "Component row updated", description: "The component relationship was saved successfully." });
       } else {
         await createItemComponent(values);
+        showToast({ tone: "success", title: "Component row created", description: "The new component relationship is now available." });
       }
       navigate("/item-components");
     } catch (submitError) {
@@ -119,73 +125,45 @@ export function ItemComponentFormPage() {
   const componentCandidates = items.filter((item) => item.isComponent);
 
   return (
-    <section className="page-section">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Master Data</p>
-          <h2>{isEdit ? "Edit item component" : "Create item component"}</h2>
-          <p className="page-copy">Attach a component item and required quantity to a parent item.</p>
-        </div>
-        <Link className="secondary-link" to="/item-components">
-          Back to item components
-        </Link>
-      </div>
-
-      {loading ? <p className="feedback">Loading item component form...</p> : null}
-
-      {!loading ? (
-        <form className="entity-form" onSubmit={handleSubmit}>
-          {formError ? <p className="feedback error">{formError}</p> : null}
-
-          <label className="form-field">
-            <span>Parent item</span>
-            <select className="select-input" value={values.parentItemId} onChange={(event) => setValue("parentItemId", event.target.value)}>
-              <option value="">Select parent item</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.code} - {item.name}
-                </option>
-              ))}
-            </select>
-            {errors.parentItemId ? <small className="field-error">{errors.parentItemId[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Component item</span>
-            <select className="select-input" value={values.componentItemId} onChange={(event) => setValue("componentItemId", event.target.value)}>
-              <option value="">Select component item</option>
-              {componentCandidates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.code} - {item.name}
-                </option>
-              ))}
-            </select>
-            {errors.componentItemId ? <small className="field-error">{errors.componentItemId[0]}</small> : null}
-          </label>
-
-          <label className="form-field">
-            <span>Quantity</span>
-            <input
-              className="text-input"
-              min={0.000001}
-              step="0.000001"
-              type="number"
-              value={values.quantity}
-              onChange={(event) => setValue("quantity", Number(event.target.value))}
-            />
-            {errors.quantity ? <small className="field-error">{errors.quantity[0]}</small> : null}
-          </label>
-
-          <div className="form-actions">
-            <Link className="secondary-link" to="/item-components">
-              Cancel
-            </Link>
-            <button className="primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : isEdit ? "Save component row" : "Create component row"}
-            </button>
-          </div>
+    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit item component" : "Create item component"} description="Link a component item to a parent item." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/item-components">Back to item components</Link>}>
+      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && items.length === 0 ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load item component form" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+      {!loading && (!formError || items.length > 0) ? (
+        <form className="hc-form-stack" onSubmit={handleSubmit}>
+          {formError ? <div className="hc-inline-error">{formError}</div> : null}
+          <FormSection title="Relationship definition" description="Parent item, component item, and quantity.">
+            <div className="hc-form-grid">
+              <Field label="Parent item" required>
+                <Select value={values.parentItemId} onChange={(event) => setValue("parentItemId", event.target.value)}>
+                  <option value="">Select parent item</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.parentItemId ? <small className="hc-field-error">{errors.parentItemId[0]}</small> : null}
+              </Field>
+              <Field label="Component item" required>
+                <Select value={values.componentItemId} onChange={(event) => setValue("componentItemId", event.target.value)}>
+                  <option value="">Select component item</option>
+                  {componentCandidates.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.code} - {item.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.componentItemId ? <small className="hc-field-error">{errors.componentItemId[0]}</small> : null}
+              </Field>
+            </div>
+            <Field label="Quantity" required hint="The quantity required per one parent item unit.">
+              <Input min={0.000001} step="0.000001" type="number" value={values.quantity} onChange={(event) => setValue("quantity", Number(event.target.value))} />
+              {errors.quantity ? <small className="hc-field-error">{errors.quantity[0]}</small> : null}
+            </Field>
+          </FormSection>
+          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/item-components">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save component row" : "Create component row"}</Button></div>
         </form>
       ) : null}
-    </section>
+    </FormPageLayout>
   );
 }
