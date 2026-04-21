@@ -14,5 +14,8 @@ public sealed class Supplier : AuditableEntity
 
     public string? Email { get; set; }
 
+    public string? Notes { get; set; }
+
     public bool IsActive { get; set; } = true;
+
 }
