@@ -1,6 +1,7 @@
 using ERP.Domain.MasterData;
 using ERP.Domain.Shortages;
 using ERP.Infrastructure.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,11 +27,113 @@ public sealed class DevelopmentDatabaseInitializer(
         using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        await dbContext.Database.MigrateAsync(cancellationToken);
+        await EnsureSqliteDatabaseIsReadyAsync(dbContext, cancellationToken);
         await SeedAsync(dbContext, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    private static async Task EnsureSqliteDatabaseIsReadyAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var databasePath = TryGetSqliteDatabasePath(dbContext);
+
+        if (!string.IsNullOrWhiteSpace(databasePath) &&
+            File.Exists(databasePath) &&
+            await IsPartiallyInitializedAsync(dbContext, cancellationToken))
+        {
+            await ResetSqliteDatabaseFileAsync(dbContext, databasePath);
+        }
+
+        try
+        {
+            await dbContext.Database.MigrateAsync(cancellationToken);
+        }
+        catch (SqliteException) when (!string.IsNullOrWhiteSpace(databasePath) && File.Exists(databasePath))
+        {
+            await ResetSqliteDatabaseFileAsync(dbContext, databasePath);
+            await dbContext.Database.MigrateAsync(cancellationToken);
+        }
+    }
+
+    private static async Task ResetSqliteDatabaseFileAsync(AppDbContext dbContext, string databasePath)
+    {
+        await dbContext.Database.CloseConnectionAsync();
+        SqliteConnection.ClearAllPools();
+        File.Delete(databasePath);
+    }
+
+    private static string? TryGetSqliteDatabasePath(AppDbContext dbContext)
+    {
+        var connectionString = dbContext.Database.GetConnectionString();
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return null;
+        }
+
+        try
+        {
+            var builder = new SqliteConnectionStringBuilder(connectionString);
+
+            if (string.IsNullOrWhiteSpace(builder.DataSource) || builder.DataSource == ":memory:")
+            {
+                return null;
+            }
+
+            return Path.GetFullPath(builder.DataSource);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<bool> IsPartiallyInitializedAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldCloseConnection = connection.State != System.Data.ConnectionState.Open;
+
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+              AND name <> '__EFMigrationsHistory';
+            """;
+
+        var userTableCount = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+
+        if (userTableCount == 0)
+        {
+            return false;
+        }
+
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name = '__EFMigrationsHistory';
+            """;
+
+        var hasMigrationHistoryTable = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+
+        if (shouldCloseConnection)
+        {
+            await connection.CloseAsync();
+        }
+
+        return !hasMigrationHistoryTable;
+    }
 
     private static async Task SeedAsync(AppDbContext dbContext, CancellationToken cancellationToken)
     {
