@@ -23,6 +23,8 @@ RUN dotnet publish Api/ERP.Api.csproj -c Release -o /app/publish /p:UseAppHost=f
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
+RUN mkdir -p /app/data
+
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 

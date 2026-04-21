@@ -5,18 +5,13 @@ namespace ERP.Infrastructure.Persistence.Factories;
 
 public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
-    private const string SqlServerFallbackConnectionString =
-        "Server=localhost,1433;Database=ERPDb;User Id=sa;Password=YourStrong@Pass123;TrustServerCertificate=True";
-
     private const string SqliteFallbackConnectionString = "Data Source=highcool-dev.db";
 
     public AppDbContext CreateDbContext(string[] args)
     {
-        var provider = Environment.GetEnvironmentVariable("DatabaseProvider") ?? "SqlServer";
+        var provider = Environment.GetEnvironmentVariable("DatabaseProvider") ?? "Sqlite";
         var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
-                ? SqliteFallbackConnectionString
-                : SqlServerFallbackConnectionString);
+            ?? SqliteFallbackConnectionString;
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
 
