@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { buildApiUrl, requestJson } from "./api";
 
 export type StockTransactionType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortagePhysicalResolution";
 export type SourceDocumentType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortageResolution";
@@ -54,7 +54,7 @@ export interface StockBalance {
 }
 
 function buildInventoryUrl(path: string, filters: InventoryFilters): string {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(buildApiUrl(path));
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -82,7 +82,7 @@ function buildInventoryUrl(path: string, filters: InventoryFilters): string {
     url.searchParams.set("toDate", endOfDay.toISOString());
   }
 
-  return `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 export function listStockLedger(filters: InventoryFilters) {

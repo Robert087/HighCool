@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { buildApiUrl, requestJson } from "./api";
 import type { DocumentStatus } from "./purchaseReceiptsApi";
 
 export type ShortageResolutionType = "Physical" | "Financial";
@@ -172,7 +172,7 @@ function applyDateFilters(url: URL, fromDate: string, toDate: string) {
 }
 
 function buildOpenShortageUrl(filters: OpenShortageFilters) {
-  const url = new URL("/api/shortages/open", window.location.origin);
+  const url = new URL(buildApiUrl("/api/shortages/open"));
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -199,11 +199,11 @@ function buildOpenShortageUrl(filters: OpenShortageFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
-  return `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 function buildResolutionListUrl(filters: ShortageResolutionFilters) {
-  const url = new URL("/api/shortage-resolutions", window.location.origin);
+  const url = new URL(buildApiUrl("/api/shortage-resolutions"));
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -222,7 +222,7 @@ function buildResolutionListUrl(filters: ShortageResolutionFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
-  return `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 function normalizePayload(values: ShortageResolutionFormValues) {

@@ -1,5 +1,23 @@
 export type ValidationErrors = Record<string, string[]>;
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
+
+export function buildApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!configuredApiBaseUrl) {
+    return normalizedPath;
+  }
+
+  return `${configuredApiBaseUrl}${normalizedPath}`;
+}
+
+console.log("API:", configuredApiBaseUrl || "(same-origin)");
+
 export class ApiError extends Error {
   status: number;
   validationErrors?: ValidationErrors;
@@ -26,7 +44,7 @@ function normalizeValidationErrors(errors: ValidationErrors | undefined): Valida
 }
 
 export async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const response = await fetch(buildApiUrl(input), {
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),

@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { buildApiUrl, requestJson } from "./api";
 
 export interface Supplier {
   id: string;
@@ -179,7 +179,7 @@ export interface UomConversionFormValues {
 }
 
 function buildUrl(path: string, search?: string, isActive?: string): string {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(buildApiUrl(path));
 
   if (search) {
     url.searchParams.set("search", search);
@@ -188,8 +188,7 @@ function buildUrl(path: string, search?: string, isActive?: string): string {
   if (isActive && isActive !== "all") {
     url.searchParams.set("isActive", String(isActive === "active"));
   }
-
-  return `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 export function listSuppliers(search: string, status: string) {

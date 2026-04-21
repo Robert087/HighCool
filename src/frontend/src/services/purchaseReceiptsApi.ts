@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { buildApiUrl, requestJson } from "./api";
 
 export type DocumentStatus = "Draft" | "Posted" | "Canceled";
 
@@ -116,12 +116,12 @@ export interface PurchaseReceiptFormValues {
 }
 
 function buildListUrl(search?: string): string {
-  const url = new URL("/api/purchase-receipts", window.location.origin);
+  const url = new URL(buildApiUrl("/api/purchase-receipts"));
   if (search) {
     url.searchParams.set("search", search);
   }
 
-  return `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 function normalizeDraftPayload(values: PurchaseReceiptFormValues) {
