@@ -11,6 +11,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     private const string SystemActor = "system";
 
+    public DbSet<Customer> Customers => Set<Customer>();
+
     public DbSet<Supplier> Suppliers => Set<Supplier>();
 
     public DbSet<Item> Items => Set<Item>();

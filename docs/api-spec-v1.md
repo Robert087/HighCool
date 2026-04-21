@@ -1,5 +1,40 @@
 # API Spec v1 — Procurement and Inventory
 
+## Customers
+
+### `GET /api/customers`
+
+Lists customers.
+
+Optional query parameters:
+
+* `search`
+* `isActive`
+
+Behavior:
+
+* search matches `code`, `name`, and `phone`
+
+### `GET /api/customers/{id}`
+
+Returns one customer master-data record.
+
+### `POST /api/customers`
+
+Creates a customer record.
+
+### `PUT /api/customers/{id}`
+
+Updates a customer record.
+
+### `POST /api/customers/{id}/activate`
+
+Marks a customer as active.
+
+### `POST /api/customers/{id}/deactivate`
+
+Marks a customer as inactive.
+
 ## Purchase Orders
 
 ### `GET /api/purchase-orders`

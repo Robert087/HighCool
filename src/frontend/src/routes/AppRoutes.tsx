@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { CustomerFormPage } from "../pages/CustomerFormPage";
+import { CustomersPage } from "../pages/CustomersPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
 import { ItemsPage } from "../pages/ItemsPage";
@@ -22,6 +24,9 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<DashboardPage />} />
+      <Route path="/customers" element={<CustomersPage />} />
+      <Route path="/customers/new" element={<CustomerFormPage />} />
+      <Route path="/customers/:customerId/edit" element={<CustomerFormPage />} />
       <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
       <Route path="/purchase-orders/new" element={<PurchaseOrderFormPage />} />
       <Route path="/purchase-orders/:purchaseOrderId/edit" element={<PurchaseOrderFormPage />} />

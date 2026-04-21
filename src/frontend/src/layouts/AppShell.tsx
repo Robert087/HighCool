@@ -22,6 +22,7 @@ const navigationGroups = [
   {
     label: "Master Data",
     items: [
+      { label: "Customers", shortLabel: "CU", to: "/customers" },
       { label: "Items", shortLabel: "IT", to: "/items" },
       { label: "UOM Conversions", shortLabel: "UC", to: "/uom-conversions" },
       { label: "Suppliers", shortLabel: "SU", to: "/suppliers" },
@@ -45,6 +46,15 @@ function getRouteMeta(pathname: string): RouteMeta {
       eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Item editor" : "Catalog",
       title: pathname.includes("/new") ? "Create item" : pathname.includes("/edit") ? "Edit item" : "Items",
       subtitle: "Search, review, and maintain core item records.",
+    };
+  }
+
+  if (pathname.startsWith("/customers")) {
+    return {
+      section: "Master Data",
+      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Customer editor" : "Directory",
+      title: pathname.includes("/new") ? "Create customer" : pathname.includes("/edit") ? "Edit customer" : "Customers",
+      subtitle: "Keep customer identities, contact details, and commercial terms organized.",
     };
   }
 

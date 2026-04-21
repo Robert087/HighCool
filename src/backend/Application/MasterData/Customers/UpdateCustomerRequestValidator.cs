@@ -1,0 +1,46 @@
+using FluentValidation;
+
+namespace ERP.Application.MasterData.Customers;
+
+public sealed class UpdateCustomerRequestValidator : AbstractValidator<UpdateCustomerRequest>
+{
+    public UpdateCustomerRequestValidator()
+    {
+        RuleFor(request => request.Code)
+            .NotEmpty()
+            .MaximumLength(32);
+
+        RuleFor(request => request.Name)
+            .NotEmpty()
+            .MaximumLength(200);
+
+        RuleFor(request => request.Phone)
+            .MaximumLength(50);
+
+        RuleFor(request => request.Email)
+            .MaximumLength(200)
+            .EmailAddress()
+            .When(request => !string.IsNullOrWhiteSpace(request.Email));
+
+        RuleFor(request => request.TaxNumber)
+            .MaximumLength(64);
+
+        RuleFor(request => request.Address)
+            .MaximumLength(500);
+
+        RuleFor(request => request.City)
+            .MaximumLength(100);
+
+        RuleFor(request => request.Area)
+            .MaximumLength(100);
+
+        RuleFor(request => request.CreditLimit)
+            .GreaterThanOrEqualTo(0m);
+
+        RuleFor(request => request.PaymentTerms)
+            .MaximumLength(250);
+
+        RuleFor(request => request.Notes)
+            .MaximumLength(2000);
+    }
+}

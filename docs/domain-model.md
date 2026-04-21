@@ -1,5 +1,32 @@
 # Domain Model — Procurement and Inventory v1
 
+## Customer
+
+Fields:
+
+* `id`
+* `code`
+* `name`
+* `phone`
+* `email`
+* `tax_number`
+* `address`
+* `city`
+* `area`
+* `credit_limit`
+* `payment_terms`
+* `notes`
+* `is_active`
+* audit fields
+
+Rules:
+
+* `code` is required and unique
+* `name` is required
+* `credit_limit >= 0`
+* `email` is optional but must be valid when supplied
+* customers are deactivated instead of hard-deleted
+
 ## Purchase Order
 
 Fields:

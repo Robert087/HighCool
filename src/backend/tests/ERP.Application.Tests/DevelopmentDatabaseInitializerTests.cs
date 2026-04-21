@@ -42,6 +42,7 @@ public sealed class DevelopmentDatabaseInitializerTests
             await using var scope = provider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            Assert.True(await dbContext.Customers.AnyAsync());
             Assert.True(await dbContext.Suppliers.AnyAsync());
             Assert.True(await dbContext.Warehouses.AnyAsync());
             Assert.True(await dbContext.Uoms.AnyAsync());
@@ -90,6 +91,7 @@ public sealed class DevelopmentDatabaseInitializerTests
             await using var scope = provider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            Assert.True(await dbContext.Customers.AnyAsync());
             Assert.True(await dbContext.Suppliers.AnyAsync());
             Assert.NotEmpty(await dbContext.Database.GetAppliedMigrationsAsync());
         }

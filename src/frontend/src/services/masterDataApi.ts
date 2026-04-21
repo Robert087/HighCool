@@ -12,6 +12,39 @@ export interface Supplier {
   updatedAt: string | null;
 }
 
+export interface Customer {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  taxNumber: string | null;
+  address: string | null;
+  city: string | null;
+  area: string | null;
+  creditLimit: number;
+  paymentTerms: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export interface CustomerListItem {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  area: string | null;
+  creditLimit: number;
+  paymentTerms: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
 export interface Warehouse {
   id: string;
   code: string;
@@ -91,6 +124,21 @@ export interface SupplierFormValues {
   isActive: boolean;
 }
 
+export interface CustomerFormValues {
+  code: string;
+  name: string;
+  phone: string;
+  email: string;
+  taxNumber: string;
+  address: string;
+  city: string;
+  area: string;
+  creditLimit: number;
+  paymentTerms: string;
+  notes: string;
+  isActive: boolean;
+}
+
 export interface WarehouseFormValues {
   code: string;
   name: string;
@@ -146,6 +194,36 @@ function buildUrl(path: string, search?: string, isActive?: string): string {
 
 export function listSuppliers(search: string, status: string) {
   return requestJson<Supplier[]>(buildUrl("/api/suppliers", search, status));
+}
+
+export function listCustomers(search: string, status: string) {
+  return requestJson<CustomerListItem[]>(buildUrl("/api/customers", search, status));
+}
+
+export function getCustomer(id: string) {
+  return requestJson<Customer>(`/api/customers/${id}`);
+}
+
+export function createCustomer(values: CustomerFormValues) {
+  return requestJson<Customer>("/api/customers", {
+    method: "POST",
+    body: JSON.stringify(values),
+  });
+}
+
+export function updateCustomer(id: string, values: CustomerFormValues) {
+  return requestJson<Customer>(`/api/customers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(values),
+  });
+}
+
+export function activateCustomer(id: string) {
+  return requestJson<void>(`/api/customers/${id}/activate`, { method: "POST" });
+}
+
+export function deactivateCustomer(id: string) {
+  return requestJson<void>(`/api/customers/${id}/deactivate`, { method: "POST" });
 }
 
 export function getSupplier(id: string) {

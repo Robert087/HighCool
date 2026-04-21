@@ -1,4 +1,5 @@
 using ERP.Application.MasterData.Items;
+using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.UomConversions;
 using ERP.Application.MasterData.Uoms;
@@ -9,6 +10,7 @@ using ERP.Application.Purchasing.PurchaseOrders;
 using ERP.Application.Purchasing.ShortageReasonCodes;
 using ERP.Infrastructure.Inventory;
 using ERP.Infrastructure.MasterData.Items;
+using ERP.Infrastructure.MasterData.Customers;
 using ERP.Infrastructure.MasterData.Suppliers;
 using ERP.Infrastructure.MasterData.UomConversions;
 using ERP.Infrastructure.MasterData.Uoms;
@@ -47,6 +49,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IItemService, ItemService>();
+        services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IUomConversionService, UomConversionService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IWarehouseService, WarehouseService>();

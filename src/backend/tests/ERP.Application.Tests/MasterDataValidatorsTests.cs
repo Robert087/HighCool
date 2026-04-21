@@ -1,3 +1,4 @@
+using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.Uoms;
 using ERP.Application.MasterData.Warehouses;
@@ -8,6 +9,30 @@ namespace ERP.Application.Tests;
 
 public sealed class MasterDataValidatorsTests
 {
+    [Fact]
+    public void CustomerValidators_ShouldRequireCoreFieldsAndRejectNegativeCreditLimit()
+    {
+        var createValidator = new CreateCustomerRequestValidator();
+        var createModel = new CreateCustomerRequest("", "", null, "invalid-email", null, null, null, null, -1m, null, null, true);
+
+        var createResult = createValidator.TestValidate(createModel);
+
+        createResult.ShouldHaveValidationErrorFor(request => request.Code);
+        createResult.ShouldHaveValidationErrorFor(request => request.Name);
+        createResult.ShouldHaveValidationErrorFor(request => request.Email);
+        createResult.ShouldHaveValidationErrorFor(request => request.CreditLimit);
+
+        var updateValidator = new UpdateCustomerRequestValidator();
+        var updateModel = new UpdateCustomerRequest("", "", null, "invalid-email", null, null, null, null, -5m, null, null, true);
+
+        var updateResult = updateValidator.TestValidate(updateModel);
+
+        updateResult.ShouldHaveValidationErrorFor(request => request.Code);
+        updateResult.ShouldHaveValidationErrorFor(request => request.Name);
+        updateResult.ShouldHaveValidationErrorFor(request => request.Email);
+        updateResult.ShouldHaveValidationErrorFor(request => request.CreditLimit);
+    }
+
     [Fact]
     public void SupplierValidator_ShouldRequireCoreIdentityFields()
     {

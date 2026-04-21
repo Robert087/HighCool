@@ -3,6 +3,12 @@ import { Badge, Card } from "../components/ui";
 
 const moduleCards = [
   {
+    title: "Customers",
+    description: "Customer accounts, credit limits, and contact details.",
+    href: "/customers",
+    status: "Ready",
+  },
+  {
     title: "Items",
     description: "Clean item records, roles, and base UOM setup.",
     href: "/items",
@@ -40,6 +46,11 @@ const nextActions = [
     href: "/suppliers",
   },
   {
+    title: "Review customer credit controls",
+    description: "Confirm active customers and payment terms before sales and collections modules arrive.",
+    href: "/customers",
+  },
+  {
     title: "Validate warehouse coverage",
     description: "Confirm active warehouse records and locations before inventory posting goes live.",
     href: "/warehouses",
@@ -59,7 +70,7 @@ export function DashboardPage() {
 
       <div className="hc-home__stats">
         <Card className="hc-home__stat" muted padding="md">
-          <p className="hc-home__stat-value">6</p>
+          <p className="hc-home__stat-value">7</p>
           <p className="hc-home__stat-label">Core master-data routes live</p>
         </Card>
         <Card className="hc-home__stat" muted padding="md">

@@ -21,6 +21,62 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     }
 
     [Fact]
+    public async Task CustomersApi_ShouldCreateListAndToggleCustomerStatus()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        var client = _factory.CreateClient();
+        var createResponse = await client.PostAsJsonAsync("/api/customers", new
+        {
+            code = "CUS-ERP-01",
+            name = "North Coast Projects",
+            phone = "+20-100-123-4567",
+            email = "finance@northcoast.example",
+            taxNumber = "TN-7788",
+            address = "Industrial Road 22",
+            city = "Cairo",
+            area = "Heliopolis",
+            creditLimit = 25000m,
+            paymentTerms = "21 days",
+            notes = "Key account",
+            isActive = true
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var created = await createResponse.Content.ReadFromJsonAsync<CustomerResponse>();
+        Assert.NotNull(created);
+        Assert.Equal("CUS-ERP-01", created!.Code);
+        Assert.Equal(25000m, created.CreditLimit);
+
+        var listResponse = await client.GetAsync("/api/customers?search=123&isActive=true");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var list = await listResponse.Content.ReadFromJsonAsync<List<CustomerListItemResponse>>();
+        Assert.NotNull(list);
+        Assert.Single(list!);
+        Assert.Equal(created.Id, list[0].Id);
+
+        var deactivateResponse = await client.PostAsync($"/api/customers/{created.Id}/deactivate", null);
+        Assert.Equal(HttpStatusCode.NoContent, deactivateResponse.StatusCode);
+
+        var inactiveResponse = await client.GetAsync("/api/customers?isActive=false");
+        Assert.Equal(HttpStatusCode.OK, inactiveResponse.StatusCode);
+        var inactiveList = await inactiveResponse.Content.ReadFromJsonAsync<List<CustomerListItemResponse>>();
+        Assert.NotNull(inactiveList);
+        Assert.Contains(inactiveList!, row => row.Id == created.Id && !row.IsActive);
+
+        var activateResponse = await client.PostAsync($"/api/customers/{created.Id}/activate", null);
+        Assert.Equal(HttpStatusCode.NoContent, activateResponse.StatusCode);
+
+        var getResponse = await client.GetAsync($"/api/customers/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        var fetched = await getResponse.Content.ReadFromJsonAsync<CustomerResponse>();
+        Assert.NotNull(fetched);
+        Assert.True(fetched!.IsActive);
+    }
+
+    [Fact]
     public async Task ItemsApi_ShouldCreateAndReturnItemWithComponents()
     {
         await _factory.ResetDatabaseAsync();
@@ -213,4 +269,8 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     public sealed record ItemComponentResponse(Guid ComponentItemId, string UomCode, decimal Quantity);
 
     public sealed record UomConversionResponse(Guid Id, string FromUomCode, string ToUomCode, decimal Factor);
+
+    public sealed record CustomerResponse(Guid Id, string Code, decimal CreditLimit, bool IsActive);
+
+    public sealed record CustomerListItemResponse(Guid Id, string Code, string Name, string? Phone, bool IsActive);
 }

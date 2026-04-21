@@ -202,6 +202,40 @@ public sealed class DevelopmentDatabaseInitializer(
             CreatedBy = "system"
         };
 
+        var customerA = new Customer
+        {
+            Code = "CUS-001",
+            Name = "Cairo Retail Projects",
+            Phone = "+20-120-000-1001",
+            Email = "ap@cairoretail.example",
+            TaxNumber = "TAX-1001",
+            Address = "Nasr City, Building 18",
+            City = "Cairo",
+            Area = "Nasr City",
+            CreditLimit = 150000m,
+            PaymentTerms = "30 days",
+            Notes = "Priority retail account.",
+            IsActive = true,
+            CreatedBy = "system"
+        };
+
+        var customerB = new Customer
+        {
+            Code = "CUS-002",
+            Name = "Alex Service Center",
+            Phone = "+20-120-000-1002",
+            Email = "finance@alexservice.example",
+            TaxNumber = "TAX-1002",
+            Address = "Smouha Industrial Zone",
+            City = "Alexandria",
+            Area = "Smouha",
+            CreditLimit = 90000m,
+            PaymentTerms = "Cash on delivery",
+            Notes = "Requires delivery coordination before dispatch.",
+            IsActive = true,
+            CreatedBy = "system"
+        };
+
         var fanMotor = new Item
         {
             Code = "ITM-001",
@@ -278,6 +312,7 @@ public sealed class DevelopmentDatabaseInitializer(
 
         dbContext.Uoms.AddRange(pieceUom, kilogramUom);
         dbContext.Warehouses.AddRange(mainWarehouse, outletWarehouse);
+        dbContext.Customers.AddRange(customerA, customerB);
         dbContext.Suppliers.AddRange(supplierA, supplierB);
         dbContext.Items.AddRange(fanMotor, copperCoil, coolingUnit);
         dbContext.ItemComponents.Add(itemComponent);

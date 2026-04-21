@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.Uoms;
 using ERP.Application.MasterData.Warehouses;
@@ -11,6 +12,14 @@ public static class MasterDataEndpoints
 {
     public static IEndpointRouteBuilder MapMasterDataEndpoints(this IEndpointRouteBuilder app)
     {
+        var customers = app.MapGroup("/api/customers");
+        customers.MapGet("/", ListCustomersAsync);
+        customers.MapGet("/{id:guid}", GetCustomerAsync);
+        customers.MapPost("/", CreateCustomerAsync);
+        customers.MapPut("/{id:guid}", UpdateCustomerAsync);
+        customers.MapPost("/{id:guid}/activate", ActivateCustomerAsync);
+        customers.MapPost("/{id:guid}/deactivate", DeactivateCustomerAsync);
+
         var suppliers = app.MapGroup("/api/suppliers");
         suppliers.MapGet("/", ListSuppliersAsync);
         suppliers.MapGet("/{id:guid}", GetSupplierAsync);
@@ -33,6 +42,84 @@ public static class MasterDataEndpoints
         uoms.MapPost("/{id:guid}/deactivate", DeactivateUomAsync);
 
         return app;
+    }
+
+    private static async Task<IResult> ListCustomersAsync(
+        string? search,
+        bool? isActive,
+        ICustomerService service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.ListAsync(new CustomerListQuery(search, isActive), cancellationToken);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetCustomerAsync(
+        Guid id,
+        ICustomerService service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.GetAsync(id, cancellationToken);
+        return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> CreateCustomerAsync(
+        CreateCustomerRequest request,
+        IValidator<CreateCustomerRequest> validator,
+        ICustomerService service,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        return await HandleValidatedRequestAsync(
+            request,
+            validator,
+            () => service.CreateAsync(request, GetActor(context), cancellationToken));
+    }
+
+    private static async Task<IResult> UpdateCustomerAsync(
+        Guid id,
+        UpdateCustomerRequest request,
+        IValidator<UpdateCustomerRequest> validator,
+        ICustomerService service,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await validator.ValidateAsync(request, cancellationToken);
+
+        if (!validationResult.IsValid)
+        {
+            return Results.ValidationProblem(ToErrors(validationResult));
+        }
+
+        try
+        {
+            var result = await service.UpdateAsync(id, request, GetActor(context), cancellationToken);
+            return result is null ? Results.NotFound() : Results.Ok(result);
+        }
+        catch (DuplicateEntityException exception)
+        {
+            return Results.Conflict(new { message = exception.Message });
+        }
+    }
+
+    private static async Task<IResult> ActivateCustomerAsync(
+        Guid id,
+        ICustomerService service,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var activated = await service.ActivateAsync(id, GetActor(context), cancellationToken);
+        return activated ? Results.NoContent() : Results.NotFound();
+    }
+
+    private static async Task<IResult> DeactivateCustomerAsync(
+        Guid id,
+        ICustomerService service,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        var deactivated = await service.DeactivateAsync(id, GetActor(context), cancellationToken);
+        return deactivated ? Results.NoContent() : Results.NotFound();
     }
 
     private static async Task<IResult> ListSuppliersAsync(

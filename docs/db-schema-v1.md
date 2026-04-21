@@ -1,5 +1,29 @@
 # Database Schema v1 — Procurement and Inventory
 
+## `customers`
+
+Columns:
+
+* `id`
+* `code`
+* `name`
+* `phone`
+* `email`
+* `tax_number`
+* `address`
+* `city`
+* `area`
+* `credit_limit`
+* `payment_terms`
+* `notes`
+* `is_active`
+* audit fields
+
+Constraints:
+
+* unique index on `code`
+* index on `name`
+
 ## `purchase_orders`
 
 Columns:
