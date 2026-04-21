@@ -23,7 +23,6 @@ import {
 import {
   createPurchaseReceiptDraft,
   getPurchaseReceiptDraft,
-  listShortageReasonCodes,
   postPurchaseReceipt,
   updatePurchaseReceiptDraft,
   type DocumentStatus,
@@ -31,7 +30,6 @@ import {
   type PurchaseReceiptFormValues,
   type PurchaseReceiptLineComponentFormValues,
   type PurchaseReceiptLineFormValues,
-  type ShortageReasonCode,
 } from "../services/purchaseReceiptsApi";
 
 const initialValues: PurchaseReceiptFormValues = {
@@ -176,7 +174,6 @@ export function PurchaseReceiptFormPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [uomConversions, setUomConversions] = useState<UomConversion[]>([]);
-  const [shortageReasons, setShortageReasons] = useState<ShortageReasonCode[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderListItem[]>([]);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [formError, setFormError] = useState("");
@@ -202,13 +199,12 @@ export function PurchaseReceiptFormPage() {
       try {
         setLoading(true);
         setFormError("");
-        const [supplierRows, warehouseRows, itemRows, uomRows, conversionRows, shortageReasonRows, purchaseOrderRows, receipt] = await Promise.all([
+        const [supplierRows, warehouseRows, itemRows, uomRows, conversionRows, purchaseOrderRows, receipt] = await Promise.all([
           listSuppliers("", "active"),
           listWarehouses("", "active"),
           listItems("", "active"),
           listUoms("", "active"),
           listUomConversions("", "active"),
-          listShortageReasonCodes(),
           listPurchaseOrders(""),
           purchaseReceiptId ? getPurchaseReceiptDraft(purchaseReceiptId) : Promise.resolve(null),
         ]);
@@ -222,7 +218,6 @@ export function PurchaseReceiptFormPage() {
         setItems(itemRows);
         setUoms(uomRows);
         setUomConversions(conversionRows);
-        setShortageReasons(shortageReasonRows);
         setPurchaseOrders(purchaseOrderRows);
 
         if (receipt) {
@@ -321,14 +316,6 @@ export function PurchaseReceiptFormPage() {
             nextErrors[`lines.${lineIndex}.components.${componentIndex}.actualReceivedQty`] = ["Actual received quantity must be zero or greater."];
           }
 
-          const shortageQty = calculateShortageQty(component);
-          if (shortageQty > 0 && !component.shortageReasonCodeId) {
-            const componentLabel = item.components.find((definition) => definition.componentItemId === component.componentItemId)?.componentItemName
-              ?? "selected component";
-            nextErrors[`lines.${lineIndex}.components.${componentIndex}.shortageReasonCodeId`] = [
-              `Shortage reason is required for component ${componentLabel} on line ${line.lineNo} because actual quantity is less than expected quantity.`,
-            ];
-          }
         });
       }
     });
@@ -525,12 +512,7 @@ export function PurchaseReceiptFormPage() {
   }
 
   return (
-    <FormPageLayout
-      eyebrow="Purchasing"
-      title={isEdit ? "Purchase receipt" : "Create purchase receipt"}
-      description="Capture actual delivered items and actual delivered components, with purchase order traceability when linked."
-      actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/purchase-receipts">Back to purchase receipts</Link>}
-    >
+    <FormPageLayout width="wide">
       {loading ? (
         <div className="hc-card hc-card--md">
           <div className="hc-skeleton-stack">
@@ -679,6 +661,94 @@ export function PurchaseReceiptFormPage() {
                         <td>
                           <Button disabled={!isEditable} type="button" variant="ghost" onClick={() => removeLine(lineIndex)}>Remove</Button>
                         </td>
+                      </tr>,
+                      <tr key={`components-${line.lineNo}-${lineIndex}`} className="hc-table__detail-row">
+                        <td colSpan={7}>
+                          <div className="hc-line-components">
+                            <div className="hc-line-components__header">
+                              <div className="po-form-toolbar">
+                                <Badge tone="neutral">{item?.code ?? "No item selected"}</Badge>
+                                <Badge tone="neutral">{line.components.length} {line.components.length === 1 ? "component" : "components"}</Badge>
+                              </div>
+                              <p className="hc-line-components__description">
+                                {item?.components.length
+                                  ? "Expected quantities are system-derived from the item BOM and receipt quantity. Actual quantities remain editable."
+                                  : "The selected item has no BOM components."}
+                              </p>
+                            </div>
+
+                            {errors[`lines.${lineIndex}.components`] ? <div className="hc-inline-error">{errors[`lines.${lineIndex}.components`][0]}</div> : null}
+
+                            <div className="hc-card hc-card--muted hc-card--sm">
+                              <table className="hc-table hc-table--compact">
+                                <thead>
+                                  <tr>
+                                    <th>Component Item</th>
+                                    <th>Expected Qty</th>
+                                    <th>Actual Qty</th>
+                                    <th>Shortage</th>
+                                    <th>Notes</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {line.components.length > 0 ? (
+                                    line.components.map((component, componentIndex) => {
+                                      const componentDefinition = item?.components.find((definition) => definition.componentItemId === component.componentItemId);
+                                      const shortageQty = calculateShortageQty(component);
+                                      const hasShortage = shortageQty > 0;
+                                      const shortageError = errors[`lines.${lineIndex}.components.${componentIndex}.shortageReasonCodeId`];
+
+                                      return (
+                                        <tr key={`${component.componentItemId}-${componentIndex}`}>
+                                          <td>
+                                            <div className="hc-table__cell-strong">
+                                              <span className="hc-table__title">{componentDefinition?.componentItemName ?? component.componentItemId}</span>
+                                              <span className="hc-table__subtitle">{componentDefinition?.componentItemCode ?? component.uomId}</span>
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <div className="hc-table__cell-strong">
+                                              <span className="hc-table__title">{component.expectedQty.toLocaleString()}</span>
+                                              <span className="hc-table__subtitle">{componentDefinition?.uomCode ?? ""}</span>
+                                            </div>
+                                          </td>
+                                          <td>
+                                            <Input
+                                              disabled={!isEditable}
+                                              type="number"
+                                              min={0}
+                                              step="0.000001"
+                                              value={component.actualReceivedQty}
+                                              onChange={(event) => setComponentValue(lineIndex, componentIndex, "actualReceivedQty", Number(event.target.value))}
+                                            />
+                                            {errors[`lines.${lineIndex}.components.${componentIndex}.actualReceivedQty`]
+                                              ? <small className="hc-field-error">{errors[`lines.${lineIndex}.components.${componentIndex}.actualReceivedQty`][0]}</small>
+                                              : null}
+                                          </td>
+                                          <td>
+                                            {hasShortage
+                                              ? <Badge tone="warning">Short {shortageQty.toLocaleString()}</Badge>
+                                              : <Badge tone="success">No shortage</Badge>}
+                                          </td>
+                                          <td>
+                                            <Input disabled={!isEditable} value={component.notes} onChange={(event) => setComponentValue(lineIndex, componentIndex, "notes", event.target.value)} />
+                                            {shortageError ? <small className="hc-field-error">{shortageError[0]}</small> : null}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })
+                                  ) : (
+                                    <tr>
+                                      <td colSpan={5}>
+                                        <div className="hc-table__empty">No components defined for this item.</div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </td>
                       </tr>
                     ];
                   })}
@@ -686,109 +756,6 @@ export function PurchaseReceiptFormPage() {
               </table>
             </div>
           </FormSection>
-
-          {values.lines.map((line, lineIndex) => {
-            const item = itemLookup.get(line.itemId);
-
-            return (
-              <FormSection
-                key={`components-${line.lineNo}-${lineIndex}`}
-                title={`Components for line ${line.lineNo}`}
-                description={item?.components.length
-                  ? "Expected quantities are system-derived from the item BOM and receipt quantity. Actual quantities remain editable."
-                  : "The selected item has no BOM components."}
-              >
-                {errors[`lines.${lineIndex}.components`] ? <div className="hc-inline-error">{errors[`lines.${lineIndex}.components`][0]}</div> : null}
-                <div className="hc-form-actions">
-                  <Badge tone="neutral">{item?.code ?? "No item selected"}</Badge>
-                  <Badge tone="neutral">{line.components.length} {line.components.length === 1 ? "component" : "components"}</Badge>
-                </div>
-                <div className="hc-card hc-card--muted hc-card--sm">
-                  <table className="hc-table">
-                    <thead>
-                      <tr>
-                        <th>Component Item</th>
-                        <th>Expected Qty</th>
-                        <th>Actual Qty</th>
-                        <th>Shortage</th>
-                        <th>Reason</th>
-                        <th>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {line.components.length > 0 ? (
-                        line.components.map((component, componentIndex) => {
-                          const componentDefinition = item?.components.find((definition) => definition.componentItemId === component.componentItemId);
-                          const shortageQty = calculateShortageQty(component);
-                          const hasShortage = shortageQty > 0;
-                          const shortageError = errors[`lines.${lineIndex}.components.${componentIndex}.shortageReasonCodeId`];
-
-                          return (
-                            <tr key={`${component.componentItemId}-${componentIndex}`}>
-                              <td>
-                                <div className="hc-table__cell-strong">
-                                  <span className="hc-table__title">{componentDefinition?.componentItemName ?? component.componentItemId}</span>
-                                  <span className="hc-table__subtitle">{componentDefinition?.componentItemCode ?? component.uomId}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="hc-table__cell-strong">
-                                  <span className="hc-table__title">{component.expectedQty.toLocaleString()}</span>
-                                  <span className="hc-table__subtitle">{componentDefinition?.uomCode ?? ""}</span>
-                                </div>
-                              </td>
-                              <td>
-                                <Input
-                                  disabled={!isEditable}
-                                  type="number"
-                                  min={0}
-                                  step="0.000001"
-                                  value={component.actualReceivedQty}
-                                  onChange={(event) => setComponentValue(lineIndex, componentIndex, "actualReceivedQty", Number(event.target.value))}
-                                />
-                                {errors[`lines.${lineIndex}.components.${componentIndex}.actualReceivedQty`]
-                                  ? <small className="hc-field-error">{errors[`lines.${lineIndex}.components.${componentIndex}.actualReceivedQty`][0]}</small>
-                                  : null}
-                              </td>
-                              <td>
-                                {hasShortage
-                                  ? <Badge tone="warning">Short {shortageQty.toLocaleString()}</Badge>
-                                  : <Badge tone="success">No shortage</Badge>}
-                              </td>
-                              <td>
-                                <Select
-                                  disabled={!isEditable}
-                                  value={component.shortageReasonCodeId}
-                                  onChange={(event) => setComponentValue(lineIndex, componentIndex, "shortageReasonCodeId", event.target.value)}
-                                >
-                                  <option value="">{hasShortage ? "Select shortage reason" : "Not required"}</option>
-                                  {shortageReasons.map((reason) => (
-                                    <option key={reason.id} value={reason.id}>
-                                      {reason.code} - {reason.name}
-                                    </option>
-                                  ))}
-                                </Select>
-                                {shortageError ? <small className="hc-field-error">{shortageError[0]}</small> : null}
-                              </td>
-                              <td>
-                                <Input disabled={!isEditable} value={component.notes} onChange={(event) => setComponentValue(lineIndex, componentIndex, "notes", event.target.value)} />
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan={6}>
-                            <div className="hc-table__empty">No components defined for this item.</div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </FormSection>
-            );
-          })}
 
           <div className="hc-form-actions">
             {purchaseReceiptId && status === "Draft" ? <Button type="button" isLoading={posting} onClick={handlePost}>Post receipt</Button> : null}

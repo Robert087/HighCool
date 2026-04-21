@@ -1106,6 +1106,10 @@
   max-width: 960px;
 }
 
+.hc-form-stack--wide {
+  max-width: 1320px;
+}
+
 .hc-form-section {
   display: grid;
   gap: 0.85rem;
@@ -1194,6 +1198,35 @@
   border: 1px solid rgba(225, 230, 238, 0.95);
   border-radius: 0.95rem;
   background: rgba(248, 250, 252, 0.96);
+}
+
+.hc-table__detail-row td {
+  padding: 0;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.hc-line-components {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem 1.1rem;
+}
+
+.hc-line-components__header {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hc-line-components__description {
+  margin: 0;
+  color: var(--hc-color-text-secondary);
+  font-size: var(--hc-font-size-small);
+  line-height: 1.5;
+}
+
+.hc-table--compact thead th,
+.hc-table--compact tbody td {
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
 }
 
 .hc-overview-grid {

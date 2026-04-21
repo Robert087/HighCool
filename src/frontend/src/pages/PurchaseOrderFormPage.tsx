@@ -261,12 +261,7 @@ export function PurchaseOrderFormPage() {
   }
 
   return (
-    <FormPageLayout
-      eyebrow="Purchasing"
-      title={isEdit ? "Purchase order" : "Create purchase order"}
-      description="Define expected supplier quantities before goods are received."
-      actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/purchase-orders">Back to purchase orders</Link>}
-    >
+    <FormPageLayout width="wide">
       {loading ? (
         <div className="hc-card hc-card--md">
           <div className="hc-skeleton-stack">
@@ -286,39 +281,6 @@ export function PurchaseOrderFormPage() {
       {!loading && (!formError || suppliers.length > 0) ? (
         <form className="hc-form-stack" onSubmit={handleSubmit}>
           {formError ? <div className="hc-inline-error">{formError}</div> : null}
-
-          <FormSection title="Purchase Order Snapshot" description="A quick view of document state before posting or receipt capture.">
-            <div className="po-form-toolbar po-form-toolbar--split">
-              <div className="po-form-toolbar">
-                <Badge tone={status === "Posted" ? "success" : status === "Canceled" ? "neutral" : "warning"}>{status}</Badge>
-                <Badge tone={receiptProgressStatus === "FullyReceived" ? "success" : receiptProgressStatus === "PartiallyReceived" ? "warning" : "neutral"}>
-                  {receiptProgressStatus}
-                </Badge>
-                {values.poNo ? <Badge tone="primary">{values.poNo}</Badge> : <Badge tone="neutral">New Draft</Badge>}
-              </div>
-              <div className="hc-form-actions">
-                {purchaseOrderId && status === "Draft" ? <Button type="button" isLoading={posting} onClick={handlePost}>Post purchase order</Button> : null}
-                {purchaseOrderId && status === "Posted" ? <Button type="button" variant="secondary" isLoading={canceling} onClick={handleCancel}>Cancel purchase order</Button> : null}
-                <Link className="hc-button hc-button--secondary hc-button--md" to="/purchase-orders">Close</Link>
-                <Button disabled={!isEditable || posting || canceling} isLoading={saving} type="submit">Save draft</Button>
-              </div>
-            </div>
-
-            <div className="po-summary-grid">
-              <Field label="Supplier summary">
-                <div className="po-summary-card">
-                  <strong>{selectedSupplier ? selectedSupplier.name : "No supplier selected"}</strong>
-                  <div className="hc-field__hint">{selectedSupplier ? selectedSupplier.code : "Select a supplier to continue."}</div>
-                </div>
-              </Field>
-              <Field label="Line summary">
-                <div className="po-summary-card">
-                  <strong>{values.lines.length} {values.lines.length === 1 ? "line" : "lines"}</strong>
-                  <div className="hc-field__hint">Total ordered quantity: {totalOrderedQty.toLocaleString()}</div>
-                </div>
-              </Field>
-            </div>
-          </FormSection>
 
           <FormSection title="Header" description="Supplier, dates, and purchase order status.">
             <div className="hc-form-grid">
@@ -340,6 +302,21 @@ export function PurchaseOrderFormPage() {
               </Field>
               <Field label="Expected date">
                 <Input disabled={!isEditable} type="date" value={values.expectedDate} onChange={(event) => setValue("expectedDate", event.target.value)} />
+              </Field>
+              <Field label="Document status">
+                <div className="po-form-toolbar">
+                  <Badge tone={status === "Posted" ? "success" : status === "Canceled" ? "neutral" : "warning"}>{status}</Badge>
+                  <Badge tone={receiptProgressStatus === "FullyReceived" ? "success" : receiptProgressStatus === "PartiallyReceived" ? "warning" : "neutral"}>
+                    {receiptProgressStatus}
+                  </Badge>
+                  {values.poNo ? <Badge tone="primary">{values.poNo}</Badge> : <Badge tone="neutral">New Draft</Badge>}
+                </div>
+              </Field>
+              <Field label="Supplier summary">
+                <div className="po-summary-card">
+                  <strong>{selectedSupplier ? selectedSupplier.name : "No supplier selected"}</strong>
+                  <div className="hc-field__hint">{selectedSupplier ? selectedSupplier.code : "Select a supplier to continue."}</div>
+                </div>
               </Field>
             </div>
 
