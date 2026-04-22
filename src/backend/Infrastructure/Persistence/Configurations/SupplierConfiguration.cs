@@ -34,6 +34,35 @@ public sealed class SupplierConfiguration : AuditableEntityConfigurationBase<Sup
             .HasColumnName("email")
             .HasMaxLength(200);
 
+        builder.Property(entity => entity.TaxNumber)
+            .HasColumnName("tax_number")
+            .HasMaxLength(64);
+
+        builder.Property(entity => entity.Address)
+            .HasColumnName("address")
+            .HasMaxLength(500);
+
+        builder.Property(entity => entity.City)
+            .HasColumnName("city")
+            .HasMaxLength(100);
+
+        builder.Property(entity => entity.Area)
+            .HasColumnName("area")
+            .HasMaxLength(100);
+
+        builder.Property(entity => entity.CreditLimit)
+            .HasColumnName("credit_limit")
+            .HasColumnType("decimal(18,2)")
+            .IsRequired();
+
+        builder.Property(entity => entity.PaymentTerms)
+            .HasColumnName("payment_terms")
+            .HasMaxLength(250);
+
+        builder.Property(entity => entity.Notes)
+            .HasColumnName("notes")
+            .HasMaxLength(2000);
+
         builder.Property(entity => entity.IsActive)
             .HasColumnName("is_active")
             .IsRequired();

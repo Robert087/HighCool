@@ -1,4 +1,5 @@
 using ERP.Application.Purchasing.PurchaseReceipts;
+using ERP.Application.Statements;
 using ERP.Domain.Common;
 using ERP.Domain.Purchasing;
 using ERP.Infrastructure.Persistence;
@@ -11,7 +12,8 @@ public sealed class PurchaseReceiptPostingService(
     IPurchaseReceiptService purchaseReceiptService,
     IStockLedgerService stockLedgerService,
     IShortageDetectionService shortageDetectionService,
-    IQuantityConversionService quantityConversionService) : IPurchaseReceiptPostingService
+    IQuantityConversionService quantityConversionService,
+    ISupplierStatementPostingService supplierStatementPostingService) : IPurchaseReceiptPostingService
 {
     public async Task<PurchaseReceiptDto?> PostAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
@@ -60,8 +62,20 @@ public sealed class PurchaseReceiptPostingService(
             throw new InvalidOperationException("Posting effects already exist for this purchase receipt.");
         }
 
+        var existingStatementEffects = await dbContext.SupplierStatementEntries
+            .AnyAsync(
+                entity => entity.SourceDocType == Domain.Statements.SupplierStatementSourceDocumentType.PurchaseReceipt &&
+                          entity.SourceDocId == receipt.Id,
+                cancellationToken);
+
+        if (existingStatementEffects)
+        {
+            throw new InvalidOperationException("Supplier statement effects already exist for this purchase receipt.");
+        }
+
         await ValidateReceiptAsync(receipt, cancellationToken);
-        await stockLedgerService.CreateEntriesAsync(receipt, actor, cancellationToken);
+        var stockEntries = await stockLedgerService.CreateEntriesAsync(receipt, actor, cancellationToken);
+        await supplierStatementPostingService.CreatePurchaseReceiptEntriesAsync(receipt, stockEntries, actor, cancellationToken);
         await shortageDetectionService.CreateEntriesAsync(receipt, actor, cancellationToken);
 
         receipt.Status = DocumentStatus.Posted;
@@ -88,6 +102,11 @@ public sealed class PurchaseReceiptPostingService(
         if (receipt.Lines.Count == 0)
         {
             throw new InvalidOperationException("At least one purchase receipt line is required before posting.");
+        }
+
+        if (receipt.SupplierPayableAmount < 0m)
+        {
+            throw new InvalidOperationException("Supplier payable amount cannot be negative.");
         }
 
         Dictionary<Guid, decimal> postedReceiptTotals = [];

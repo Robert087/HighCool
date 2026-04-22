@@ -32,6 +32,11 @@ public sealed class PurchaseReceiptConfiguration : BusinessDocumentConfiguration
             .HasColumnType("datetime2")
             .IsRequired();
 
+        builder.Property(entity => entity.SupplierPayableAmount)
+            .HasColumnName("supplier_payable_amount")
+            .HasColumnType("decimal(18,6)")
+            .IsRequired();
+
         builder.Property(entity => entity.Notes)
             .HasColumnName("notes")
             .HasMaxLength(1000);

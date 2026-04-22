@@ -138,7 +138,7 @@ export function SuppliersPage() {
           rows={visibleSuppliers.map((supplier) => (
             <tr key={supplier.id} className="hc-table__row">
               <td>
-                <div className="hc-table__cell-strong">
+                <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{supplier.name}</span>
                   <span className="hc-table__subtitle">{supplier.code}</span>
                 </div>
@@ -155,14 +155,15 @@ export function SuppliersPage() {
                   <span className="hc-table__subtitle">{supplier.email || "No email"}</span>
                 </div>
               </td>
-              <td><StatusBadge isActive={supplier.isActive} /></td>
+              <td><div className="hc-table__status-stack"><StatusBadge isActive={supplier.isActive} /></div></td>
               <td className="hc-table__cell-actions">
-                <RowActions>
-                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/suppliers/${supplier.id}/edit`}>Edit</Link>
-                  {supplier.isActive ? (
-                    <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(supplier.id)}>Deactivate</Button>
-                  ) : null}
-                </RowActions>
+                <RowActions
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/suppliers/${supplier.id}/edit`}>View</Link>}
+                  menuItems={[
+                    { label: "Edit", to: `/suppliers/${supplier.id}/edit` },
+                    ...(supplier.isActive ? [{ label: "Deactivate", onSelect: () => void handleDeactivate(supplier.id) }] : []),
+                  ]}
+                />
               </td>
             </tr>
           ))}

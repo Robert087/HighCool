@@ -117,6 +117,7 @@ Request body:
   "warehouseId": "guid",
   "purchaseOrderId": "guid",
   "receiptDate": "2026-04-20T00:00:00.000Z",
+  "supplierPayableAmount": 1250.0,
   "notes": "Receipt capture",
   "lines": [
     {
@@ -160,7 +161,9 @@ Behavior:
 * posting is idempotent
 * linked PO quantities cannot exceed remaining posted PO quantity
 * posting creates stock ledger entries
+* posting creates supplier statement rows from the current receipt financial basis
 * posting creates shortage ledger entries when actual components are below expected BOM quantities
+* `supplierPayableAmount` is the current explicit receipt financial basis until receipt line pricing exists
 
 ## Shortage Reason Codes
 
@@ -258,9 +261,152 @@ Behavior:
 * physical posting requires `allocated_qty` only
 * financial posting requires `allocated_qty` plus `valuation_rate`
 * financial posting calculates and stores `allocated_amount = allocated_qty x valuation_rate`
+
+## Supplier Statements
+
+### `GET /api/supplier-statements`
+
+Lists supplier statement rows across suppliers.
+
+Optional query parameters:
+
+* `search`
+* `supplierId`
+* `effectType`
+* `sourceDocType`
+* `fromDate`
+* `toDate`
+
+### `GET /api/suppliers/{supplierId}/statement`
+
+Lists supplier statement rows for one supplier.
+
+Optional query parameters:
+
+* `search`
+* `effectType`
+* `sourceDocType`
+* `fromDate`
+* `toDate`
+
+### `GET /api/suppliers/{supplierId}/statement/summary`
+
+Returns supplier statement summary values for one supplier.
+
+Optional query parameters:
+
+* `effectType`
+* `sourceDocType`
+* `fromDate`
+* `toDate`
+
+Behavior:
+
+* supplier statements are generated from posted business documents only
+* purchase receipt posting creates supplier statement rows
+* financial shortage resolution posting creates supplier statement rows
+* physical shortage resolution posting does not create supplier statement rows
+* no manual create, update, or delete supplier statement endpoint exists
+* purchase receipt statement amount currently comes from the posted receipt header payable amount
 * financial posting stores `financial_qty_equivalent = allocated_qty`
 * shortage status stays `PartiallyResolved` until `open_qty` reaches `0`
 * posting is idempotent
+
+## Supplier Payments
+
+### `GET /api/payments`
+
+Lists supplier payments.
+
+Optional query parameters:
+
+* `search`
+* `supplierId`
+* `direction`
+* `status`
+* `paymentMethod`
+* `fromDate`
+* `toDate`
+
+### `GET /api/payments/{id}`
+
+Returns one supplier payment with nested allocations.
+
+### `GET /api/payments/{id}/allocations`
+
+Returns allocation rows for one payment.
+
+### `POST /api/payments`
+
+Creates a supplier payment draft.
+
+Request body:
+
+```json
+{
+  "paymentNo": "PAY-20260422-0001",
+  "partyType": "Supplier",
+  "partyId": "guid",
+  "direction": "OutboundToParty",
+  "amount": 1250.0,
+  "paymentDate": "2026-04-22T00:00:00.000Z",
+  "currency": "EGP",
+  "exchangeRate": null,
+  "paymentMethod": "BankTransfer",
+  "referenceNote": "BANK-TRX-001",
+  "notes": "Supplier settlement",
+  "allocations": [
+    {
+      "targetDocType": "PurchaseReceipt",
+      "targetDocId": "guid",
+      "targetLineId": null,
+      "allocatedAmount": 1250.0,
+      "allocationOrder": 1
+    }
+  ]
+}
+```
+
+### `PUT /api/payments/{id}`
+
+Updates a draft supplier payment.
+
+### `POST /api/payments/{id}/post`
+
+Posts a draft supplier payment.
+
+Behavior:
+
+* supplier payments are generated and posted through document workflows only
+* payment allocation is mandatory before posting
+* current supplier payment directions are:
+  * `OutboundToParty` for company payment to supplier against purchase receipt payables
+  * `InboundFromParty` for money received from supplier against financial shortage resolution receivables
+* posted payment amount must equal total allocated amount
+* no manual supplier statement entry endpoint exists
+* payment posting creates supplier statement rows with effect type `Payment`
+
+## Supplier Open Balances
+
+### `GET /api/suppliers/{supplierId}/open-balances`
+
+Lists currently open supplier-side targets that can be allocated from a payment.
+
+Required query parameters:
+
+* `direction`
+
+Optional query parameters:
+
+* `search`
+* `fromDate`
+* `toDate`
+
+Behavior:
+
+* `direction = OutboundToParty` returns open posted purchase receipts
+* `direction = InboundFromParty` returns open posted financial shortage resolutions
+* open amount is derived from source document amount minus posted payment allocations
 
 ### `POST /api/shortage-resolutions/suggest-allocations`
 

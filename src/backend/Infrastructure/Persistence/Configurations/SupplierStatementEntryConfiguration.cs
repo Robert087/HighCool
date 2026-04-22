@@ -34,8 +34,13 @@ public sealed class SupplierStatementEntryConfiguration : AuditableEntityConfigu
         builder.Property(entity => entity.SourceLineId)
             .HasColumnName("source_line_id");
 
-        builder.Property(entity => entity.AmountDelta)
-            .HasColumnName("amount_delta")
+        builder.Property(entity => entity.Debit)
+            .HasColumnName("debit")
+            .HasColumnType("decimal(18,6)")
+            .IsRequired();
+
+        builder.Property(entity => entity.Credit)
+            .HasColumnName("credit")
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 
@@ -48,8 +53,8 @@ public sealed class SupplierStatementEntryConfiguration : AuditableEntityConfigu
             .HasColumnName("currency")
             .HasMaxLength(16);
 
-        builder.Property(entity => entity.TransactionDate)
-            .HasColumnName("transaction_date")
+        builder.Property(entity => entity.EntryDate)
+            .HasColumnName("entry_date")
             .HasColumnType("datetime2")
             .IsRequired();
 
@@ -62,8 +67,8 @@ public sealed class SupplierStatementEntryConfiguration : AuditableEntityConfigu
             .HasForeignKey(entity => entity.SupplierId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.SupplierId, entity.TransactionDate });
-        builder.HasIndex(entity => new { entity.SourceDocId, entity.SourceLineId, entity.EffectType })
+        builder.HasIndex(entity => new { entity.SupplierId, entity.EntryDate });
+        builder.HasIndex(entity => new { entity.SourceDocType, entity.SourceDocId, entity.SourceLineId, entity.EffectType })
             .IsUnique();
     }
 }

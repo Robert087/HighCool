@@ -236,6 +236,65 @@ Examples:
 * "Received quantity must be greater than zero."
 * "Shortage reason is required when actual quantity is less than expected."
 
+## 4.5 Section Separation Rules
+
+When a page contains multiple related workflows in the same screen, the UI must separate them into clearly distinct sections.
+
+Rules:
+- each section must have a title
+- each section may have helper text if the step is not obvious
+- spacing between sections must be larger than spacing inside a section
+- summary information must not visually blend with data tables
+- tables used for selection must be visually separated from tables used for results or chosen records
+- use cards, panels, or clear section containers for grouping
+- the user flow must be obvious from top to bottom
+
+Preferred step order for mixed workflow screens:
+- summary or status overview first
+- selected or in-progress work second
+- available records or next actions third
+
+Use:
+- stronger outer spacing between sections than within section content
+- section-level headings with short helper text
+- dedicated panels for summaries instead of merging summary chips into table toolbars
+
+Avoid:
+- one continuous block where multiple tasks visually share the same surface
+- placing search tools far from the table they control
+- mixing selected records and available records in one visual area
+
+## 4.6 Empty State Rules
+
+Empty states must explain both:
+- current state
+- next action
+
+Do:
+- "No targets added yet"
+- "Search and add documents from the list below"
+- "No open documents available"
+- "Choose a supplier first to load available documents"
+
+Do not:
+- show only technical empty text like "No data" or "No allocations selected"
+- leave the user without a next step
+
+## 4.7 Task Table Rules
+
+Tables used for performing actions must not look identical to passive reporting tables.
+
+Rules:
+- actionable rows must have a clear row action
+- important values must be emphasized
+- row hover must be visible
+- action columns must be obvious and consistent
+- search/filter tools must belong to the relevant section, not float ambiguously
+- the primary document or business record must carry the strongest text weight
+- numeric values must align consistently for fast scanning
+- headers must be quieter than the row content
+- selected-task tables and available-task tables should feel related but not identical
+
 ---
 
 # 5. Tables and Data Grids

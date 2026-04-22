@@ -117,8 +117,12 @@ Mandatory rules:
 
 * supplier statement entries are derived from posted business documents only
 * no manual supplier statement entries are allowed
+* purchase receipt posting creates supplier statement rows
 * shortage financial resolution posting creates supplier statement entries
+* physical shortage resolution does not create supplier statement entries
 * supplier statement rows remain traceable to shortage resolution allocations
+* purchase receipt statement amount follows the current receipt financial basis available in the system
+* in the current implementation, posted purchase receipts create traceability rows but receipt payable amount remains `0` until receipt pricing or valuation is implemented explicitly
 
 ## UI Expectations
 

@@ -6,6 +6,7 @@ using ERP.Domain.Purchasing;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Purchasing.PurchaseOrders;
 using ERP.Infrastructure.Purchasing.PurchaseReceipts;
+using ERP.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -79,6 +80,7 @@ public sealed class PurchaseOrderWorkflowTests
                 references.Warehouse.Id,
                 purchaseOrder.Id,
                 DateTime.UtcNow.Date,
+                0m,
                 "Receipt from PO",
                 [
                     new UpsertPurchaseReceiptLineRequest(
@@ -167,7 +169,8 @@ public sealed class PurchaseOrderWorkflowTests
             receiptService,
             new StockLedgerService(dbContext, conversionService),
             new ShortageDetectionService(dbContext, conversionService),
-            conversionService);
+            conversionService,
+            new SupplierStatementPostingService(dbContext));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             postingService.PostAsync(draftReceipt.Id, "tester", CancellationToken.None));

@@ -78,6 +78,7 @@ export interface PurchaseReceipt {
   purchaseOrderId: string | null;
   purchaseOrderNo: string | null;
   receiptDate: string;
+  supplierPayableAmount: number;
   notes: string | null;
   status: DocumentStatus;
   lines: PurchaseReceiptLine[];
@@ -111,6 +112,7 @@ export interface PurchaseReceiptFormValues {
   warehouseId: string;
   purchaseOrderId: string;
   receiptDate: string;
+  supplierPayableAmount: number | "";
   notes: string;
   lines: PurchaseReceiptLineFormValues[];
 }
@@ -131,6 +133,7 @@ function normalizeDraftPayload(values: PurchaseReceiptFormValues) {
     warehouseId: values.warehouseId,
     purchaseOrderId: values.purchaseOrderId || null,
     receiptDate: values.receiptDate ? new Date(values.receiptDate).toISOString() : null,
+    supplierPayableAmount: values.supplierPayableAmount === "" ? 0 : Number(values.supplierPayableAmount),
     notes: values.notes.trim() || null,
     lines: values.lines.map((line) => ({
       lineNo: Number(line.lineNo),

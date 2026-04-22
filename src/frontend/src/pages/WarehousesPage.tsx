@@ -126,7 +126,7 @@ export function WarehousesPage() {
           rows={visibleWarehouses.map((warehouse) => (
             <tr key={warehouse.id} className="hc-table__row">
               <td>
-                <div className="hc-table__cell-strong">
+                <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{warehouse.name}</span>
                   <span className="hc-table__subtitle">{warehouse.code}</span>
                 </div>
@@ -137,12 +137,15 @@ export function WarehousesPage() {
                   <span className="hc-table__subtitle">Location reference</span>
                 </div>
               </td>
-              <td><StatusBadge isActive={warehouse.isActive} /></td>
+              <td><div className="hc-table__status-stack"><StatusBadge isActive={warehouse.isActive} /></div></td>
               <td className="hc-table__cell-actions">
-                <RowActions>
-                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/warehouses/${warehouse.id}/edit`}>Edit</Link>
-                  {warehouse.isActive ? <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(warehouse.id)}>Deactivate</Button> : null}
-                </RowActions>
+                <RowActions
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/warehouses/${warehouse.id}/edit`}>View</Link>}
+                  menuItems={[
+                    { label: "Edit", to: `/warehouses/${warehouse.id}/edit` },
+                    ...(warehouse.isActive ? [{ label: "Deactivate", onSelect: () => void handleDeactivate(warehouse.id) }] : []),
+                  ]}
+                />
               </td>
             </tr>
           ))}

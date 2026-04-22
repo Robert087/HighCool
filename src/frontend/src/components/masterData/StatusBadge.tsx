@@ -5,5 +5,5 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ isActive }: StatusBadgeProps) {
-  return <Badge tone={isActive ? "success" : "warning"}>{isActive ? "Active" : "Inactive"}</Badge>;
+  return <Badge tone={isActive ? "success" : "neutral"}>{isActive ? "Active" : "Inactive"}</Badge>;
 }

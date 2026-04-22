@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
-import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, useToast } from "../components/ui";
+import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, Textarea, useToast } from "../components/ui";
 import {
   createSupplier,
   getSupplier,
@@ -16,6 +16,13 @@ const initialValues: SupplierFormValues = {
   statementName: "",
   phone: "",
   email: "",
+  taxNumber: "",
+  address: "",
+  city: "",
+  area: "",
+  creditLimit: 0,
+  paymentTerms: "",
+  notes: "",
   isActive: true,
 };
 
@@ -53,6 +60,13 @@ export function SupplierFormPage() {
             statementName: supplier.statementName,
             phone: supplier.phone ?? "",
             email: supplier.email ?? "",
+            taxNumber: supplier.taxNumber ?? "",
+            address: supplier.address ?? "",
+            city: supplier.city ?? "",
+            area: supplier.area ?? "",
+            creditLimit: supplier.creditLimit,
+            paymentTerms: supplier.paymentTerms ?? "",
+            notes: supplier.notes ?? "",
             isActive: supplier.isActive,
           });
         }
@@ -91,6 +105,10 @@ export function SupplierFormPage() {
 
     if (currentValues.email && !/^\S+@\S+\.\S+$/.test(currentValues.email)) {
       nextErrors.email = ["Email format is invalid."];
+    }
+
+    if (currentValues.creditLimit < 0) {
+      nextErrors.creditLimit = ["Credit limit cannot be negative."];
     }
 
     return nextErrors;
@@ -157,13 +175,30 @@ export function SupplierFormPage() {
       {!loading && (!formError || !isEdit) ? (
         <form className="hc-document-form" id={formId} onSubmit={handleSubmit}>
           {formError ? <div className="hc-inline-error">{formError}</div> : null}
-          <DocumentSection title="Form Header" description="Capture supplier identity and contact details in aligned rows.">
+          <DocumentSection title="Supplier identity" description="Capture supplier naming, statement reference, and tax identity.">
             <div className="hc-document-form-grid">
               <Field label="Code" required><Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />{errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}</Field>
               <Field label="Name" required><Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />{errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}</Field>
-              <Field className="hc-document-field--span-full" label="Statement name" required hint="Shown on supplier statements."><Input value={values.statementName} onChange={(event) => setValue("statementName", event.target.value)} />{errors.statementName ? <small className="hc-field-error">{errors.statementName[0]}</small> : null}</Field>
+              <Field label="Statement name" required hint="Shown on supplier statements."><Input value={values.statementName} onChange={(event) => setValue("statementName", event.target.value)} />{errors.statementName ? <small className="hc-field-error">{errors.statementName[0]}</small> : null}</Field>
+              <Field label="Tax number"><Input value={values.taxNumber} onChange={(event) => setValue("taxNumber", event.target.value)} />{errors.taxNumber ? <small className="hc-field-error">{errors.taxNumber[0]}</small> : null}</Field>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection title="Contact and location" description="Keep supplier communication and geographic details clear for operations.">
+            <div className="hc-document-form-grid">
               <Field label="Phone"><Input value={values.phone} onChange={(event) => setValue("phone", event.target.value)} />{errors.phone ? <small className="hc-field-error">{errors.phone[0]}</small> : null}</Field>
               <Field label="Email"><Input value={values.email} onChange={(event) => setValue("email", event.target.value)} />{errors.email ? <small className="hc-field-error">{errors.email[0]}</small> : null}</Field>
+              <Field className="hc-document-field--span-full" label="Address"><Textarea value={values.address} onChange={(event) => setValue("address", event.target.value)} />{errors.address ? <small className="hc-field-error">{errors.address[0]}</small> : null}</Field>
+              <Field label="City"><Input value={values.city} onChange={(event) => setValue("city", event.target.value)} />{errors.city ? <small className="hc-field-error">{errors.city[0]}</small> : null}</Field>
+              <Field label="Area"><Input value={values.area} onChange={(event) => setValue("area", event.target.value)} />{errors.area ? <small className="hc-field-error">{errors.area[0]}</small> : null}</Field>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection title="Commercial controls" description="Store payment, credit, notes, and supplier availability on the master record.">
+            <div className="hc-document-form-grid">
+              <Field label="Credit limit" required hint="Used as the supplier-side commercial limit."><Input min={0} step="0.01" type="number" value={values.creditLimit} onChange={(event) => setValue("creditLimit", event.target.value === "" ? 0 : Number(event.target.value))} />{errors.creditLimit ? <small className="hc-field-error">{errors.creditLimit[0]}</small> : null}</Field>
+              <Field label="Payment terms"><Input value={values.paymentTerms} onChange={(event) => setValue("paymentTerms", event.target.value)} />{errors.paymentTerms ? <small className="hc-field-error">{errors.paymentTerms[0]}</small> : null}</Field>
+              <Field className="hc-document-field--span-full" label="Notes"><Textarea value={values.notes} onChange={(event) => setValue("notes", event.target.value)} />{errors.notes ? <small className="hc-field-error">{errors.notes[0]}</small> : null}</Field>
               <Field className="hc-document-field--span-full" label="Status">
                 <Checkbox checked={values.isActive} label="Active supplier" onChange={(event) => setValue("isActive", event.target.checked)} />
               </Field>

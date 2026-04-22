@@ -18,6 +18,9 @@ public sealed class UpsertPurchaseReceiptDraftRequestValidator : AbstractValidat
         RuleFor(request => request.ReceiptDate)
             .NotNull();
 
+        RuleFor(request => request.SupplierPayableAmount)
+            .GreaterThanOrEqualTo(0m);
+
         RuleFor(request => request.Notes)
             .MaximumLength(1000);
 

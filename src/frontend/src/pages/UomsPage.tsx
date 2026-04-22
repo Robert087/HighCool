@@ -114,15 +114,18 @@ export function UomsPage() {
           columns={<tr><th scope="col">UOM</th><th scope="col">Precision</th><th scope="col">Fractions</th><th scope="col">Status</th><th scope="col" className="hc-table__head-actions" aria-label="Actions" /></tr>}
           rows={visibleUoms.map((uom) => (
             <tr key={uom.id} className="hc-table__row">
-              <td><div className="hc-table__cell-strong"><span className="hc-table__title">{uom.name}</span><span className="hc-table__subtitle">{uom.code}</span></div></td>
+              <td><div className="hc-table__cell-strong hc-table__primary-cell"><span className="hc-table__title">{uom.name}</span><span className="hc-table__subtitle">{uom.code}</span></div></td>
               <td><div className="hc-table__cell-strong"><span className="hc-table__title">{uom.precision}</span><span className="hc-table__subtitle">Decimal places</span></div></td>
               <td><span className="hc-table__subtitle">{uom.allowsFraction ? "Allowed" : "Whole numbers only"}</span></td>
-              <td><StatusBadge isActive={uom.isActive} /></td>
+              <td><div className="hc-table__status-stack"><StatusBadge isActive={uom.isActive} /></div></td>
               <td className="hc-table__cell-actions">
-                <RowActions>
-                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/uoms/${uom.id}/edit`}>Edit</Link>
-                  {uom.isActive ? <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(uom.id)}>Deactivate</Button> : null}
-                </RowActions>
+                <RowActions
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/uoms/${uom.id}/edit`}>View</Link>}
+                  menuItems={[
+                    { label: "Edit", to: `/uoms/${uom.id}/edit` },
+                    ...(uom.isActive ? [{ label: "Deactivate", onSelect: () => void handleDeactivate(uom.id) }] : []),
+                  ]}
+                />
               </td>
             </tr>
           ))}

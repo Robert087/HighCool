@@ -22,6 +22,7 @@ public sealed class PurchaseReceiptDraftTests
             Guid.Empty,
             null,
             null,
+            0m,
             null,
             []);
 
@@ -46,6 +47,7 @@ public sealed class PurchaseReceiptDraftTests
             Guid.NewGuid(),
             null,
             DateTime.UtcNow,
+            0m,
             null,
             [
                 new UpsertPurchaseReceiptLineRequest(
@@ -137,6 +139,7 @@ public sealed class PurchaseReceiptDraftTests
                 references.Warehouse.Id,
                 null,
                 DateTime.UtcNow.Date,
+                0m,
                 "Auto-fill test",
                 [
                     new UpsertPurchaseReceiptLineRequest(
@@ -173,6 +176,7 @@ public sealed class PurchaseReceiptDraftTests
                 references.Warehouse.Id,
                 null,
                 DateTime.UtcNow.Date,
+                0m,
                 null,
                 [
                     new UpsertPurchaseReceiptLineRequest(
@@ -198,6 +202,7 @@ public sealed class PurchaseReceiptDraftTests
                 references.Warehouse.Id,
                 null,
                 DateTime.UtcNow.Date,
+                0m,
                 null,
                 [
                     new UpsertPurchaseReceiptLineRequest(
@@ -236,6 +241,7 @@ public sealed class PurchaseReceiptDraftTests
                     references.Warehouse.Id,
                     null,
                     DateTime.UtcNow.Date,
+                    0m,
                     null,
                     [
                         new UpsertPurchaseReceiptLineRequest(
@@ -270,6 +276,7 @@ public sealed class PurchaseReceiptDraftTests
                 references.Warehouse.Id,
                 null,
                 DateTime.UtcNow.Date,
+                0m,
                 null,
                 [
                     new UpsertPurchaseReceiptLineRequest(
@@ -307,6 +314,7 @@ public sealed class PurchaseReceiptDraftTests
                     references.Warehouse.Id,
                     null,
                     DateTime.UtcNow.Date,
+                    0m,
                     null,
                     [
                         new UpsertPurchaseReceiptLineRequest(
@@ -447,6 +455,7 @@ public sealed class PurchaseReceiptDraftTests
             references.Warehouse.Id,
             null,
             DateTime.UtcNow.Date,
+            0m,
             "Draft notes",
             [
                 new UpsertPurchaseReceiptLineRequest(

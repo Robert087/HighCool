@@ -1,6 +1,7 @@
 using ERP.Domain.Common;
 using ERP.Domain.Inventory;
 using ERP.Domain.MasterData;
+using ERP.Domain.Payments;
 using ERP.Domain.Purchasing;
 using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
@@ -47,6 +48,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ShortageResolutionAllocation> ShortageResolutionAllocations => Set<ShortageResolutionAllocation>();
 
     public DbSet<SupplierStatementEntry> SupplierStatementEntries => Set<SupplierStatementEntry>();
+
+    public DbSet<Payment> Payments => Set<Payment>();
+
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
 
     public override int SaveChanges()
     {

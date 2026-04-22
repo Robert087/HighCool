@@ -20,7 +20,9 @@ public sealed class SupplierService(AppDbContext dbContext) : ISupplierService
             suppliers = suppliers.Where(entity =>
                 entity.Code.Contains(search) ||
                 entity.Name.Contains(search) ||
-                entity.StatementName.Contains(search));
+                entity.StatementName.Contains(search) ||
+                (entity.Phone != null && entity.Phone.Contains(search)) ||
+                (entity.Email != null && entity.Email.Contains(search)));
         }
 
         if (query.IsActive.HasValue)
@@ -58,6 +60,13 @@ public sealed class SupplierService(AppDbContext dbContext) : ISupplierService
             StatementName = request.StatementName.Trim(),
             Phone = NormalizeOptional(request.Phone),
             Email = NormalizeOptional(request.Email),
+            TaxNumber = NormalizeOptional(request.TaxNumber),
+            Address = NormalizeOptional(request.Address),
+            City = NormalizeOptional(request.City),
+            Area = NormalizeOptional(request.Area),
+            CreditLimit = request.CreditLimit,
+            PaymentTerms = NormalizeOptional(request.PaymentTerms),
+            Notes = NormalizeOptional(request.Notes),
             IsActive = request.IsActive,
             CreatedBy = actor
         };
@@ -88,6 +97,13 @@ public sealed class SupplierService(AppDbContext dbContext) : ISupplierService
         supplier.StatementName = request.StatementName.Trim();
         supplier.Phone = NormalizeOptional(request.Phone);
         supplier.Email = NormalizeOptional(request.Email);
+        supplier.TaxNumber = NormalizeOptional(request.TaxNumber);
+        supplier.Address = NormalizeOptional(request.Address);
+        supplier.City = NormalizeOptional(request.City);
+        supplier.Area = NormalizeOptional(request.Area);
+        supplier.CreditLimit = request.CreditLimit;
+        supplier.PaymentTerms = NormalizeOptional(request.PaymentTerms);
+        supplier.Notes = NormalizeOptional(request.Notes);
         supplier.IsActive = request.IsActive;
         supplier.UpdatedBy = actor;
 
@@ -145,6 +161,13 @@ public sealed class SupplierService(AppDbContext dbContext) : ISupplierService
             entity.StatementName,
             entity.Phone,
             entity.Email,
+            entity.TaxNumber,
+            entity.Address,
+            entity.City,
+            entity.Area,
+            entity.CreditLimit,
+            entity.PaymentTerms,
+            entity.Notes,
             entity.IsActive,
             entity.CreatedAt,
             entity.UpdatedAt);

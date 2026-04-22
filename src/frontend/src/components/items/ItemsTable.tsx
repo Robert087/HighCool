@@ -39,7 +39,7 @@ export function ItemsTable({
       rows={items.map((item) => (
         <tr key={item.id} className="hc-table__row">
           <td>
-            <div className="hc-table__cell-strong">
+            <div className="hc-table__cell-strong hc-table__primary-cell">
               <span className="hc-table__title">{item.name}</span>
               <span className="hc-table__subtitle">{item.code}</span>
             </div>
@@ -58,19 +58,22 @@ export function ItemsTable({
             </div>
           </td>
           <td>
-            <StatusBadge isActive={item.isActive} />
+            <div className="hc-table__status-stack">
+              <StatusBadge isActive={item.isActive} />
+            </div>
           </td>
           <td className="hc-table__cell-actions">
-            <RowActions>
-              <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/items/${item.id}/edit`}>
-                Edit
-              </Link>
-              {item.isActive ? (
-                <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void onDeactivate(item.id)}>
-                  Deactivate
-                </Button>
-              ) : null}
-            </RowActions>
+            <RowActions
+              primaryAction={(
+                <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/items/${item.id}/edit`}>
+                  View
+                </Link>
+              )}
+              menuItems={[
+                { label: "Edit", to: `/items/${item.id}/edit` },
+                ...(item.isActive ? [{ label: "Deactivate", onSelect: () => void onDeactivate(item.id) }] : []),
+              ]}
+            />
           </td>
         </tr>
       ))}

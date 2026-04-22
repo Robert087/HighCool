@@ -37,7 +37,7 @@ public sealed class MasterDataValidatorsTests
     public void SupplierValidator_ShouldRequireCoreIdentityFields()
     {
         var validator = new UpsertSupplierRequestValidator();
-        var model = new UpsertSupplierRequest("", "", "", null, "invalid-email", true);
+        var model = new UpsertSupplierRequest("", "", "", null, "invalid-email", null, null, null, null, -1m, null, null, true);
 
         var result = validator.TestValidate(model);
 
@@ -45,6 +45,7 @@ public sealed class MasterDataValidatorsTests
         result.ShouldHaveValidationErrorFor(request => request.Name);
         result.ShouldHaveValidationErrorFor(request => request.StatementName);
         result.ShouldHaveValidationErrorFor(request => request.Email);
+        result.ShouldHaveValidationErrorFor(request => request.CreditLimit);
     }
 
     [Fact]

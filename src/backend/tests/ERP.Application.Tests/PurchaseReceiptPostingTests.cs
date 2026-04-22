@@ -6,6 +6,7 @@ using ERP.Domain.Purchasing;
 using ERP.Domain.Shortages;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Purchasing.PurchaseReceipts;
+using ERP.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -14,7 +15,7 @@ namespace ERP.Application.Tests;
 public sealed class PurchaseReceiptPostingTests
 {
     [Fact]
-    public async Task PostAsync_ShouldCreateStockLedgerShortageLedgerAndMarkReceiptPosted()
+    public async Task PostAsync_ShouldCreateStockLedgerShortageLedgerSupplierStatementAndMarkReceiptPosted()
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedPostingReferencesAsync(dbContext);
@@ -41,6 +42,13 @@ public sealed class PurchaseReceiptPostingTests
         Assert.Equal(2m, shortageEntry.ShortageQty);
         Assert.True(shortageEntry.AffectsSupplierBalance);
         Assert.Equal(ShortageEntryStatus.Open, shortageEntry.Status);
+
+        var statementEntry = await dbContext.SupplierStatementEntries.SingleAsync();
+        Assert.Equal(receipt.SupplierId, statementEntry.SupplierId);
+        Assert.Equal(Domain.Statements.SupplierStatementEffectType.PurchaseReceipt, statementEntry.EffectType);
+        Assert.Equal(Domain.Statements.SupplierStatementSourceDocumentType.PurchaseReceipt, statementEntry.SourceDocType);
+        Assert.Equal(0m, statementEntry.Debit);
+        Assert.Equal(0m, statementEntry.Credit);
     }
 
     [Fact]
@@ -60,6 +68,7 @@ public sealed class PurchaseReceiptPostingTests
         Assert.Equal(DocumentStatus.Posted, secondResult!.Status);
         Assert.Equal(1, await dbContext.StockLedgerEntries.CountAsync());
         Assert.Equal(1, await dbContext.ShortageLedgerEntries.CountAsync());
+        Assert.Equal(1, await dbContext.SupplierStatementEntries.CountAsync());
     }
 
     [Fact]
@@ -195,7 +204,8 @@ public sealed class PurchaseReceiptPostingTests
             receiptService,
             stockLedgerService,
             shortageDetectionService,
-            quantityConversionService);
+            quantityConversionService,
+            new SupplierStatementPostingService(dbContext));
     }
 
     private static AppDbContext CreateDbContext()

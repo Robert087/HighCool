@@ -90,12 +90,12 @@ export function UomConversionsPage() {
           columns={<tr><th scope="col">From</th><th scope="col">To</th><th scope="col">Factor</th><th scope="col">Rounding</th><th scope="col">Status</th><th scope="col" className="hc-table__head-actions" aria-label="Actions" /></tr>}
           rows={visibleRows.map((row) => (
             <tr key={row.id} className="hc-table__row">
-              <td><div className="hc-table__cell-strong"><span className="hc-table__title">{row.fromUomCode}</span><span className="hc-table__subtitle">{row.fromUomName}</span></div></td>
+              <td><div className="hc-table__cell-strong hc-table__primary-cell"><span className="hc-table__title">{row.fromUomCode}</span><span className="hc-table__subtitle">{row.fromUomName}</span></div></td>
               <td><div className="hc-table__cell-strong"><span className="hc-table__title">{row.toUomCode}</span><span className="hc-table__subtitle">{row.toUomName}</span></div></td>
               <td><span className="hc-table__subtitle">{row.factor}</span></td>
               <td><span className="hc-table__subtitle">{row.roundingMode}</span></td>
-              <td><StatusBadge isActive={row.isActive} /></td>
-              <td className="hc-table__cell-actions"><RowActions><Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/uom-conversions/${row.id}/edit`}>Edit</Link>{row.isActive ? <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleDeactivate(row.id)}>Deactivate</Button> : null}</RowActions></td>
+              <td><div className="hc-table__status-stack"><StatusBadge isActive={row.isActive} /></div></td>
+              <td className="hc-table__cell-actions"><RowActions primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/uom-conversions/${row.id}/edit`}>View</Link>} menuItems={[{ label: "Edit", to: `/uom-conversions/${row.id}/edit` }, ...(row.isActive ? [{ label: "Deactivate", onSelect: () => void handleDeactivate(row.id) }] : [])]} /></td>
             </tr>
           ))}
           footer={<><p className="hc-table__footer-note">Client-side pagination for the current result set.</p><Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={rows.length} totalPages={totalPages} /></>}

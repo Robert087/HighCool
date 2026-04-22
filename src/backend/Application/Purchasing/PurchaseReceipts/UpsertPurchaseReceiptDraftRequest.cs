@@ -6,5 +6,6 @@ public sealed record UpsertPurchaseReceiptDraftRequest(
     Guid WarehouseId,
     Guid? PurchaseOrderId,
     DateTime? ReceiptDate,
+    decimal SupplierPayableAmount,
     string? Notes,
     IReadOnlyList<UpsertPurchaseReceiptLineRequest> Lines);

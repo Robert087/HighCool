@@ -88,9 +88,15 @@ Posting effects:
 
 * status changes from `Draft` to `Posted`
 * one stock ledger `IN` row is written per receipt line
+* one supplier statement row is written per posted receipt header
 * expected component quantities are expanded from the item BOM using `received_qty`
 * actual components are compared against expected quantities
 * shortage ledger rows are written only for positive shortages
+
+Current receipt financial assumption:
+
+* receipt statement amount uses `supplier_payable_amount` from the posted receipt header
+* because receipt pricing is not yet implemented per line, `supplier_payable_amount` is the temporary explicit procurement financial basis for supplier statement and payment allocation
 
 Idempotency:
 
@@ -149,3 +155,53 @@ Idempotency:
 
 * reposting an already posted resolution returns the current posted document
 * duplicate stock and supplier statement rows are guarded by source document plus allocation indexing
+
+## Supplier Payment
+
+### Draft Save
+
+Actions:
+
+* `POST /api/payments`
+* `PUT /api/payments/{id}`
+
+Effects:
+
+* persists payment header and allocation rows
+* no stock ledger effect
+* no supplier statement effect
+* status remains `Draft`
+
+### Post
+
+Action:
+
+* `POST /api/payments/{id}/post`
+
+Preconditions:
+
+* payment exists
+* payment status is `Draft`
+* supplier exists and is active
+* payment amount is greater than zero
+* at least one allocation exists
+* allocated total does not exceed payment amount
+* allocated total must equal payment amount before posting
+* each allocation points to an open target owned by the same supplier
+* allocation amount does not exceed current open amount
+* `direction = OutboundToParty` may allocate only to `PurchaseReceipt`
+* `direction = InboundFromParty` may allocate only to financial `ShortageResolution`
+
+Posting effects:
+
+* status changes from `Draft` to `Posted`
+* no stock ledger effect
+* supplier statement rows are written using effect type `Payment`
+* outbound supplier payment writes debit rows and reduces supplier payable balance
+* inbound supplier payment writes credit rows and reduces supplier receivable balance created by financial shortage resolutions
+* open supplier target amount is reduced only through posted payment allocations
+
+Idempotency:
+
+* reposting an already posted payment returns the current posted document
+* duplicate supplier statement rows are guarded by payment source document plus allocation indexing

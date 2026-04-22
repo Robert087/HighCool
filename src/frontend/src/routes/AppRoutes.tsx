@@ -10,9 +10,12 @@ import { PurchaseOrdersPage } from "../pages/PurchaseOrdersPage";
 import { PurchaseReceiptFormPage } from "../pages/PurchaseReceiptFormPage";
 import { PurchaseReceiptsPage } from "../pages/PurchaseReceiptsPage";
 import { OpenShortagesPage } from "../pages/OpenShortagesPage";
+import { PaymentFormPage } from "../pages/PaymentFormPage";
+import { PaymentsPage } from "../pages/PaymentsPage";
 import { ShortageResolutionFormPage } from "../pages/ShortageResolutionFormPage";
 import { ShortageResolutionsPage } from "../pages/ShortageResolutionsPage";
 import { SupplierFormPage } from "../pages/SupplierFormPage";
+import { SupplierStatementPage } from "../pages/SupplierStatementPage";
 import { SuppliersPage } from "../pages/SuppliersPage";
 import { StockBalancePage } from "../pages/StockBalancePage";
 import { StockMovementPage } from "../pages/StockMovementPage";
@@ -40,6 +43,10 @@ export function AppRoutes() {
       <Route path="/shortage-resolutions" element={<ShortageResolutionsPage />} />
       <Route path="/shortage-resolutions/new" element={<ShortageResolutionFormPage />} />
       <Route path="/shortage-resolutions/:shortageResolutionId/edit" element={<ShortageResolutionFormPage />} />
+      <Route path="/payments" element={<PaymentsPage />} />
+      <Route path="/payments/new" element={<PaymentFormPage />} />
+      <Route path="/payments/:paymentId" element={<PaymentFormPage />} />
+      <Route path="/payments/:paymentId/edit" element={<PaymentFormPage />} />
       <Route path="/stock-balances" element={<StockBalancePage />} />
       <Route path="/stock-movements" element={<StockMovementPage />} />
       <Route path="/items" element={<ItemsPage />} />
@@ -49,6 +56,7 @@ export function AppRoutes() {
       <Route path="/uom-conversions/new" element={<UomConversionFormPage />} />
       <Route path="/uom-conversions/:uomConversionId/edit" element={<UomConversionFormPage />} />
       <Route path="/suppliers" element={<SuppliersPage />} />
+      <Route path="/supplier-statements" element={<SupplierStatementPage />} />
       <Route path="/suppliers/new" element={<SupplierFormPage />} />
       <Route path="/suppliers/:supplierId/edit" element={<SupplierFormPage />} />
       <Route path="/warehouses" element={<WarehousesPage />} />

@@ -1,12 +1,34 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { RowActions } from "../components/patterns";
-import { MasterDataFilterToolbar } from "../components/masterData";
-import { Badge, Button, DataTable, EmptyState, Pagination, SkeletonLoader, PageHeader, useToast } from "../components/ui";
+import {
+  Badge,
+  Button,
+  DataTable,
+  EmptyState,
+  Field,
+  FilterDateRangeInline,
+  FilterDropdown,
+  FiltersToolbar,
+  FilterTextInput,
+  Input,
+  Pagination,
+  SkeletonLoader,
+  PageHeader,
+  Select,
+  type FilterChip,
+  useToast,
+} from "../components/ui";
 import { ApiError } from "../services/api";
 import { listPurchaseOrders, type PurchaseOrderListItem } from "../services/purchaseOrdersApi";
 
 const PAGE_SIZE = 10;
+const INITIAL_FILTERS = {
+  status: "",
+  receiptProgress: "",
+  fromDate: "",
+  toDate: "",
+};
 
 function progressTone(status: PurchaseOrderListItem["receiptProgressStatus"]) {
   switch (status) {
@@ -22,25 +44,12 @@ function progressTone(status: PurchaseOrderListItem["receiptProgressStatus"]) {
 export function PurchaseOrdersPage() {
   const [rows, setRows] = useState<PurchaseOrderListItem[]>([]);
   const [search, setSearch] = useState("");
+  const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
-  const navigate = useNavigate();
   const { showToast } = useToast();
-
-  function handleEdit(row: PurchaseOrderListItem) {
-    if (row.status === "Posted") {
-      showToast({
-        tone: "warning",
-        title: "Cannot edit posted order",
-        description: "Posted purchase orders are read-only and cannot be edited.",
-      });
-      return;
-    }
-
-    navigate(`/purchase-orders/${row.id}/edit`);
-  }
 
   function handleDelete(row: PurchaseOrderListItem) {
     if (row.status === "Posted") {
@@ -91,14 +100,79 @@ export function PurchaseOrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, filters]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (filters.status && row.status !== filters.status) {
+      return false;
+    }
+
+    if (filters.receiptProgress && row.receiptProgressStatus !== filters.receiptProgress) {
+      return false;
+    }
+
+    if (filters.fromDate) {
+      const rowDate = new Date(row.orderDate);
+      const fromDate = new Date(filters.fromDate);
+      if (rowDate < fromDate) {
+        return false;
+      }
+    }
+
+    if (filters.toDate) {
+      const rowDate = new Date(row.orderDate);
+      const toDate = new Date(filters.toDate);
+      toDate.setHours(23, 59, 59, 999);
+      if (rowDate > toDate) {
+        return false;
+      }
+    }
+
+    return true;
+  }), [filters, rows]);
+  const activeFilters = useMemo(() => {
+    const chips: FilterChip[] = [];
+
+    if (search.trim()) {
+      chips.push({
+        key: "search",
+        label: `Search: ${search.trim()}`,
+        onRemove: () => setSearch(""),
+      });
+    }
+
+    if (filters.status) {
+      chips.push({
+        key: "status",
+        label: `Status: ${filters.status}`,
+        onRemove: () => setFilters((current) => ({ ...current, status: "" })),
+      });
+    }
+
+    if (filters.receiptProgress) {
+      chips.push({
+        key: "receiptProgress",
+        label: `Progress: ${filters.receiptProgress}`,
+        onRemove: () => setFilters((current) => ({ ...current, receiptProgress: "" })),
+      });
+    }
+
+    if (filters.fromDate || filters.toDate) {
+      chips.push({
+        key: "dateRange",
+        label: `Order date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        onRemove: () => setFilters((current) => ({ ...current, fromDate: "", toDate: "" })),
+      });
+    }
+
+    return chips;
+  }, [filters, search]);
+  const hasFilters = activeFilters.length > 0;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
-  const hasFilters = Boolean(search.trim());
-  const resultLabel = rows.length === 1 ? "1 purchase order" : `${rows.length} purchase orders`;
+  const visibleRows = filteredRows.slice(pageStart, pageStart + PAGE_SIZE);
+  const resultLabel = filteredRows.length === 1 ? "1 purchase order" : `${filteredRows.length} purchase orders`;
 
   return (
     <section className="hc-list-page">
@@ -111,16 +185,72 @@ export function PurchaseOrdersPage() {
         }
       />
 
-      <MasterDataFilterToolbar
-        hasFilters={hasFilters}
+      <FiltersToolbar
+        activeFilters={activeFilters}
+        dateRange={(
+          <FilterDateRangeInline
+            fromValue={filters.fromDate}
+            toValue={filters.toDate}
+            onFromChange={(value) => setFilters((current) => ({ ...current, fromDate: value }))}
+            onToChange={(value) => setFilters((current) => ({ ...current, toDate: value }))}
+          />
+        )}
+        mobileFilters={(
+          <>
+            <Field label="Status">
+              <Select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}>
+                <option value="">All statuses</option>
+                <option value="Draft">Draft</option>
+                <option value="Posted">Posted</option>
+                <option value="Canceled">Canceled</option>
+              </Select>
+            </Field>
+            <Field label="Receipt progress">
+              <Select value={filters.receiptProgress} onChange={(event) => setFilters((current) => ({ ...current, receiptProgress: event.target.value }))}>
+                <option value="">All progress states</option>
+                <option value="NotReceived">Not received</option>
+                <option value="PartiallyReceived">Partially received</option>
+                <option value="FullyReceived">Fully received</option>
+              </Select>
+            </Field>
+            <Field label="From date">
+              <Input type="date" value={filters.fromDate} onChange={(event) => setFilters((current) => ({ ...current, fromDate: event.target.value }))} />
+            </Field>
+            <Field label="To date">
+              <Input type="date" value={filters.toDate} onChange={(event) => setFilters((current) => ({ ...current, toDate: event.target.value }))} />
+            </Field>
+          </>
+        )}
+        onReset={() => {
+          setSearch("");
+          setFilters(INITIAL_FILTERS);
+        }}
+        primaryFilters={(
+          <>
+            <FilterDropdown aria-label="Purchase order status filter" value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}>
+              <option value="">Status</option>
+              <option value="Draft">Draft</option>
+              <option value="Posted">Posted</option>
+              <option value="Canceled">Canceled</option>
+            </FilterDropdown>
+            <FilterDropdown aria-label="Purchase order progress filter" value={filters.receiptProgress} onChange={(event) => setFilters((current) => ({ ...current, receiptProgress: event.target.value }))}>
+              <option value="">Receipt progress</option>
+              <option value="NotReceived">Not received</option>
+              <option value="PartiallyReceived">Partially received</option>
+              <option value="FullyReceived">Fully received</option>
+            </FilterDropdown>
+          </>
+        )}
         resultLabel={resultLabel}
-        searchLabel="Search"
-        searchPlaceholder="Search PO no, supplier, or notes"
-        searchValue={search}
-        statusEnabled={false}
-        emptyText="All purchase orders"
-        filteredText="Filtered purchase orders"
-        onSearchChange={setSearch}
+        search={(
+          <FilterTextInput
+            aria-label="Search purchase orders"
+            placeholder="Search PO no, supplier, or notes"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        )}
+        mobileTriggerOnly
       />
 
       {error ? (
@@ -145,13 +275,12 @@ export function PurchaseOrdersPage() {
 
       {!loading && !error ? (
         <DataTable
-          hasData={rows.length > 0}
+          hasData={filteredRows.length > 0}
           columns={
             <tr>
               <th scope="col">PO</th>
               <th scope="col">Supplier</th>
-              <th scope="col">Order Date</th>
-              <th scope="col">Expected</th>
+              <th scope="col">Dates</th>
               <th scope="col">Status</th>
               <th scope="col">Receipt Progress</th>
               <th scope="col" className="hc-table__head-actions" aria-label="Actions" />
@@ -160,7 +289,7 @@ export function PurchaseOrdersPage() {
           rows={visibleRows.map((row) => (
             <tr key={row.id} className="hc-table__row">
               <td>
-                <div className="hc-table__cell-strong">
+                <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{row.poNo}</span>
                   <span className="hc-table__subtitle">{row.lineCount} {row.lineCount === 1 ? "line" : "lines"}</span>
                 </div>
@@ -171,24 +300,45 @@ export function PurchaseOrdersPage() {
                   <span className="hc-table__subtitle">{row.supplierCode}</span>
                 </div>
               </td>
-              <td><span className="hc-table__subtitle">{new Date(row.orderDate).toLocaleDateString()}</span></td>
-              <td><span className="hc-table__subtitle">{row.expectedDate ? new Date(row.expectedDate).toLocaleDateString() : "Not set"}</span></td>
-              <td><Badge tone={row.status === "Posted" ? "success" : row.status === "Canceled" ? "neutral" : "warning"}>{row.status}</Badge></td>
-              <td><Badge tone={progressTone(row.receiptProgressStatus)}>{row.receiptProgressStatus}</Badge></td>
+              <td>
+                <div className="hc-table__stack">
+                  <div className="hc-table__metric">
+                    <span className="hc-table__metric-label">Order</span>
+                    <span className="hc-table__subtitle">{new Date(row.orderDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="hc-table__metric">
+                    <span className="hc-table__metric-label">Expected</span>
+                    <span className="hc-table__subtitle">{row.expectedDate ? new Date(row.expectedDate).toLocaleDateString() : "Not set"}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div className="hc-table__status-stack">
+                  <Badge tone={row.status === "Posted" ? "success" : row.status === "Canceled" ? "danger" : "warning"}>{row.status}</Badge>
+                </div>
+              </td>
+              <td>
+                <div className="hc-table__status-stack">
+                  <Badge tone={progressTone(row.receiptProgressStatus)}>{row.receiptProgressStatus}</Badge>
+                </div>
+              </td>
               <td className="hc-table__cell-actions">
-                <RowActions>
-                  <Button size="sm" variant="secondary" className="hc-table__action-button" onClick={() => handleEdit(row)}>Edit</Button>
-                  <Button size="sm" variant="ghost" className="hc-table__action-button" onClick={() => handleDelete(row)}>Delete</Button>
-                  {row.status === "Posted" && row.receiptProgressStatus !== "FullyReceived" ? (
-                    <Link className="hc-button hc-button--ghost hc-button--sm hc-table__action-button" to={`/purchase-receipts/new?purchaseOrderId=${row.id}`}>Create receipt</Link>
-                  ) : null}
-                </RowActions>
+                <RowActions
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/purchase-orders/${row.id}/edit`}>View</Link>}
+                  menuItems={[
+                    ...(row.status === "Draft" ? [{ label: "Edit", to: `/purchase-orders/${row.id}/edit` }] : []),
+                    ...(row.status === "Draft" ? [{ label: "Delete", onSelect: () => handleDelete(row), tone: "danger" as const }] : []),
+                    ...(row.status === "Posted" && row.receiptProgressStatus !== "FullyReceived"
+                      ? [{ label: "Create receipt", to: `/purchase-receipts/new?purchaseOrderId=${row.id}` }]
+                      : []),
+                  ]}
+                />
               </td>
             </tr>
           ))}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={rows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={filteredRows.length} totalPages={totalPages} />}
           emptyState={hasFilters
-            ? <EmptyState title="No purchase orders match the current search" description="Try a broader search term." />
+            ? <EmptyState title="No purchase orders match the current filters" description="Try a broader search term or clear one of the filters." />
             : <EmptyState title="No purchase orders yet" description="Create the first purchase order to define expected supplier quantities." action={<Link className="hc-button hc-button--primary hc-button--md" to="/purchase-orders/new">Create purchase order</Link>} />}
         />
       ) : null}

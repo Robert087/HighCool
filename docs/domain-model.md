@@ -81,6 +81,7 @@ Fields:
 * `warehouse_id`
 * `purchase_order_id`
 * `receipt_date`
+* `supplier_payable_amount`
 * `notes`
 * `status`
 * audit fields
@@ -92,6 +93,8 @@ Rules:
 * only `Draft` receipts can be posted
 * posting is idempotent
 * posted receipts are immutable
+* posted receipts generate supplier statement rows from the explicit receipt header payable amount
+* until receipt line pricing exists, `supplier_payable_amount` is the temporary procurement financial basis used for supplier statement and payment allocation
 
 ## Purchase Receipt Line
 
@@ -138,7 +141,7 @@ Rules:
 * `expected_qty` is system-derived as `received_qty x item component quantity`
 * `actual_received_qty` defaults to `expected_qty` and remains editable
 * `actual_received_qty >= 0`
-* `shortage_reason_code_id` is required only when `actual_received_qty < expected_qty`
+* `shortage_reason_code_id` is optional and informational only
 * one component row per component item inside the same receipt line
 
 ## Stock Ledger Entry
@@ -286,14 +289,15 @@ Fields:
 
 * `id`
 * `supplier_id`
+* `entry_date`
 * `effect_type`
 * `source_doc_type`
 * `source_doc_id`
 * `source_line_id`
-* `amount_delta`
+* `debit`
+* `credit`
 * `running_balance`
 * `currency`
-* `transaction_date`
 * `notes`
 * audit fields
 
@@ -301,4 +305,66 @@ Rules:
 
 * append-only
 * created only from posted supplier-affecting business documents
+* purchase receipt posting writes supplier statement rows
 * shortage financial resolution writes supplier statement rows with source allocation traceability
+* physical shortage resolution does not write supplier statement rows
+* supplier payment posting writes supplier statement rows with source allocation traceability
+* no manual statement entry flow exists
+* `running_balance = previous_running_balance + credit - debit`
+* purchase receipt rows currently use the explicit receipt header payable amount until receipt line pricing is implemented explicitly
+
+## Payment
+
+Fields:
+
+* `id`
+* `payment_no`
+* `party_type`
+* `party_id`
+* `direction`
+* `amount`
+* `payment_date`
+* `currency`
+* `exchange_rate`
+* `payment_method`
+* `reference_note`
+* `notes`
+* `status`
+* audit fields
+
+Rules:
+
+* supplier payments are the currently supported procurement payment flow
+* new payments start as `Draft`
+* only `Draft` payments are editable
+* only `Draft` payments can be posted
+* posted payments are immutable
+* payment posting is idempotent
+* `direction = OutboundToParty` means the company pays the supplier and reduces supplier payable balance
+* `direction = InboundFromParty` means money is received from the supplier and reduces supplier receivable balance created by financial shortage resolutions
+* no direct supplier balance edit is allowed outside posted source documents
+
+## Payment Allocation
+
+Fields:
+
+* `id`
+* `payment_id`
+* `target_doc_type`
+* `target_doc_id`
+* `target_line_id`
+* `allocated_amount`
+* `allocation_order`
+* audit fields
+
+Rules:
+
+* allocation rows are mandatory before payment posting
+* one payment may allocate across many target documents
+* one target document may be settled by many payments over time
+* partial settlement is supported
+* over-allocation is blocked
+* current procurement targets are:
+  * `PurchaseReceipt` for outbound supplier payments
+  * `ShortageResolution` for inbound supplier payments against financial shortage receivables
+* payment amount must equal total allocated amount before posting

@@ -79,6 +79,7 @@ public sealed class PurchaseReceiptService(
             WarehouseId = request.WarehouseId,
             PurchaseOrderId = request.PurchaseOrderId,
             ReceiptDate = request.ReceiptDate!.Value,
+            SupplierPayableAmount = Round(request.SupplierPayableAmount),
             Notes = NormalizeOptionalText(request.Notes),
             Status = DocumentStatus.Draft,
             CreatedBy = actor
@@ -112,6 +113,7 @@ public sealed class PurchaseReceiptService(
         receipt.WarehouseId = request.WarehouseId;
         receipt.PurchaseOrderId = request.PurchaseOrderId;
         receipt.ReceiptDate = request.ReceiptDate!.Value;
+        receipt.SupplierPayableAmount = Round(request.SupplierPayableAmount);
         receipt.Notes = NormalizeOptionalText(request.Notes);
         receipt.UpdatedBy = actor;
 
@@ -521,6 +523,7 @@ public sealed class PurchaseReceiptService(
             entity.PurchaseOrderId,
             entity.PurchaseOrder?.PoNo,
             entity.ReceiptDate,
+            entity.SupplierPayableAmount,
             entity.Notes,
             entity.Status,
             entity.Lines

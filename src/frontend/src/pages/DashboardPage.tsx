@@ -1,152 +1,185 @@
 import { Link } from "react-router-dom";
-import { Badge, Card } from "../components/ui";
+import { Button, Card, useToast } from "../components/ui";
 
-const moduleCards = [
+const quickLinks = [
   {
-    title: "Customers",
-    description: "Customer accounts, credit limits, and contact details.",
-    href: "/customers",
-    status: "Ready",
+    title: "Purchase Orders",
+    eyebrow: "Purchasing",
+    meta: "Draft, post, and review supplier demand",
+    href: "/purchase-orders",
+    actionLabel: "Open orders",
+    actionVariant: "primary",
+    cardTone: "primary",
   },
   {
-    title: "Items",
-    description: "Clean item records, roles, and base UOM setup.",
-    href: "/items",
-    status: "Ready",
+    title: "Purchase Receipts",
+    eyebrow: "Warehouse",
+    meta: "Capture deliveries and component shortages",
+    href: "/purchase-receipts",
+    actionLabel: "Open receipts",
+    actionVariant: "secondary",
+    cardTone: "supporting",
   },
   {
-    title: "Suppliers",
-    description: "Supplier names, statement names, and contact details.",
-    href: "/suppliers",
-    status: "Ready",
+    title: "Stock Balance",
+    eyebrow: "Inventory",
+    meta: "Check on-hand quantities by warehouse",
+    href: "/stock-balances",
+    actionLabel: "View balance",
+    actionVariant: "ghost",
+    cardTone: "neutral",
   },
   {
-    title: "Warehouses",
-    description: "Warehouse identities and location references.",
-    href: "/warehouses",
-    status: "Ready",
+    title: "Supplier Statement",
+    eyebrow: "Statements",
+    meta: "Review payable and receivable position",
+    href: "/supplier-statements",
+    actionLabel: "Open statement",
+    actionVariant: "ghost",
+    cardTone: "calm",
   },
-  {
-    title: "Units of Measure",
-    description: "Shared measurement rules for the catalog.",
-    href: "/uoms",
-    status: "Ready",
-  },
-];
+] as const;
 
-const nextActions = [
+const attentionItems = [
   {
-    title: "Check item roles",
-    description: "Make sure sellable and component flags are aligned before downstream flows arrive.",
-    href: "/items",
+    title: "Review open shortages",
+    detail: "Confirm unresolved component shortages before new resolution work starts.",
+    href: "/open-shortages",
+    actionLabel: "Review",
+    actionVariant: "secondary",
   },
   {
-    title: "Review supplier statement names",
-    description: "Keep external-facing names clean before statement generation is introduced.",
+    title: "Check pending purchase receipts",
+    detail: "Keep receipt capture current for posted purchase orders and warehouse stock.",
+    href: "/purchase-receipts",
+    actionLabel: "Open",
+    actionVariant: "ghost",
+  },
+  {
+    title: "Validate supplier master data",
+    detail: "Clean supplier names and statement identities before deeper statement usage grows.",
     href: "/suppliers",
+    actionLabel: "Review",
+    actionVariant: "ghost",
   },
   {
-    title: "Review customer credit controls",
-    description: "Confirm active customers and payment terms before sales and collections modules arrive.",
-    href: "/customers",
+    title: "Audit item setup",
+    detail: "Check item roles, base UOMs, and component definitions before posting volume increases.",
+    href: "/items",
+    actionLabel: "Open",
+    actionVariant: "ghost",
   },
-  {
-    title: "Validate warehouse coverage",
-    description: "Confirm active warehouse records and locations before inventory posting goes live.",
-    href: "/warehouses",
-  },
+] as const;
+
+const aiSuggestions = [
+  "Show draft purchase orders that still need posting",
+  "Where do I have open shortages by supplier?",
+  "What should I review before posting receipts today?",
 ];
 
 export function DashboardPage() {
+  const { showToast } = useToast();
+
   return (
     <section className="hc-home">
-      <Card className="hero" padding="lg">
-        <Badge tone="primary">Workspace snapshot</Badge>
-        <h2>Master data is ready for a cleaner daily workflow.</h2>
-        <p className="hero-copy">
-          The shared shell, lists, and forms now follow one calm enterprise rhythm. Review setup, tidy records, and move quickly between core modules.
-        </p>
-      </Card>
-
       <div className="hc-home__stats">
-        <Card className="hc-home__stat" muted padding="md">
-          <p className="hc-home__stat-value">7</p>
-          <p className="hc-home__stat-label">Core master-data routes live</p>
+        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--primary" muted padding="md">
+          <p className="hc-home__stat-kicker">Purchasing</p>
+          <p className="hc-home__stat-value">2</p>
+          <p className="hc-home__stat-label">Core purchasing workflows live</p>
         </Card>
-        <Card className="hc-home__stat" muted padding="md">
-          <p className="hc-home__stat-value">1</p>
-          <p className="hc-home__stat-label">Shared visual system across lists and forms</p>
+        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--supporting" muted padding="md">
+          <p className="hc-home__stat-kicker">Inventory</p>
+          <p className="hc-home__stat-value">4</p>
+          <p className="hc-home__stat-label">Inventory views ready for daily review</p>
         </Card>
-        <Card className="hc-home__stat" muted padding="md">
-          <p className="hc-home__stat-value">Draft</p>
-          <p className="hc-home__stat-label">Offline support remains draft-only</p>
+        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--neutral" muted padding="md">
+          <p className="hc-home__stat-kicker">Workspace</p>
+          <p className="hc-home__stat-value">0</p>
+          <p className="hc-home__stat-label">Drafts pending in this workspace</p>
         </Card>
       </div>
 
-      <div className="hc-overview-grid">
-        {moduleCards.map((card) => (
-          <Card key={card.title} className="hc-summary-card" padding="md">
-            <div className="hc-summary-card__header">
-              <Badge tone="neutral">{card.status}</Badge>
-              <h3 className="hc-summary-card__title">{card.title}</h3>
+      <div className="hc-home__shortcut-grid">
+        {quickLinks.map((link) => (
+          <Card
+            key={link.title}
+            className={`hc-home__shortcut-card hc-home__shortcut-card--surface hc-home__shortcut-card--${link.cardTone}`}
+            padding="md"
+          >
+            <div className="hc-home__shortcut-copy">
+              <p className="hc-home__shortcut-eyebrow">{link.eyebrow}</p>
+              <h3 className="hc-home__shortcut-title">{link.title}</h3>
+              <p className="hc-home__shortcut-meta">{link.meta}</p>
             </div>
-            <p className="hc-summary-card__description">{card.description}</p>
-            <div className="hc-summary-card__footer">
-              <Link className="hc-summary-card__link" to={card.href}>
-                Open module
-              </Link>
-            </div>
+            <Link className={`hc-button hc-button--${link.actionVariant} hc-button--sm`} to={link.href}>
+              {link.actionLabel}
+            </Link>
           </Card>
         ))}
       </div>
 
       <div className="hc-home__panels">
-        <Card className="hc-home__panel" padding="md">
+        <Card className="hc-home__panel hc-home__panel--attention" padding="md">
           <div className="hc-home__panel-header">
-            <h3 className="hc-home__panel-title">Next best actions</h3>
-            <p className="hc-home__panel-copy">A short review list to keep setup tidy.</p>
+            <h3 className="hc-home__panel-title">Needs attention</h3>
           </div>
 
           <div className="hc-home__list">
-            {nextActions.map((action) => (
+            {attentionItems.map((action) => (
               <div key={action.title} className="hc-home__list-item">
                 <div className="hc-home__list-main">
                   <p className="hc-home__list-title">{action.title}</p>
-                  <p className="hc-home__list-copy">{action.description}</p>
+                  <p className="hc-home__list-copy">{action.detail}</p>
                 </div>
 
-                <Link className="hc-button hc-button--secondary hc-button--sm" to={action.href}>
-                  Open
+                <Link className={`hc-button hc-button--${action.actionVariant} hc-button--sm`} to={action.href}>
+                  {action.actionLabel}
                 </Link>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card className="hc-home__panel" muted padding="md">
+        <Card className="hc-home__panel hc-home__panel--ai" padding="md">
           <div className="hc-home__panel-header">
-            <h3 className="hc-home__panel-title">AI workspace hints</h3>
-            <p className="hc-home__panel-copy">Assistant guidance should feel present, not noisy.</p>
+            <h3 className="hc-home__panel-title">Ask AI</h3>
           </div>
 
-          <div className="hc-home__list">
-            <div className="hc-home__list-item">
-              <div className="hc-home__list-main">
-                <p className="hc-home__list-title">Setup prompts</p>
-                <p className="hc-home__list-copy">The header assistant can surface quick review prompts as modules expand.</p>
-              </div>
+          <div className="hc-home__ai">
+            <div className="hc-home__ai-input" aria-label="Ask AI suggestions">
+              <span className="hc-home__ai-prompt">Ask AI about purchasing, shortages, or setup</span>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  showToast({
+                    tone: "info",
+                    title: "Ask AI",
+                    description: "Start with shortages, pending receipts, or setup checks for the clearest guidance.",
+                  });
+                }}
+              >
+                Open
+              </Button>
             </div>
-            <div className="hc-home__list-item">
-              <div className="hc-home__list-main">
-                <p className="hc-home__list-title">Exception-first guidance</p>
-                <p className="hc-home__list-copy">Use AI for concise nudges around missing setup, inactive records, and follow-up work.</p>
-              </div>
-            </div>
-            <div className="hc-home__list-item">
-              <div className="hc-home__list-main">
-                <p className="hc-home__list-title">No chat clutter</p>
-                <p className="hc-home__list-copy">The assistant layer stays embedded in headers, helpers, and lightweight actions.</p>
-              </div>
+            <div className="hc-home__chip-row">
+              {aiSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  className="hc-home__chip"
+                  type="button"
+                  onClick={() => {
+                    showToast({
+                      tone: "info",
+                      title: "AI suggestion",
+                      description: suggestion,
+                    });
+                  }}
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
           </div>
         </Card>

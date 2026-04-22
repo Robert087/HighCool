@@ -7,6 +7,13 @@ public sealed record SupplierDto(
     string StatementName,
     string? Phone,
     string? Email,
+    string? TaxNumber,
+    string? Address,
+    string? City,
+    string? Area,
+    decimal CreditLimit,
+    string? PaymentTerms,
+    string? Notes,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

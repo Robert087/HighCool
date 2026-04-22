@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
-import { FormPageLayout, FormSection } from "../components/patterns";
+import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Button, Checkbox, EmptyState, Field, Input, SkeletonLoader, Textarea, useToast } from "../components/ui";
 import {
   createCustomer,
@@ -36,6 +36,7 @@ export function CustomerFormPage() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const formId = "customer-form";
 
   useEffect(() => {
     if (!customerId) {
@@ -146,42 +147,56 @@ export function CustomerFormPage() {
     setValues((current) => ({ ...current, [key]: value }));
   }
 
+  function renderActionBar() {
+    return (
+      <>
+        <Link className="hc-button hc-button--secondary hc-button--md" to="/customers">Close</Link>
+        <Button form={formId} isLoading={saving} type="submit">{isEdit ? "Save customer" : "Create customer"}</Button>
+      </>
+    );
+  }
+
   return (
-    <FormPageLayout eyebrow="Master Data" title={isEdit ? "Edit customer" : "Create customer"} description="Set the customer record, commercial controls, and contact details." actions={<Link className="hc-button hc-button--secondary hc-button--md" to="/customers">Back to customers</Link>}>
-      {loading ? <div className="hc-card hc-card--md"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
-      {!loading && formError && isEdit ? <div className="hc-card hc-card--md"><EmptyState title="Unable to load customer" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
+    <DocumentPageLayout
+      eyebrow="Master Data"
+      title={isEdit ? "Edit customer" : "Create customer"}
+      description="Maintain customer identity, contact details, and commercial controls in the same ERP document layout."
+      actions={renderActionBar()}
+      footer={renderActionBar()}
+    >
+      {loading ? <div className="hc-document-section"><div className="hc-skeleton-stack"><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /><SkeletonLoader height="2.75rem" variant="rect" /></div></div> : null}
+      {!loading && formError && isEdit ? <div className="hc-document-section"><EmptyState title="Unable to load customer" description={formError} action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>} /></div> : null}
       {!loading && (!formError || !isEdit) ? (
-        <form className="hc-form-stack" onSubmit={handleSubmit}>
+        <form className="hc-document-form" id={formId} onSubmit={handleSubmit}>
           {formError ? <div className="hc-inline-error">{formError}</div> : null}
-          <FormSection title="Customer identity" description="Core naming, code, and tax reference fields.">
-            <div className="hc-form-grid">
+          <DocumentSection title="Customer identity" description="Capture customer naming, core tax fields, and account identity.">
+            <div className="hc-document-form-grid">
               <Field label="Code" required><Input value={values.code} onChange={(event) => setValue("code", event.target.value)} />{errors.code ? <small className="hc-field-error">{errors.code[0]}</small> : null}</Field>
               <Field label="Name" required><Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />{errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}</Field>
-            </div>
-            <div className="hc-form-grid">
               <Field label="Tax number"><Input value={values.taxNumber} onChange={(event) => setValue("taxNumber", event.target.value)} />{errors.taxNumber ? <small className="hc-field-error">{errors.taxNumber[0]}</small> : null}</Field>
               <Field label="Payment terms"><Input value={values.paymentTerms} onChange={(event) => setValue("paymentTerms", event.target.value)} />{errors.paymentTerms ? <small className="hc-field-error">{errors.paymentTerms[0]}</small> : null}</Field>
             </div>
-          </FormSection>
-          <FormSection title="Contact and location" description="Keep the account reachable and geographically clear.">
-            <div className="hc-form-grid">
+          </DocumentSection>
+          <DocumentSection title="Contact and location" description="Keep the account reachable and geographically clear.">
+            <div className="hc-document-form-grid">
               <Field label="Phone"><Input value={values.phone} onChange={(event) => setValue("phone", event.target.value)} />{errors.phone ? <small className="hc-field-error">{errors.phone[0]}</small> : null}</Field>
               <Field label="Email"><Input value={values.email} onChange={(event) => setValue("email", event.target.value)} />{errors.email ? <small className="hc-field-error">{errors.email[0]}</small> : null}</Field>
-            </div>
-            <Field label="Address"><Textarea value={values.address} onChange={(event) => setValue("address", event.target.value)} />{errors.address ? <small className="hc-field-error">{errors.address[0]}</small> : null}</Field>
-            <div className="hc-form-grid">
+              <Field className="hc-document-field--span-full" label="Address"><Textarea value={values.address} onChange={(event) => setValue("address", event.target.value)} />{errors.address ? <small className="hc-field-error">{errors.address[0]}</small> : null}</Field>
               <Field label="City"><Input value={values.city} onChange={(event) => setValue("city", event.target.value)} />{errors.city ? <small className="hc-field-error">{errors.city[0]}</small> : null}</Field>
               <Field label="Area"><Input value={values.area} onChange={(event) => setValue("area", event.target.value)} />{errors.area ? <small className="hc-field-error">{errors.area[0]}</small> : null}</Field>
             </div>
-          </FormSection>
-          <FormSection title="Commercial controls" description="Manage credit exposure, notes, and account status.">
-            <Field label="Credit limit" required hint="Stored on the customer master record."><Input min={0} step="0.01" type="number" value={values.creditLimit} onChange={(event) => setValue("creditLimit", event.target.value === "" ? 0 : Number(event.target.value))} />{errors.creditLimit ? <small className="hc-field-error">{errors.creditLimit[0]}</small> : null}</Field>
-            <Field label="Notes"><Textarea value={values.notes} onChange={(event) => setValue("notes", event.target.value)} />{errors.notes ? <small className="hc-field-error">{errors.notes[0]}</small> : null}</Field>
-            <Checkbox checked={values.isActive} label="Active customer" onChange={(event) => setValue("isActive", event.target.checked)} />
-          </FormSection>
-          <div className="hc-form-actions"><Link className="hc-button hc-button--ghost hc-button--md" to="/customers">Cancel</Link><Button isLoading={saving} type="submit">{isEdit ? "Save customer" : "Create customer"}</Button></div>
+          </DocumentSection>
+          <DocumentSection title="Commercial controls" description="Manage credit exposure, notes, and account status.">
+            <div className="hc-document-form-grid">
+              <Field label="Credit limit" required hint="Stored on the customer master record."><Input min={0} step="0.01" type="number" value={values.creditLimit} onChange={(event) => setValue("creditLimit", event.target.value === "" ? 0 : Number(event.target.value))} />{errors.creditLimit ? <small className="hc-field-error">{errors.creditLimit[0]}</small> : null}</Field>
+              <Field className="hc-document-field--span-full" label="Notes"><Textarea value={values.notes} onChange={(event) => setValue("notes", event.target.value)} />{errors.notes ? <small className="hc-field-error">{errors.notes[0]}</small> : null}</Field>
+              <Field className="hc-document-field--span-full" label="Status">
+                <Checkbox checked={values.isActive} label="Active customer" onChange={(event) => setValue("isActive", event.target.checked)} />
+              </Field>
+            </div>
+          </DocumentSection>
         </form>
       ) : null}
-    </FormPageLayout>
+    </DocumentPageLayout>
   );
 }

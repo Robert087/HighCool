@@ -25,5 +25,26 @@ public sealed class UpsertSupplierRequestValidator : AbstractValidator<UpsertSup
             .MaximumLength(200)
             .EmailAddress()
             .When(request => !string.IsNullOrWhiteSpace(request.Email));
+
+        RuleFor(request => request.TaxNumber)
+            .MaximumLength(64);
+
+        RuleFor(request => request.Address)
+            .MaximumLength(500);
+
+        RuleFor(request => request.City)
+            .MaximumLength(100);
+
+        RuleFor(request => request.Area)
+            .MaximumLength(100);
+
+        RuleFor(request => request.CreditLimit)
+            .GreaterThanOrEqualTo(0m);
+
+        RuleFor(request => request.PaymentTerms)
+            .MaximumLength(250);
+
+        RuleFor(request => request.Notes)
+            .MaximumLength(2000);
     }
 }

@@ -336,6 +336,21 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("address");
+
+                    b.Property<string>("Area")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("area");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("city");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -352,6 +367,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("created_by");
 
+                    b.Property<decimal>("CreditLimit")
+                        .HasColumnType("decimal(18,2)")
+                        .HasColumnName("credit_limit");
+
                     b.Property<string>("Email")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)")
@@ -367,6 +386,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(200)")
                         .HasColumnName("name");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("PaymentTerms")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)")
+                        .HasColumnName("payment_terms");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)")
@@ -377,6 +406,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)")
                         .HasColumnName("statement_name");
+
+                    b.Property<string>("TaxNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("tax_number");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -566,6 +600,169 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Payments.Payment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)")
+                        .HasColumnName("direction");
+
+                    b.Property<decimal?>("ExchangeRate")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("exchange_rate");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("party_id");
+
+                    b.Property<string>("PartyType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("party_type");
+
+                    b.Property<DateTime>("PaymentDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("payment_date");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)")
+                        .HasColumnName("payment_method");
+
+                    b.Property<string>("PaymentNo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("payment_no");
+
+                    b.Property<string>("ReferenceNote")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("reference_note");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Direction");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("PaymentMethod");
+
+                    b.HasIndex("PaymentNo")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("PartyType", "PartyId", "PaymentDate");
+
+                    b.ToTable("payments", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Payments.PaymentAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("allocated_amount");
+
+                    b.Property<int>("AllocationOrder")
+                        .HasColumnType("int")
+                        .HasColumnName("allocation_order");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("payment_id");
+
+                    b.Property<Guid>("TargetDocId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("target_doc_id");
+
+                    b.Property<string>("TargetDocType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("target_doc_type");
+
+                    b.Property<Guid?>("TargetLineId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("target_line_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentId", "AllocationOrder")
+                        .IsUnique();
+
+                    b.HasIndex("TargetDocType", "TargetDocId", "TargetLineId");
+
+                    b.ToTable("payment_allocations", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -737,6 +934,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("SupplierId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("supplier_id");
+
+                    b.Property<decimal>("SupplierPayableAmount")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("supplier_payable_amount");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
@@ -1267,10 +1468,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<decimal>("AmountDelta")
-                        .HasColumnType("decimal(18,6)")
-                        .HasColumnName("amount_delta");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
@@ -1281,16 +1478,28 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("created_by");
 
+                    b.Property<decimal>("Credit")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("credit");
+
                     b.Property<string>("Currency")
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)")
                         .HasColumnName("currency");
+
+                    b.Property<decimal>("Debit")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("debit");
 
                     b.Property<string>("EffectType")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("nvarchar(40)")
                         .HasColumnName("effect_type");
+
+                    b.Property<DateTime>("EntryDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("entry_date");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -1319,10 +1528,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("supplier_id");
 
-                    b.Property<DateTime>("TransactionDate")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("transaction_date");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
@@ -1334,9 +1539,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SupplierId", "TransactionDate");
+                    b.HasIndex("SupplierId", "EntryDate");
 
-                    b.HasIndex("SourceDocId", "SourceLineId", "EffectType")
+                    b.HasIndex("SourceDocType", "SourceDocId", "SourceLineId", "EffectType")
                         .IsUnique()
                         .HasFilter("[source_line_id] IS NOT NULL");
 
@@ -1425,6 +1630,28 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Navigation("FromUom");
 
                     b.Navigation("ToUom");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Payments.Payment", b =>
+                {
+                    b.HasOne("ERP.Domain.MasterData.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Payments.PaymentAllocation", b =>
+                {
+                    b.HasOne("ERP.Domain.Payments.Payment", "Payment")
+                        .WithMany("Allocations")
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseOrder", b =>
@@ -1659,6 +1886,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.MasterData.Item", b =>
                 {
                     b.Navigation("Components");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Payments.Payment", b =>
+                {
+                    b.Navigation("Allocations");
                 });
 
             modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseOrder", b =>

@@ -21,6 +21,8 @@ public sealed class PurchaseReceipt : BusinessDocument
 
     public DateTime ReceiptDate { get; set; }
 
+    public decimal SupplierPayableAmount { get; set; }
+
     public string? Notes { get; set; }
 
     public ICollection<PurchaseReceiptLine> Lines { get; set; } = new List<PurchaseReceiptLine>();

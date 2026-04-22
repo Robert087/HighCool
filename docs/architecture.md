@@ -84,6 +84,7 @@ Current implementation uses:
 * validates draft receipt
 * keeps posting idempotent
 * writes stock ledger rows
+* writes supplier statement rows from the current receipt financial basis
 * runs shortage detection
 * marks receipt as `Posted`
 
@@ -115,6 +116,22 @@ Current implementation uses:
 * writes stock ledger rows for physical resolutions
 * writes supplier statement rows for financial resolutions
 * marks the resolution as `Posted`
+
+### SupplierStatementPostingService
+
+* writes append-only supplier statement rows from posted purchase receipts
+* writes append-only supplier statement rows from posted financial shortage resolutions
+* blocks duplicate supplier statement effects for the same posted source document
+
+### SupplierStatementQueryService
+
+* lists supplier statement rows with supplier, effect, source document, and date filters
+* resolves source document numbers for receipt and shortage resolution traceability
+
+### SupplierBalanceService
+
+* returns supplier statement summaries with opening, closing, and current balances
+* keeps summary calculation aligned with append-only statement rows
 
 ### ShortageResolutionValidationService
 

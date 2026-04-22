@@ -7,6 +7,7 @@ using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Shortages;
+using ERP.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -101,7 +102,8 @@ public sealed class ShortageResolutionPostingTests
 
         var statementEntry = await dbContext.SupplierStatementEntries.SingleAsync();
         Assert.Equal(SupplierStatementEffectType.ShortageFinancialResolution, statementEntry.EffectType);
-        Assert.Equal(-30m, statementEntry.AmountDelta);
+        Assert.Equal(30m, statementEntry.Debit);
+        Assert.Equal(0m, statementEntry.Credit);
     }
 
     [Fact]
@@ -349,7 +351,12 @@ public sealed class ShortageResolutionPostingTests
         var validationService = new ShortageResolutionValidationService(dbContext);
         var allocationService = new ShortageResolutionAllocationService(dbContext);
 
-        return new ShortageResolutionPostingService(dbContext, resolutionService, validationService, allocationService);
+        return new ShortageResolutionPostingService(
+            dbContext,
+            resolutionService,
+            validationService,
+            allocationService,
+            new SupplierStatementPostingService(dbContext));
     }
 
     private static AppDbContext CreateDbContext()

@@ -1,4 +1,5 @@
 using ERP.Application.Shortages;
+using ERP.Application.Statements;
 using ERP.Domain.Common;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,8 @@ public sealed class ShortageResolutionPostingService(
     AppDbContext dbContext,
     IShortageResolutionService shortageResolutionService,
     IShortageResolutionValidationService validationService,
-    IShortageResolutionAllocationService allocationService) : IShortageResolutionPostingService
+    IShortageResolutionAllocationService allocationService,
+    ISupplierStatementPostingService supplierStatementPostingService) : IShortageResolutionPostingService
 {
     public async Task<ShortageResolutionDto?> PostAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
@@ -64,6 +66,7 @@ public sealed class ShortageResolutionPostingService(
 
         await validationService.ValidateDraftAsync(resolution, cancellationToken);
         await allocationService.ApplyAsync(resolution, actor, cancellationToken);
+        await supplierStatementPostingService.CreateFinancialShortageResolutionEntriesAsync(resolution, actor, cancellationToken);
 
         resolution.TotalQty = resolution.ResolutionType == Domain.Shortages.ShortageResolutionType.Physical
             ? resolution.Allocations.Sum(entity => entity.AllocatedQty ?? 0m)

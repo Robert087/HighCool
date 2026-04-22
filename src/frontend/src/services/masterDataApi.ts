@@ -7,6 +7,13 @@ export interface Supplier {
   statementName: string;
   phone: string | null;
   email: string | null;
+  taxNumber: string | null;
+  address: string | null;
+  city: string | null;
+  area: string | null;
+  creditLimit: number;
+  paymentTerms: string | null;
+  notes: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string | null;
@@ -121,6 +128,13 @@ export interface SupplierFormValues {
   statementName: string;
   phone: string;
   email: string;
+  taxNumber: string;
+  address: string;
+  city: string;
+  area: string;
+  creditLimit: number;
+  paymentTerms: string;
+  notes: string;
   isActive: boolean;
 }
 

@@ -156,7 +156,7 @@ export function CustomersPage() {
           rows={visibleCustomers.map((customer) => (
             <tr key={customer.id} className="hc-table__row">
               <td>
-                <div className="hc-table__cell-strong">
+                <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{customer.name}</span>
                   <span className="hc-table__subtitle">{customer.code}</span>
                 </div>
@@ -179,16 +179,17 @@ export function CustomersPage() {
                   <span className="hc-table__subtitle">{customer.creditLimit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
               </td>
-              <td><StatusBadge isActive={customer.isActive} /></td>
+              <td><div className="hc-table__status-stack"><StatusBadge isActive={customer.isActive} /></div></td>
               <td className="hc-table__cell-actions">
-                <RowActions>
-                  <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/customers/${customer.id}/edit`}>Edit</Link>
-                  {customer.isActive ? (
-                    <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleToggleStatus(customer.id, false)}>Deactivate</Button>
-                  ) : (
-                    <Button className="hc-table__action-button" size="sm" variant="ghost" onClick={() => void handleToggleStatus(customer.id, true)}>Activate</Button>
-                  )}
-                </RowActions>
+                <RowActions
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/customers/${customer.id}/edit`}>View</Link>}
+                  menuItems={[
+                    { label: "Edit", to: `/customers/${customer.id}/edit` },
+                    customer.isActive
+                      ? { label: "Deactivate", onSelect: () => void handleToggleStatus(customer.id, false) }
+                      : { label: "Activate", onSelect: () => void handleToggleStatus(customer.id, true) },
+                  ]}
+                />
               </td>
             </tr>
           ))}

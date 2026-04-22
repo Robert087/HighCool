@@ -1,7 +1,6 @@
 using ERP.Application.Shortages;
 using ERP.Domain.Inventory;
 using ERP.Domain.Shortages;
-using ERP.Domain.Statements;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +11,6 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
     public async Task ApplyAsync(ShortageResolution resolution, string actor, CancellationToken cancellationToken)
     {
         var runningStockBalances = new Dictionary<(Guid ItemId, Guid WarehouseId), decimal>();
-        var runningSupplierBalances = new Dictionary<Guid, decimal>();
 
         foreach (var allocation in resolution.Allocations.OrderBy(entity => entity.SequenceNo))
         {
@@ -77,34 +75,6 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
             allocation.FinancialQtyEquivalent = quantityEquivalent;
             allocation.ValuationRate = valuationRate;
             ApplyFinancialResolvedState(shortage, allocatedAmount, quantityEquivalent, actor);
-
-            if (!runningSupplierBalances.TryGetValue(resolution.SupplierId, out var supplierRunningBalance))
-            {
-                supplierRunningBalance = await dbContext.SupplierStatementEntries
-                    .Where(entity => entity.SupplierId == resolution.SupplierId)
-                    .OrderByDescending(entity => entity.TransactionDate)
-                    .ThenByDescending(entity => entity.CreatedAt)
-                    .Select(entity => entity.RunningBalance)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-
-            supplierRunningBalance -= allocatedAmount;
-            runningSupplierBalances[resolution.SupplierId] = supplierRunningBalance;
-
-            dbContext.SupplierStatementEntries.Add(new SupplierStatementEntry
-            {
-                SupplierId = resolution.SupplierId,
-                EffectType = SupplierStatementEffectType.ShortageFinancialResolution,
-                SourceDocType = SupplierStatementSourceDocumentType.ShortageResolution,
-                SourceDocId = resolution.Id,
-                SourceLineId = allocation.Id,
-                AmountDelta = -allocatedAmount,
-                RunningBalance = supplierRunningBalance,
-                Currency = resolution.Currency,
-                TransactionDate = resolution.ResolutionDate,
-                Notes = $"Shortage resolution {resolution.ResolutionNo}",
-                CreatedBy = actor
-            });
         }
     }
 

@@ -17,13 +17,15 @@ public sealed class SupplierStatementEntry : AuditableEntity
 
     public Guid? SourceLineId { get; set; }
 
-    public decimal AmountDelta { get; set; }
+    public decimal Debit { get; set; }
+
+    public decimal Credit { get; set; }
 
     public decimal RunningBalance { get; set; }
 
     public string? Currency { get; set; }
 
-    public DateTime TransactionDate { get; set; }
+    public DateTime EntryDate { get; set; }
 
     public string? Notes { get; set; }
 }

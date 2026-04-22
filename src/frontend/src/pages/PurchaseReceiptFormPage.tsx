@@ -38,6 +38,7 @@ const initialValues: PurchaseReceiptFormValues = {
   warehouseId: "",
   purchaseOrderId: "",
   receiptDate: new Date().toISOString().slice(0, 10),
+  supplierPayableAmount: 0,
   notes: "",
   lines: [],
 };
@@ -140,6 +141,7 @@ function mapReceiptToFormValues(receipt: PurchaseReceipt): PurchaseReceiptFormVa
     warehouseId: receipt.warehouseId,
     purchaseOrderId: receipt.purchaseOrderId ?? "",
     receiptDate: receipt.receiptDate.slice(0, 10),
+    supplierPayableAmount: receipt.supplierPayableAmount,
     notes: receipt.notes ?? "",
     lines: receipt.lines.map((line) => ({
       lineNo: line.lineNo,
@@ -317,6 +319,10 @@ export function PurchaseReceiptFormPage() {
 
     if (!currentValues.receiptDate) {
       nextErrors.receiptDate = ["Receipt date is required."];
+    }
+
+    if (currentValues.supplierPayableAmount === "" || Number(currentValues.supplierPayableAmount) < 0) {
+      nextErrors.supplierPayableAmount = ["Supplier payable amount cannot be negative."];
     }
 
     if (currentValues.lines.length === 0) {
@@ -658,6 +664,18 @@ export function PurchaseReceiptFormPage() {
               <Field label="Receipt date" required>
                 <Input disabled={!isEditable} type="date" value={values.receiptDate} onChange={(event) => setValue("receiptDate", event.target.value)} />
                 {errors.receiptDate ? <small className="hc-field-error">{errors.receiptDate[0]}</small> : null}
+              </Field>
+              <Field label="Supplier payable amount" required>
+                <Input
+                  disabled={!isEditable}
+                  min={0}
+                  step="0.000001"
+                  type="number"
+                  value={values.supplierPayableAmount}
+                  onChange={(event) => setValue("supplierPayableAmount", event.target.value === "" ? "" : Number(event.target.value))}
+                />
+                <div className="hc-field__hint">Used for supplier statement and payment allocation until receipt pricing is modeled per line.</div>
+                {errors.supplierPayableAmount ? <small className="hc-field-error">{errors.supplierPayableAmount[0]}</small> : null}
               </Field>
               <Field className="hc-document-field--summary" label="Receipt mode">
                 <div className="hc-document-readonly">

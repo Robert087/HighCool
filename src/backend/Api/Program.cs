@@ -38,6 +38,8 @@ app.MapPurchaseOrderEndpoints();
 app.MapPurchaseReceiptEndpoints();
 app.MapShortageReasonCodeEndpoints();
 app.MapShortageResolutionEndpoints();
+app.MapPaymentEndpoints();
+app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
 
 app.Run();

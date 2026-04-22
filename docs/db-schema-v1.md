@@ -72,6 +72,7 @@ Columns:
 * `warehouse_id`
 * `purchase_order_id`
 * `receipt_date`
+* `supplier_payable_amount`
 * `notes`
 * `status`
 * audit fields
@@ -285,24 +286,86 @@ Columns:
 
 * `id`
 * `supplier_id`
+* `entry_date`
 * `effect_type`
 * `source_doc_type`
 * `source_doc_id`
 * `source_line_id`
-* `amount_delta`
+* `debit`
+* `credit`
 * `running_balance`
 * `currency`
-* `transaction_date`
 * `notes`
 * audit fields
 
 Constraints:
 
-* unique index on `(source_doc_id, source_line_id, effect_type)`
-* index on `(supplier_id, transaction_date)`
+* unique index on `(source_doc_type, source_doc_id, source_line_id, effect_type)`
+* index on `(supplier_id, entry_date)`
 * foreign key to `suppliers(id)` on `supplier_id`
 
 Behavior rules:
 
 * this table is append-only
 * no direct supplier balance edit table exists or is allowed
+* `running_balance` is stored as `previous + credit - debit`
+* purchase receipt statement rows currently use `purchase_receipts.supplier_payable_amount` until receipt line pricing is implemented
+* payment statement rows use `source_line_id = payment_allocations.id` for allocation traceability
+
+## `payments`
+
+Columns:
+
+* `id`
+* `payment_no`
+* `party_type`
+* `party_id`
+* `direction`
+* `amount`
+* `payment_date`
+* `currency`
+* `exchange_rate`
+* `payment_method`
+* `reference_note`
+* `notes`
+* `status`
+* audit fields
+
+Constraints:
+
+* unique index on `payment_no`
+* index on `(party_type, party_id, payment_date)`
+* index on `status`
+* index on `payment_method`
+* index on `direction`
+* foreign key to `suppliers(id)` on `party_id` for the current supplier payment flow
+
+Behavior rules:
+
+* posted payments are immutable
+* payment posting creates supplier statement rows only through posted allocations
+
+## `payment_allocations`
+
+Columns:
+
+* `id`
+* `payment_id`
+* `target_doc_type`
+* `target_doc_id`
+* `target_line_id`
+* `allocated_amount`
+* `allocation_order`
+* audit fields
+
+Constraints:
+
+* unique index on `(payment_id, allocation_order)`
+* index on `(target_doc_type, target_doc_id, target_line_id)`
+* foreign key to `payments(id)` on `payment_id`
+
+Behavior rules:
+
+* payment allocations are mandatory before posting
+* open amount is derived from source document amount minus posted payment allocations
+* current supplier payment targets are `PurchaseReceipt` and `ShortageResolution`

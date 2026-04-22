@@ -77,6 +77,54 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     }
 
     [Fact]
+    public async Task SuppliersApi_ShouldCreateAndReturnExtendedSupplierFields()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        var client = _factory.CreateClient();
+        var createResponse = await client.PostAsJsonAsync("/api/suppliers", new
+        {
+            code = "SUP-ERP-01",
+            name = "Delta Cooling Supplies",
+            statementName = "Delta Cooling Supplies LLC",
+            phone = "+20-122-222-3333",
+            email = "ap@delta.example",
+            taxNumber = "SUP-TAX-19",
+            address = "Industrial Zone 4",
+            city = "Cairo",
+            area = "Nasr City",
+            creditLimit = 18000m,
+            paymentTerms = "30 days",
+            notes = "Priority condenser vendor",
+            isActive = true
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var created = await createResponse.Content.ReadFromJsonAsync<SupplierResponse>();
+        Assert.NotNull(created);
+        Assert.Equal("SUP-ERP-01", created!.Code);
+        Assert.Equal("SUP-TAX-19", created.TaxNumber);
+        Assert.Equal(18000m, created.CreditLimit);
+
+        var getResponse = await client.GetAsync($"/api/suppliers/{created.Id}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var fetched = await getResponse.Content.ReadFromJsonAsync<SupplierResponse>();
+        Assert.NotNull(fetched);
+        Assert.Equal("Nasr City", fetched!.Area);
+        Assert.Equal("30 days", fetched.PaymentTerms);
+
+        var listResponse = await client.GetAsync("/api/suppliers?search=222&isActive=true");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var list = await listResponse.Content.ReadFromJsonAsync<List<SupplierResponse>>();
+        Assert.NotNull(list);
+        Assert.Single(list!);
+        Assert.Equal(created.Id, list[0].Id);
+    }
+
+    [Fact]
     public async Task ItemsApi_ShouldCreateAndReturnItemWithComponents()
     {
         await _factory.ResetDatabaseAsync();
@@ -273,4 +321,13 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     public sealed record CustomerResponse(Guid Id, string Code, decimal CreditLimit, bool IsActive);
 
     public sealed record CustomerListItemResponse(Guid Id, string Code, string Name, string? Phone, bool IsActive);
+
+    public sealed record SupplierResponse(
+        Guid Id,
+        string Code,
+        string? TaxNumber,
+        string? Area,
+        decimal CreditLimit,
+        string? PaymentTerms,
+        bool IsActive);
 }

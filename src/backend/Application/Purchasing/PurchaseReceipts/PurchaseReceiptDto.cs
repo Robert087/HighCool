@@ -14,6 +14,7 @@ public sealed record PurchaseReceiptDto(
     Guid? PurchaseOrderId,
     string? PurchaseOrderNo,
     DateTime ReceiptDate,
+    decimal SupplierPayableAmount,
     string? Notes,
     DocumentStatus Status,
     IReadOnlyList<PurchaseReceiptLineDto> Lines,

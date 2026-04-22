@@ -6,11 +6,16 @@ import {
   DataTable,
   EmptyState,
   Field,
+  FilterDateRangeInline,
+  FilterDropdown,
+  FiltersToolbar,
+  FilterTextInput,
   Input,
   PageHeader,
   Pagination,
   Select,
   SkeletonLoader,
+  type FilterChip,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listStockLedger, type InventoryFilters, type StockLedgerEntry } from "../services/inventoryApi";
@@ -119,6 +124,56 @@ export function StockMovementPage() {
     () => Object.values(filters).some((value) => value.trim().length > 0),
     [filters],
   );
+  const activeFilters = useMemo(() => {
+    const selectedItem = items.find((item) => item.id === filters.itemId);
+    const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === filters.warehouseId);
+    const chips: FilterChip[] = [];
+
+    if (filters.search.trim()) {
+      chips.push({
+        key: "search",
+        label: `Search: ${filters.search.trim()}`,
+        onRemove: () => setFilter("search", ""),
+      });
+    }
+
+    if (selectedItem) {
+      chips.push({
+        key: "item",
+        label: `Item: ${selectedItem.code} - ${selectedItem.name}`,
+        onRemove: () => setFilter("itemId", ""),
+      });
+    }
+
+    if (selectedWarehouse) {
+      chips.push({
+        key: "warehouse",
+        label: `Warehouse: ${selectedWarehouse.code} - ${selectedWarehouse.name}`,
+        onRemove: () => setFilter("warehouseId", ""),
+      });
+    }
+
+    if (filters.transactionType) {
+      chips.push({
+        key: "transactionType",
+        label: `Type: ${formatTransactionType(filters.transactionType as StockLedgerEntry["transactionType"])}`,
+        onRemove: () => setFilter("transactionType", ""),
+      });
+    }
+
+    if (filters.fromDate || filters.toDate) {
+      chips.push({
+        key: "dateRange",
+        label: `Date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        onRemove: () => {
+          setFilter("fromDate", "");
+          setFilter("toDate", "");
+        },
+      });
+    }
+
+    return chips;
+  }, [filters, items, warehouses]);
   const resultLabel = rows.length === 1 ? "1 movement row" : `${rows.length} movement rows`;
 
   function setFilter<K extends keyof InventoryFilters>(key: K, value: InventoryFilters[K]) {
@@ -138,53 +193,91 @@ export function StockMovementPage() {
         }
       />
 
-      <Card className="hc-inventory-filter-panel" padding="md">
-        <div className="hc-inventory-filter-panel__top">
-          <div>
-            <h2 className="hc-inventory-filter-panel__title">Filters</h2>
-            <p className="hc-inventory-filter-panel__description">Use the full ledger history to trace source documents, warehouse movement, and running stock positions.</p>
-          </div>
-          <div className="hc-inventory-filter-panel__meta">
-            <span className="hc-inventory-filter-panel__result">{resultLabel}</span>
-            {hasFilters ? (
-              <Button size="sm" variant="ghost" onClick={() => setFilters(INITIAL_FILTERS)}>
-                Reset filters
-              </Button>
-            ) : null}
-          </div>
-        </div>
+      <FiltersToolbar
+        activeFilters={activeFilters}
+        dateRange={(
+          <FilterDateRangeInline
+            fromValue={filters.fromDate}
+            toValue={filters.toDate}
+            onFromChange={(value) => setFilter("fromDate", value)}
+            onToChange={(value) => setFilter("toDate", value)}
+          />
+        )}
+        mobileFilters={(
+          <>
+            <Field label="Item">
+              <Select value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
+                <option value="">All items</option>
+                {items.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.code} - {item.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        <div className="hc-form-grid hc-inventory-filter-grid">
-          <Field label="Search">
-            <Input
-              placeholder="Search item code, item name, warehouse"
-              value={filters.search}
-              onChange={(event) => setFilter("search", event.target.value)}
-            />
-          </Field>
+            <Field label="Warehouse">
+              <Select value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
+                <option value="">All warehouses</option>
+                {warehouses.map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.code} - {warehouse.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-          <Field label="Item">
-            <Select value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
-              <option value="">All items</option>
+            <Field label="Transaction type">
+              <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
+                <option value="">All transaction types</option>
+                <option value="PurchaseReceipt">Purchase receipt</option>
+                <option value="PurchaseReceiptReversal">Purchase receipt reversal</option>
+                <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
+              </Select>
+            </Field>
+
+            <Field label="From date">
+              <Input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} />
+            </Field>
+
+            <Field label="To date">
+              <Input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} />
+            </Field>
+          </>
+        )}
+        onReset={() => setFilters(INITIAL_FILTERS)}
+        primaryFilters={(
+          <>
+            <FilterDropdown aria-label="Item filter" value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
+              <option value="">Item</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.code} - {item.name}
                 </option>
               ))}
-            </Select>
-          </Field>
+            </FilterDropdown>
 
-          <Field label="Warehouse">
-            <Select value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
-              <option value="">All warehouses</option>
+            <FilterDropdown aria-label="Warehouse filter" value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
+              <option value="">Warehouse</option>
               {warehouses.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.code} - {warehouse.name}
                 </option>
               ))}
-            </Select>
-          </Field>
-
+            </FilterDropdown>
+          </>
+        )}
+        resultLabel={resultLabel}
+        search={(
+          <FilterTextInput
+            aria-label="Search stock movements"
+            placeholder="Search item code, item name, warehouse"
+            value={filters.search}
+            onChange={(event) => setFilter("search", event.target.value)}
+          />
+        )}
+        secondaryActiveCount={filters.transactionType ? 1 : 0}
+        secondaryFilters={(
           <Field label="Transaction type">
             <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
               <option value="">All transaction types</option>
@@ -193,16 +286,8 @@ export function StockMovementPage() {
               <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
             </Select>
           </Field>
-
-          <Field label="From date">
-            <Input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} />
-          </Field>
-
-          <Field label="To date">
-            <Input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} />
-          </Field>
-        </div>
-      </Card>
+        )}
+      />
 
       {error ? (
         <Card padding="md">
@@ -245,7 +330,7 @@ export function StockMovementPage() {
           rows={visibleRows.map((row) => (
             <tr key={row.id} className="hc-table__row">
               <td>
-                <div className="hc-table__cell-strong">
+                <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{new Date(row.transactionDate).toLocaleDateString()}</span>
                   <span className="hc-table__subtitle">{row.uomCode}</span>
                 </div>

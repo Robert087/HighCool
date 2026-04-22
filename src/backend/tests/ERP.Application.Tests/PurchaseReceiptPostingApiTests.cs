@@ -174,6 +174,7 @@ public sealed class PurchaseReceiptPostingApiTests : IClassFixture<PurchaseRecei
 
         Assert.Equal(1, await dbContext.StockLedgerEntries.CountAsync());
         Assert.Equal(1, await dbContext.ShortageLedgerEntries.CountAsync());
+        Assert.Equal(1, await dbContext.SupplierStatementEntries.CountAsync());
     }
 
     public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime

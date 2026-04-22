@@ -1,4 +1,4 @@
-import { Badge, Input, Select } from "../ui";
+import { FilterDropdown, FiltersToolbar, FilterTextInput, type FilterChip } from "../ui";
 
 interface MasterDataFilterToolbarProps {
   hasFilters: boolean;
@@ -29,35 +29,50 @@ export function MasterDataFilterToolbar({
   statusEnabled = true,
   statusValue = "all",
 }: MasterDataFilterToolbarProps) {
+  const activeFilters: FilterChip[] = [];
+
+  if (searchValue.trim()) {
+    activeFilters.push({
+      key: "search",
+      label: `Search: ${searchValue.trim()}`,
+      onRemove: () => onSearchChange(""),
+    });
+  }
+
+  if (statusEnabled && statusValue !== "all") {
+    activeFilters.push({
+      key: "status",
+      label: `Status: ${statusValue === "active" ? "Active" : "Inactive"}`,
+      onRemove: () => onStatusChange?.("all"),
+    });
+  }
+
   return (
-    <div className="hc-card hc-card--md hc-filter-bar">
-      <div className={`hc-filter-bar__controls ${searchWidth === "full" ? "hc-filter-bar__controls--single" : ""}`}>
-        <label className="hc-filter-bar__field hc-filter-bar__field--search">
-          <span className="hc-filter-bar__label">{searchLabel}</span>
-          <Input
-            className="hc-filter-bar__input"
-            placeholder={searchPlaceholder}
-            value={searchValue}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
-        </label>
-
-        {statusEnabled ? (
-          <label className="hc-filter-bar__field hc-filter-bar__field--status">
-            <span className="hc-filter-bar__label">Status</span>
-            <Select className="hc-filter-bar__input" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </Select>
-          </label>
-        ) : null}
-      </div>
-
-      <div className="hc-filter-bar__meta">
-        <Badge tone="neutral">{resultLabel}</Badge>
-        <p className="hc-filter-bar__result">{hasFilters ? filteredText : emptyText}</p>
-      </div>
-    </div>
+    <FiltersToolbar
+      activeFilters={activeFilters}
+      search={(
+        <FilterTextInput
+          aria-label={searchLabel}
+          placeholder={searchPlaceholder}
+          value={searchValue}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+      )}
+      primaryFilters={statusEnabled ? (
+        <FilterDropdown aria-label="Status filter" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
+          <option value="all">Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </FilterDropdown>
+      ) : null}
+      resultLabel={resultLabel}
+      resetLabel="Reset"
+      onReset={() => {
+        onSearchChange("");
+        if (statusEnabled) {
+          onStatusChange?.("all");
+        }
+      }}
+    />
   );
 }

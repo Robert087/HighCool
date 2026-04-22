@@ -28,16 +28,22 @@ These decisions are mandatory for ongoing purchasing work:
 * purchase receipt is the source of actual delivered quantities
 * PO-linked receipt lines must store PO traceability and ordered quantity snapshot
 * over-receipt is blocked in the current implementation
+* until receipt line pricing exists, purchase receipt supplier payable value is captured explicitly on the receipt header and drives supplier statement and payment allocation
 
 ### Stock and Shortage
 
 * stock is derived from stock ledger entries only
 * purchase receipt posting writes stock ledger rows
+* purchase receipt posting writes supplier statement rows from the current receipt financial basis
 * shortage expectation is expanded from BOM against receipt quantity
 * shortage ledger rows are created only for positive shortages
 * shortage resolution posting is the only supported way to close shortage rows
 * physical shortage resolution writes stock ledger rows
 * financial shortage resolution writes supplier statement rows
+* physical shortage resolution does not write supplier statement rows
+* supplier payment allocation is mandatory
+* supplier payments settle open procurement balances only through posted allocation rows
+* supplier payment posting writes supplier statement rows
 * shortage closure is allocation-driven and must support partial and multi-row settlement
 * one shortage row may be resolved repeatedly over time through physical and/or financial settlement
 * shortage closes only when the full shortage quantity has been covered
