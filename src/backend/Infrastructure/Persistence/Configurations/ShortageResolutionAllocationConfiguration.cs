@@ -19,6 +19,12 @@ public sealed class ShortageResolutionAllocationConfiguration : AuditableEntityC
             .HasColumnName("shortage_ledger_id")
             .IsRequired();
 
+        builder.Property(entity => entity.AllocationType)
+            .HasColumnName("allocation_type")
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired();
+
         builder.Property(entity => entity.AllocatedQty)
             .HasColumnName("allocated_qty")
             .HasColumnType("decimal(18,6)");
@@ -29,6 +35,10 @@ public sealed class ShortageResolutionAllocationConfiguration : AuditableEntityC
 
         builder.Property(entity => entity.ValuationRate)
             .HasColumnName("valuation_rate")
+            .HasColumnType("decimal(18,6)");
+
+        builder.Property(entity => entity.FinancialQtyEquivalent)
+            .HasColumnName("financial_qty_equivalent")
             .HasColumnType("decimal(18,6)");
 
         builder.Property(entity => entity.AllocationMethod)

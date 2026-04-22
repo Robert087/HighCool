@@ -12,11 +12,15 @@ public sealed class ShortageResolutionAllocation : AuditableEntity
 
     public ShortageLedgerEntry? ShortageLedgerEntry { get; set; }
 
+    public ShortageAllocationType AllocationType { get; set; }
+
     public decimal? AllocatedQty { get; set; }
 
     public decimal? AllocatedAmount { get; set; }
 
     public decimal? ValuationRate { get; set; }
+
+    public decimal? FinancialQtyEquivalent { get; set; }
 
     public string AllocationMethod { get; set; } = "Manual";
 

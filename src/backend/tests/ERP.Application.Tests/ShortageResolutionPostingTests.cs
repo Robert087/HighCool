@@ -15,41 +15,7 @@ namespace ERP.Application.Tests;
 public sealed class ShortageResolutionPostingTests
 {
     [Fact]
-    public async Task PostAsync_ShouldFullyResolvePhysicalShortageAndCreateStockLedgerEntry()
-    {
-        await using var dbContext = CreateDbContext();
-        var references = await SeedShortageReferencesAsync(dbContext);
-        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 5m);
-        var resolution = await CreateResolutionAsync(
-            dbContext,
-            references.Supplier,
-            ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedQty: 5m)
-            });
-
-        var service = CreatePostingService(dbContext);
-
-        var result = await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
-
-        Assert.NotNull(result);
-        Assert.Equal(DocumentStatus.Posted, result!.Status);
-
-        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
-        Assert.Equal(5m, updatedShortage.ResolvedQty);
-        Assert.Equal(0m, updatedShortage.OpenQty);
-        Assert.Equal(ShortageEntryStatus.Resolved, updatedShortage.Status);
-
-        var stockEntry = await dbContext.StockLedgerEntries.SingleAsync();
-        Assert.Equal(StockTransactionType.ShortagePhysicalResolution, stockEntry.TransactionType);
-        Assert.Equal(SourceDocumentType.ShortageResolution, stockEntry.SourceDocType);
-        Assert.Equal(5m, stockEntry.QtyIn);
-        Assert.Equal(references.ComponentItem.BaseUomId, stockEntry.UomId);
-    }
-
-    [Fact]
-    public async Task PostAsync_ShouldPartiallyResolvePhysicalShortage()
+    public async Task PostAsync_ShouldFullyResolvePhysicalShortage()
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedShortageReferencesAsync(dbContext);
@@ -58,173 +24,274 @@ public sealed class ShortageResolutionPostingTests
             dbContext,
             references.Supplier,
             ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedQty: 4m)
-            });
+            [new AllocationSeed(shortage.Id, allocatedQty: 10m)]);
 
         var service = CreatePostingService(dbContext);
 
         await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
 
         var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
-        Assert.Equal(4m, updatedShortage.ResolvedQty);
-        Assert.Equal(6m, updatedShortage.OpenQty);
-        Assert.Equal(ShortageEntryStatus.PartiallyResolved, updatedShortage.Status);
+        Assert.Equal(10m, updatedShortage.ResolvedPhysicalQty);
+        Assert.Equal(0m, updatedShortage.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(0m, updatedShortage.OpenQty);
+        Assert.Equal(ShortageEntryStatus.Resolved, updatedShortage.Status);
+
+        var stockEntry = await dbContext.StockLedgerEntries.SingleAsync();
+        Assert.Equal(10m, stockEntry.QtyIn);
+        Assert.Equal(StockTransactionType.ShortagePhysicalResolution, stockEntry.TransactionType);
     }
 
     [Fact]
-    public async Task PostAsync_ShouldResolveMultipleShortageRowsInOnePhysicalResolution()
+    public async Task PostAsync_ShouldPartiallyResolvePhysicalShortage()
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedShortageReferencesAsync(dbContext);
-        var first = await CreateShortageAsync(dbContext, references, shortageQty: 3m);
-        var second = await CreateShortageAsync(dbContext, references, shortageQty: 2m, suffix: "0002");
+        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 10m, shortageValue: 100m);
         var resolution = await CreateResolutionAsync(
             dbContext,
             references.Supplier,
             ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(first.Id, AllocatedQty: 3m),
-                new AllocationSeed(second.Id, AllocatedQty: 2m)
-            });
-
-        var service = CreatePostingService(dbContext);
-
-        await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
-
-        Assert.Equal(2, await dbContext.StockLedgerEntries.CountAsync());
-        Assert.All(await dbContext.ShortageLedgerEntries.OrderBy(entity => entity.CreatedAt).ToListAsync(), shortage =>
-        {
-            Assert.Equal(0m, shortage.OpenQty);
-            Assert.Equal(ShortageEntryStatus.Resolved, shortage.Status);
-        });
-    }
-
-    [Fact]
-    public async Task PostAsync_ShouldCreateSupplierStatementForFinancialResolution()
-    {
-        await using var dbContext = CreateDbContext();
-        var references = await SeedShortageReferencesAsync(dbContext);
-        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 10m, affectsSupplierBalance: true);
-        var resolution = await CreateResolutionAsync(
-            dbContext,
-            references.Supplier,
-            ShortageResolutionType.Financial,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedAmount: 40m, ValuationRate: 10m)
-            });
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m)]);
 
         var service = CreatePostingService(dbContext);
 
         await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
 
         var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
-        Assert.Equal(4m, updatedShortage.ResolvedQty);
+        Assert.Equal(4m, updatedShortage.ResolvedPhysicalQty);
+        Assert.Equal(0m, updatedShortage.ResolvedFinancialQtyEquivalent);
         Assert.Equal(6m, updatedShortage.OpenQty);
-        Assert.Equal(100m, updatedShortage.ShortageValue);
-        Assert.Equal(40m, updatedShortage.ResolvedAmount);
         Assert.Equal(60m, updatedShortage.OpenAmount);
         Assert.Equal(ShortageEntryStatus.PartiallyResolved, updatedShortage.Status);
-
-        var statementEntry = await dbContext.SupplierStatementEntries.SingleAsync();
-        Assert.Equal(SupplierStatementEffectType.ShortageFinancialResolution, statementEntry.EffectType);
-        Assert.Equal(-40m, statementEntry.AmountDelta);
-        Assert.Equal(-40m, statementEntry.RunningBalance);
     }
 
     [Fact]
-    public async Task PostAsync_ShouldRejectPhysicalAllocationBeyondOpenQty()
-    {
-        await using var dbContext = CreateDbContext();
-        var references = await SeedShortageReferencesAsync(dbContext);
-        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 2m);
-        var resolution = await CreateResolutionAsync(
-            dbContext,
-            references.Supplier,
-            ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedQty: 3m)
-            });
-
-        var service = CreatePostingService(dbContext);
-
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            service.PostAsync(resolution.Id, "tester", CancellationToken.None));
-
-        Assert.Contains("Allocated quantity cannot exceed the open shortage quantity", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task PostAsync_ShouldRejectFinancialAllocationBeyondOpenAmount()
+    public async Task PostAsync_ShouldPartiallyResolveFinancialShortageUsingQuantityEquivalent()
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedShortageReferencesAsync(dbContext);
         var shortage = await CreateShortageAsync(
             dbContext,
             references,
-            shortageQty: 5m,
+            shortageQty: 10m,
             affectsSupplierBalance: true,
-            shortageValue: 50m,
-            resolvedAmount: 20m,
-            resolvedQty: 2m);
+            shortageValue: 100m);
         var resolution = await CreateResolutionAsync(
             dbContext,
             references.Supplier,
             ShortageResolutionType.Financial,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedAmount: 40m)
-            });
+            [new AllocationSeed(shortage.Id, allocatedQty: 3m, valuationRate: 10m)],
+            resolutionNo: "SR-FIN-0001");
+
+        var service = CreatePostingService(dbContext);
+
+        await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
+
+        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
+        Assert.Equal(0m, updatedShortage.ResolvedPhysicalQty);
+        Assert.Equal(3m, updatedShortage.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(7m, updatedShortage.OpenQty);
+        Assert.Equal(30m, updatedShortage.ResolvedAmount);
+        Assert.Equal(70m, updatedShortage.OpenAmount);
+        Assert.Equal(ShortageEntryStatus.PartiallyResolved, updatedShortage.Status);
+
+        var allocation = await dbContext.ShortageResolutionAllocations.SingleAsync();
+        Assert.Equal(ShortageAllocationType.Financial, allocation.AllocationType);
+        Assert.Equal(3m, allocation.FinancialQtyEquivalent);
+
+        var statementEntry = await dbContext.SupplierStatementEntries.SingleAsync();
+        Assert.Equal(SupplierStatementEffectType.ShortageFinancialResolution, statementEntry.EffectType);
+        Assert.Equal(-30m, statementEntry.AmountDelta);
+    }
+
+    [Fact]
+    public async Task PostAsync_ShouldAllowFinancialResolutionForAnyOpenShortageRow()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(
+            dbContext,
+            references,
+            shortageQty: 8m,
+            affectsSupplierBalance: false,
+            shortageValue: 80m);
+        var resolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 2m, valuationRate: 10m)],
+            resolutionNo: "SR-FIN-OPEN-ALL");
+
+        var service = CreatePostingService(dbContext);
+
+        await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
+
+        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
+        Assert.Equal(2m, updatedShortage.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(6m, updatedShortage.OpenQty);
+        Assert.Equal(ShortageEntryStatus.PartiallyResolved, updatedShortage.Status);
+        Assert.Equal(1, await dbContext.SupplierStatementEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task PostAsync_ShouldSupportMixedSettlementAcrossTime()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(
+            dbContext,
+            references,
+            shortageQty: 10m,
+            affectsSupplierBalance: true,
+            shortageValue: 100m);
+
+        var physicalResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Physical,
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m)],
+            resolutionNo: "SR-MIX-0001");
+
+        var financialResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 3m, valuationRate: 10m)],
+            resolutionNo: "SR-MIX-0002");
+
+        var service = CreatePostingService(dbContext);
+
+        await service.PostAsync(physicalResolution.Id, "tester", CancellationToken.None);
+        await service.PostAsync(financialResolution.Id, "tester", CancellationToken.None);
+
+        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
+        Assert.Equal(4m, updatedShortage.ResolvedPhysicalQty);
+        Assert.Equal(3m, updatedShortage.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(3m, updatedShortage.OpenQty);
+        Assert.Equal(30m, updatedShortage.ResolvedAmount);
+        Assert.Equal(30m, updatedShortage.OpenAmount);
+        Assert.Equal(ShortageEntryStatus.PartiallyResolved, updatedShortage.Status);
+    }
+
+    [Fact]
+    public async Task PostAsync_ShouldResolveRepeatedMixedSettlementOverMultipleDocuments()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(
+            dbContext,
+            references,
+            shortageQty: 10m,
+            affectsSupplierBalance: true,
+            shortageValue: 100m);
+
+        var firstResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Physical,
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m)],
+            resolutionNo: "SR-STEP-1");
+        var secondResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Physical,
+            [new AllocationSeed(shortage.Id, allocatedQty: 2m)],
+            resolutionNo: "SR-STEP-2");
+        var thirdResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m, valuationRate: 10m)],
+            resolutionNo: "SR-STEP-3");
+
+        var service = CreatePostingService(dbContext);
+
+        await service.PostAsync(firstResolution.Id, "tester", CancellationToken.None);
+        await service.PostAsync(secondResolution.Id, "tester", CancellationToken.None);
+        await service.PostAsync(thirdResolution.Id, "tester", CancellationToken.None);
+
+        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
+        Assert.Equal(6m, updatedShortage.ResolvedPhysicalQty);
+        Assert.Equal(4m, updatedShortage.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(0m, updatedShortage.OpenQty);
+        Assert.Equal(40m, updatedShortage.ResolvedAmount);
+        Assert.Equal(0m, updatedShortage.OpenAmount);
+        Assert.Equal(ShortageEntryStatus.Resolved, updatedShortage.Status);
+
+        Assert.Equal(2, await dbContext.StockLedgerEntries.CountAsync());
+        Assert.Equal(1, await dbContext.SupplierStatementEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task PostAsync_ShouldRejectOverAllocationWhenRemainingOpenQtyWouldBeExceeded()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(
+            dbContext,
+            references,
+            shortageQty: 10m,
+            affectsSupplierBalance: true,
+            shortageValue: 100m,
+            resolvedPhysicalQty: 4m,
+            resolvedFinancialQtyEquivalent: 4m,
+            resolvedAmount: 40m);
+        var resolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 3m, valuationRate: 10m)],
+            resolutionNo: "SR-OVER-0001");
 
         var service = CreatePostingService(dbContext);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.PostAsync(resolution.Id, "tester", CancellationToken.None));
 
-        Assert.Contains("Allocated amount cannot exceed the open shortage amount", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("open shortage quantity", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task PostAsync_ShouldAllowOneShortageRowAcrossMultipleResolutions()
+    public async Task PostAsync_ShouldAllowPhysicalResolutionWithoutRate()
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedShortageReferencesAsync(dbContext);
-        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 10m, affectsSupplierBalance: true);
-        var firstResolution = await CreateResolutionAsync(
+        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 6m);
+        var resolution = await CreateResolutionAsync(
             dbContext,
             references.Supplier,
             ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedQty: 4m)
-            },
-            resolutionNo: "SR-STEP-1");
-        var secondResolution = await CreateResolutionAsync(
-            dbContext,
-            references.Supplier,
-            ShortageResolutionType.Financial,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedAmount: 60m, ValuationRate: 10m)
-            },
-            resolutionNo: "SR-STEP-2");
+            [new AllocationSeed(shortage.Id, allocatedQty: 2m)],
+            resolutionNo: "SR-PHY-NO-RATE");
 
         var service = CreatePostingService(dbContext);
 
-        await service.PostAsync(firstResolution.Id, "tester", CancellationToken.None);
-        await service.PostAsync(secondResolution.Id, "tester", CancellationToken.None);
+        await service.PostAsync(resolution.Id, "tester", CancellationToken.None);
 
-        var updatedShortage = await dbContext.ShortageLedgerEntries.SingleAsync();
-        Assert.Equal(10m, updatedShortage.ResolvedQty);
-        Assert.Equal(0m, updatedShortage.OpenQty);
-        Assert.Equal(100m, updatedShortage.ShortageValue);
-        Assert.Equal(100m, updatedShortage.ResolvedAmount);
-        Assert.Equal(0m, updatedShortage.OpenAmount);
-        Assert.Equal(ShortageEntryStatus.Resolved, updatedShortage.Status);
+        var stockEntry = await dbContext.StockLedgerEntries.SingleAsync();
+        Assert.Null(stockEntry.UnitCost);
+        Assert.Equal(2m, stockEntry.QtyIn);
+    }
+
+    [Fact]
+    public async Task PostAsync_ShouldRejectFinancialResolutionWithoutRate()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(dbContext, references, shortageQty: 6m);
+        var resolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 2m)],
+            resolutionNo: "SR-FIN-NO-RATE");
+
+        var service = CreatePostingService(dbContext);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.PostAsync(resolution.Id, "tester", CancellationToken.None));
+
+        Assert.Contains("valuation rate", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -237,10 +304,7 @@ public sealed class ShortageResolutionPostingTests
             dbContext,
             references.Supplier,
             ShortageResolutionType.Physical,
-            new[]
-            {
-                new AllocationSeed(shortage.Id, AllocatedQty: 4m)
-            });
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m)]);
 
         var service = CreatePostingService(dbContext);
 
@@ -259,7 +323,7 @@ public sealed class ShortageResolutionPostingTests
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedShortageReferencesAsync(dbContext);
-        await CreateShortageAsync(dbContext, references, shortageQty: 7m);
+        await CreateShortageAsync(dbContext, references, shortageQty: 7m, shortageValue: 70m);
 
         var legacyRow = await dbContext.ShortageLedgerEntries.SingleAsync();
         legacyRow.OpenQty = 0m;
@@ -274,6 +338,8 @@ public sealed class ShortageResolutionPostingTests
 
         var shortage = Assert.Single(result);
         Assert.Equal(7m, shortage.OpenQty);
+        Assert.Equal(0m, shortage.ResolvedPhysicalQty);
+        Assert.Equal(0m, shortage.ResolvedFinancialQtyEquivalent);
         Assert.Equal(ShortageEntryStatus.Open, shortage.Status);
     }
 
@@ -369,7 +435,8 @@ public sealed class ShortageResolutionPostingTests
         bool affectsSupplierBalance = false,
         decimal? shortageValue = null,
         decimal resolvedAmount = 0m,
-        decimal resolvedQty = 0m,
+        decimal resolvedPhysicalQty = 0m,
+        decimal resolvedFinancialQtyEquivalent = 0m,
         string suffix = "0001")
     {
         var receipt = new PurchaseReceipt
@@ -398,6 +465,11 @@ public sealed class ShortageResolutionPostingTests
         dbContext.PurchaseReceiptLines.Add(receiptLine);
         await dbContext.SaveChangesAsync();
 
+        var resolvedQtyEquivalent = resolvedPhysicalQty + resolvedFinancialQtyEquivalent;
+        var valuationRate = shortageValue.HasValue && shortageQty > 0m
+            ? shortageValue.Value / shortageQty
+            : (decimal?)null;
+
         var entry = new ShortageLedgerEntry
         {
             PurchaseReceiptId = receipt.Id,
@@ -407,14 +479,15 @@ public sealed class ShortageResolutionPostingTests
             ExpectedQty = shortageQty,
             ActualQty = 0m,
             ShortageQty = shortageQty,
-            ResolvedQty = resolvedQty,
-            OpenQty = shortageQty - resolvedQty,
+            ResolvedPhysicalQty = resolvedPhysicalQty,
+            ResolvedFinancialQtyEquivalent = resolvedFinancialQtyEquivalent,
+            OpenQty = shortageQty - resolvedQtyEquivalent,
             ShortageValue = shortageValue,
             ResolvedAmount = resolvedAmount,
-            OpenAmount = shortageValue.HasValue ? shortageValue.Value - resolvedAmount : null,
+            OpenAmount = valuationRate.HasValue ? (shortageQty - resolvedQtyEquivalent) * valuationRate.Value : null,
             AffectsSupplierBalance = affectsSupplierBalance,
             ApprovalStatus = "NotRequired",
-            Status = resolvedQty == 0m ? ShortageEntryStatus.Open : ShortageEntryStatus.PartiallyResolved,
+            Status = resolvedQtyEquivalent == 0m ? ShortageEntryStatus.Open : ShortageEntryStatus.PartiallyResolved,
             CreatedBy = "seed"
         };
 
@@ -437,7 +510,12 @@ public sealed class ShortageResolutionPostingTests
             ResolutionType = type,
             ResolutionDate = new DateTime(2026, 4, 21),
             TotalQty = type == ShortageResolutionType.Physical ? allocations.Sum(entity => entity.AllocatedQty ?? 0m) : null,
-            TotalAmount = type == ShortageResolutionType.Financial ? allocations.Sum(entity => entity.AllocatedAmount ?? 0m) : null,
+            TotalAmount = type == ShortageResolutionType.Financial
+                ? allocations.Sum(entity =>
+                    entity.AllocatedQty.HasValue && entity.ValuationRate.HasValue
+                        ? entity.AllocatedQty.Value * entity.ValuationRate.Value
+                        : 0m)
+                : null,
             Currency = "EGP",
             Notes = "Resolution",
             Status = DocumentStatus.Draft,
@@ -449,8 +527,15 @@ public sealed class ShortageResolutionPostingTests
             resolution.Allocations.Add(new ShortageResolutionAllocation
             {
                 ShortageLedgerId = allocation.value.ShortageLedgerId,
+                AllocationType = type == ShortageResolutionType.Physical
+                    ? ShortageAllocationType.Physical
+                    : ShortageAllocationType.Financial,
                 AllocatedQty = allocation.value.AllocatedQty,
-                AllocatedAmount = allocation.value.AllocatedAmount,
+                AllocatedAmount = type == ShortageResolutionType.Financial &&
+                                  allocation.value.AllocatedQty.HasValue &&
+                                  allocation.value.ValuationRate.HasValue
+                    ? allocation.value.AllocatedQty.Value * allocation.value.ValuationRate.Value
+                    : null,
                 ValuationRate = allocation.value.ValuationRate,
                 AllocationMethod = "Manual",
                 SequenceNo = allocation.index + 1,
@@ -472,7 +557,12 @@ public sealed class ShortageResolutionPostingTests
 
     private sealed record AllocationSeed(
         Guid ShortageLedgerId,
-        decimal? AllocatedQty = null,
-        decimal? AllocatedAmount = null,
-        decimal? ValuationRate = null);
+        decimal? allocatedQty = null,
+        decimal? allocatedAmount = null,
+        decimal? valuationRate = null)
+    {
+        public decimal? AllocatedQty { get; init; } = allocatedQty;
+        public decimal? AllocatedAmount { get; init; } = allocatedAmount;
+        public decimal? ValuationRate { get; init; } = valuationRate;
+    }
 }

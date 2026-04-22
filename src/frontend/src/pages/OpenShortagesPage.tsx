@@ -247,6 +247,7 @@ export function OpenShortagesPage() {
               <th scope="col">Component</th>
               <th scope="col">Shortage qty</th>
               <th scope="col">Resolved qty</th>
+              <th scope="col">Physical / Financial</th>
               <th scope="col">Open qty</th>
               <th scope="col">Open amount</th>
               <th scope="col">Status</th>
@@ -281,7 +282,8 @@ export function OpenShortagesPage() {
                 </div>
               </td>
               <td><span className="hc-table__subtitle">{row.shortageQty.toLocaleString()}</span></td>
-              <td><span className="hc-table__subtitle">{row.resolvedQty.toLocaleString()}</span></td>
+              <td><span className="hc-table__subtitle">{row.resolvedQtyEquivalent.toLocaleString()}</span></td>
+              <td><span className="hc-table__subtitle">{row.resolvedPhysicalQty.toLocaleString()} / {row.resolvedFinancialQtyEquivalent.toLocaleString()}</span></td>
               <td><span className="hc-table__title">{row.openQty.toLocaleString()}</span></td>
               <td><span className="hc-table__subtitle">{row.openAmount?.toLocaleString() ?? "Pending value"}</span></td>
               <td><Badge tone={row.status === "PartiallyResolved" ? "warning" : "neutral"}>{row.status}</Badge></td>

@@ -67,7 +67,9 @@ public sealed class ShortageResolutionPostingService(
 
         resolution.TotalQty = resolution.ResolutionType == Domain.Shortages.ShortageResolutionType.Physical
             ? resolution.Allocations.Sum(entity => entity.AllocatedQty ?? 0m)
-            : resolution.TotalQty;
+            : resolution.ResolutionType == Domain.Shortages.ShortageResolutionType.Financial
+                ? resolution.Allocations.Sum(entity => entity.FinancialQtyEquivalent ?? 0m)
+                : resolution.TotalQty;
         resolution.TotalAmount = resolution.ResolutionType == Domain.Shortages.ShortageResolutionType.Financial
             ? resolution.Allocations.Sum(entity => entity.AllocatedAmount ?? 0m)
             : resolution.TotalAmount;

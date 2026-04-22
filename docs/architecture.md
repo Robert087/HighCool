@@ -118,9 +118,9 @@ Current implementation uses:
 
 ### ShortageResolutionValidationService
 
-* enforces allocation correctness against current open shortage quantity and open amount
-* blocks financial settlement for non-supplier-accountable shortage rows
-* keeps quantity and valuation rules explicit before posting
+* enforces quantity correctness against current open shortage quantity
+* requires valuation rate only for financial settlement
+* keeps physical vs financial allocation rules explicit before posting
 
 ### ShortageResolutionAllocationService
 

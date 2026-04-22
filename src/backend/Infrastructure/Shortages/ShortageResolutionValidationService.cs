@@ -57,59 +57,96 @@ public sealed class ShortageResolutionValidationService(AppDbContext dbContext) 
 
             if (resolution.ResolutionType == ShortageResolutionType.Physical)
             {
-                if (!allocation.AllocatedQty.HasValue || allocation.AllocatedQty.Value <= 0m)
-                {
-                    throw new InvalidOperationException("Physical resolutions require allocated quantities.");
-                }
-
-                if (allocation.AllocatedAmount.HasValue)
-                {
-                    throw new InvalidOperationException("Physical resolutions cannot include allocated amounts.");
-                }
-
-                if (allocation.AllocatedQty.Value > shortage.OpenQty)
-                {
-                    throw new InvalidOperationException("Allocated quantity cannot exceed the open shortage quantity.");
-                }
+                ValidatePhysicalAllocation(allocation, shortage);
+                continue;
             }
-            else
-            {
-                if (!shortage.AffectsSupplierBalance)
-                {
-                    throw new InvalidOperationException("Financial resolution is allowed only for shortage rows that affect supplier balance.");
-                }
 
-                if (!allocation.AllocatedAmount.HasValue || allocation.AllocatedAmount.Value <= 0m)
-                {
-                    throw new InvalidOperationException("Financial resolutions require allocated amounts.");
-                }
+            ValidateFinancialAllocation(allocation, shortage);
+        }
+    }
 
-                if (allocation.AllocatedQty.HasValue)
-                {
-                    throw new InvalidOperationException("Financial resolutions cannot include allocated quantities.");
-                }
+    private static void ValidatePhysicalAllocation(ShortageResolutionAllocation allocation, ShortageLedgerEntry shortage)
+    {
+        if (!allocation.AllocatedQty.HasValue || allocation.AllocatedQty.Value <= 0m)
+        {
+            throw new InvalidOperationException("Physical resolutions require allocated quantities.");
+        }
 
-                var rate = ResolveRate(shortage, allocation.ValuationRate);
-                if (!rate.HasValue || rate.Value <= 0m)
-                {
-                    throw new InvalidOperationException("Financial allocations require a valuation rate when the shortage row does not yet have one.");
-                }
+        if (allocation.AllocatedAmount.HasValue)
+        {
+            throw new InvalidOperationException("Physical resolutions cannot include allocated amounts.");
+        }
 
-                var openAmount = shortage.ShortageValue.HasValue
-                    ? shortage.OpenAmount ?? Round(shortage.OpenQty * rate.Value)
-                    : Round(shortage.OpenQty * rate.Value);
+        if (allocation.ValuationRate.HasValue)
+        {
+            throw new InvalidOperationException("Physical resolutions do not require a valuation rate.");
+        }
 
-                if (allocation.AllocatedAmount.Value > openAmount)
-                {
-                    throw new InvalidOperationException("Allocated amount cannot exceed the open shortage amount.");
-                }
+        if (allocation.AllocationType != ShortageAllocationType.Physical)
+        {
+            throw new InvalidOperationException("Physical resolution allocations must be marked as Physical.");
+        }
 
-                var quantityEquivalent = Round(allocation.AllocatedAmount.Value / rate.Value);
-                if (quantityEquivalent > shortage.OpenQty)
-                {
-                    throw new InvalidOperationException("Allocated amount cannot resolve more than the open shortage quantity.");
-                }
-            }
+        if (allocation.AllocatedQty.Value > shortage.OpenQty)
+        {
+            throw new InvalidOperationException("Allocated quantity cannot exceed the open shortage quantity.");
+        }
+
+        var projectedResolvedQty = Round(
+            shortage.ResolvedPhysicalQty +
+            shortage.ResolvedFinancialQtyEquivalent +
+            allocation.AllocatedQty.Value);
+
+        if (projectedResolvedQty > shortage.ShortageQty)
+        {
+            throw new InvalidOperationException("Cumulative shortage settlement cannot exceed the original shortage quantity.");
+        }
+    }
+
+    private static void ValidateFinancialAllocation(ShortageResolutionAllocation allocation, ShortageLedgerEntry shortage)
+    {
+        if (!allocation.AllocatedQty.HasValue || allocation.AllocatedQty.Value <= 0m)
+        {
+            throw new InvalidOperationException("Financial resolutions require resolved quantity.");
+        }
+
+        if (allocation.AllocationType != ShortageAllocationType.Financial)
+        {
+            throw new InvalidOperationException("Financial resolution allocations must be marked as Financial.");
+        }
+
+        var rate = ResolveRate(shortage, allocation.ValuationRate);
+        if (!rate.HasValue || rate.Value <= 0m)
+        {
+            throw new InvalidOperationException("Financial allocations require a valuation rate.");
+        }
+
+        var quantityEquivalent = Round(allocation.AllocatedQty.Value);
+        if (quantityEquivalent <= 0m)
+        {
+            throw new InvalidOperationException("Financial quantity-equivalent must be greater than zero.");
+        }
+
+        if (quantityEquivalent > shortage.OpenQty)
+        {
+            throw new InvalidOperationException("Resolved quantity cannot exceed the open shortage quantity.");
+        }
+
+        var allocatedAmount = Round(quantityEquivalent * rate.Value);
+        var openAmount = Round(shortage.OpenQty * rate.Value);
+        if (allocatedAmount > openAmount)
+        {
+            throw new InvalidOperationException("Calculated amount cannot exceed the open shortage amount.");
+        }
+
+        var projectedResolvedQty = Round(
+            shortage.ResolvedPhysicalQty +
+            shortage.ResolvedFinancialQtyEquivalent +
+            quantityEquivalent);
+
+        if (projectedResolvedQty > shortage.ShortageQty)
+        {
+            throw new InvalidOperationException("Cumulative shortage settlement cannot exceed the original shortage quantity.");
         }
     }
 
@@ -130,11 +167,6 @@ public sealed class ShortageResolutionValidationService(AppDbContext dbContext) 
         return valuationRate.HasValue ? Round(valuationRate.Value) : null;
     }
 
-    private static decimal Round(decimal value)
-    {
-        return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
-    }
-
     private static void NormalizeLegacyShortageState(ShortageLedgerEntry shortage)
     {
         if (shortage.Status is ShortageEntryStatus.Resolved or ShortageEntryStatus.Canceled)
@@ -142,14 +174,44 @@ public sealed class ShortageResolutionValidationService(AppDbContext dbContext) 
             return;
         }
 
-        if (shortage.OpenQty <= 0m && shortage.ShortageQty > shortage.ResolvedQty)
+        if (shortage.ResolvedPhysicalQty < 0m)
         {
-            shortage.OpenQty = Round(shortage.ShortageQty - shortage.ResolvedQty);
+            shortage.ResolvedPhysicalQty = 0m;
         }
 
-        if (!shortage.OpenAmount.HasValue && shortage.ShortageValue.HasValue)
+        if (shortage.ResolvedFinancialQtyEquivalent < 0m)
         {
-            shortage.OpenAmount = Round(shortage.ShortageValue.Value - shortage.ResolvedAmount);
+            shortage.ResolvedFinancialQtyEquivalent = 0m;
         }
+
+        var resolvedQtyEquivalent = GetResolvedQtyEquivalent(shortage);
+
+        if (shortage.OpenQty <= 0m && shortage.ShortageQty > resolvedQtyEquivalent)
+        {
+            shortage.OpenQty = Round(shortage.ShortageQty - resolvedQtyEquivalent);
+        }
+
+        if (shortage.ShortageValue.HasValue && shortage.ShortageQty > 0m)
+        {
+            var rate = Round(shortage.ShortageValue.Value / shortage.ShortageQty);
+            shortage.OpenAmount = Round(shortage.OpenQty * rate);
+        }
+
+        shortage.Status = shortage.OpenQty switch
+        {
+            0m when shortage.ShortageQty > 0m => ShortageEntryStatus.Resolved,
+            _ when resolvedQtyEquivalent > 0m => ShortageEntryStatus.PartiallyResolved,
+            _ => ShortageEntryStatus.Open
+        };
+    }
+
+    private static decimal GetResolvedQtyEquivalent(ShortageLedgerEntry shortage)
+    {
+        return Round(shortage.ResolvedPhysicalQty + shortage.ResolvedFinancialQtyEquivalent);
+    }
+
+    private static decimal Round(decimal value)
+    {
+        return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
     }
 }

@@ -48,9 +48,13 @@ export async function requestJson<T>(input: string, init?: RequestInit): Promise
       ? normalizeValidationErrors(payload.errors as ValidationErrors)
       : undefined;
 
+    const firstValidationMessage = validationErrors
+      ? Object.values(validationErrors).flat()[0]
+      : undefined;
+
     const message = typeof payload === "object" && payload && "message" in payload
       ? String(payload.message)
-      : response.statusText || "Request failed";
+      : (firstValidationMessage ?? (response.statusText || "Request failed"));
 
     throw new ApiError(message, response.status, validationErrors);
   }

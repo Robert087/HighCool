@@ -129,16 +129,21 @@ Preconditions:
 * at least one allocation exists
 * all allocation rows point to shortage rows owned by the same supplier
 * no allocation exceeds current open shortage quantity
-* no financial allocation exceeds current open shortage amount or open quantity-equivalent
-* only shortage rows marked `affects_supplier_balance = true` may be posted financially
+* physical allocations require `allocated_qty` only
+* financial allocations require `allocated_qty` plus `valuation_rate`
+* financial `allocated_amount = allocated_qty x valuation_rate`
+* financial `financial_qty_equivalent = allocated_qty`
+* any shortage row with open quantity may be posted physically or financially
 
 Posting effects:
 
 * status changes from `Draft` to `Posted`
 * physical resolution writes one stock ledger `IN` row per allocation using transaction type `ShortagePhysicalResolution`
 * financial resolution writes one supplier statement row per allocation using effect type `ShortageFinancialResolution`
-* shortage ledger resolved and open balances are updated per allocation
+* shortage ledger updates `resolved_physical_qty`, `resolved_financial_qty_equivalent`, and `open_qty` per allocation
 * shortage status changes from `Open` to `PartiallyResolved` to `Resolved` based on remaining open quantity
+* the same shortage row may be settled many times across multiple posted resolutions
+* mixed physical plus financial settlement is supported until the shortage quantity is fully covered
 
 Idempotency:
 

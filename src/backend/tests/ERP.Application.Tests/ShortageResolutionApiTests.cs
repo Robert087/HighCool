@@ -119,12 +119,13 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
             ExpectedQty = 5m,
             ActualQty = 0m,
             ShortageQty = 5m,
-            ResolvedQty = 0m,
+            ResolvedPhysicalQty = 0m,
+            ResolvedFinancialQtyEquivalent = 0m,
             OpenQty = 5m,
             ShortageValue = null,
             ResolvedAmount = 0m,
             OpenAmount = null,
-            AffectsSupplierBalance = true,
+            AffectsSupplierBalance = false,
             ApprovalStatus = "NotRequired",
             Status = Domain.Shortages.ShortageEntryStatus.Open,
             CreatedBy = "seed"
@@ -148,7 +149,7 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
                 new
                 {
                     shortageLedgerId = shortage.Id,
-                    allocatedAmount = 20m,
+                    allocatedQty = 2m,
                     valuationRate = 10m,
                     allocationMethod = "Manual",
                     sequenceNo = 1

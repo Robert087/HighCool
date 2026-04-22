@@ -48,8 +48,13 @@ public sealed class ShortageLedgerEntryConfiguration : AuditableEntityConfigurat
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 
-        builder.Property(entity => entity.ResolvedQty)
-            .HasColumnName("resolved_qty")
+        builder.Property(entity => entity.ResolvedPhysicalQty)
+            .HasColumnName("resolved_physical_qty")
+            .HasColumnType("decimal(18,6)")
+            .IsRequired();
+
+        builder.Property(entity => entity.ResolvedFinancialQtyEquivalent)
+            .HasColumnName("resolved_financial_qty_equivalent")
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 

@@ -195,7 +195,8 @@ Columns:
 * `expected_qty`
 * `actual_qty`
 * `shortage_qty`
-* `resolved_qty`
+* `resolved_physical_qty`
+* `resolved_financial_qty_equivalent`
 * `open_qty`
 * `shortage_value`
 * `resolved_amount`
@@ -224,6 +225,8 @@ Constraints:
 Behavior rules:
 
 * shortage state is derived and updated only through posted shortage resolution allocations
+* `open_qty = shortage_qty - resolved_physical_qty - resolved_financial_qty_equivalent`
+* shortage rows remain open until the full shortage quantity is covered
 
 ## `shortage_resolutions`
 
@@ -255,9 +258,11 @@ Columns:
 * `id`
 * `resolution_id`
 * `shortage_ledger_id`
+* `allocation_type`
 * `allocated_qty`
 * `allocated_amount`
 * `valuation_rate`
+* `financial_qty_equivalent`
 * `allocation_method`
 * `sequence_no`
 * audit fields
@@ -268,6 +273,11 @@ Constraints:
 * unique index on `(resolution_id, shortage_ledger_id)`
 * foreign key to `shortage_resolutions(id)` on `resolution_id`
 * foreign key to `shortage_ledger_entries(id)` on `shortage_ledger_id`
+
+Behavior rules:
+
+* physical allocations store `allocated_qty` only
+* financial allocations store `allocated_qty`, `valuation_rate`, calculated `allocated_amount`, and `financial_qty_equivalent`
 
 ## `supplier_statement_entries`
 

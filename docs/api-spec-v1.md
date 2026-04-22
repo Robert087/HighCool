@@ -187,7 +187,7 @@ Optional query parameters:
 
 ### `GET /api/shortages/{id}`
 
-Returns one shortage row with current open and resolved balances.
+Returns one shortage row with current open balance, physical resolved quantity, financial resolved quantity-equivalent, and monetary balances.
 
 ## Shortage Resolutions
 
@@ -230,7 +230,7 @@ Request body:
     {
       "shortageLedgerId": "guid",
       "allocatedQty": 4.0,
-      "valuationRate": 10.0,
+      "valuationRate": null,
       "allocationMethod": "Manual",
       "sequenceNo": 1
     }
@@ -253,6 +253,13 @@ Behavior:
 * allocation rows are mandatory and keep source shortage traceability
 * one resolution may settle multiple shortage rows
 * one shortage row may be settled across multiple resolutions over time
+* one shortage row may be settled by both physical and financial resolutions over time
+* any shortage row with `open_qty > 0` may be settled in either physical or financial mode
+* physical posting requires `allocated_qty` only
+* financial posting requires `allocated_qty` plus `valuation_rate`
+* financial posting calculates and stores `allocated_amount = allocated_qty x valuation_rate`
+* financial posting stores `financial_qty_equivalent = allocated_qty`
+* shortage status stays `PartiallyResolved` until `open_qty` reaches `0`
 * posting is idempotent
 
 ### `POST /api/shortage-resolutions/suggest-allocations`

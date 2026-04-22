@@ -75,17 +75,21 @@ public sealed class UpsertShortageResolutionRequestValidator : AbstractValidator
             RuleForEach(request => request.Allocations)
                 .Must(entry => !entry.AllocatedAmount.HasValue)
                 .WithMessage("Physical resolutions cannot store amount allocations.");
+
+            RuleForEach(request => request.Allocations)
+                .Must(entry => !entry.ValuationRate.HasValue)
+                .WithMessage("Physical resolutions do not require a valuation rate.");
         });
 
         When(request => request.ResolutionType == ShortageResolutionType.Financial, () =>
         {
             RuleForEach(request => request.Allocations)
-                .Must(entry => entry.AllocatedAmount.HasValue && entry.AllocatedAmount.Value > 0m)
-                .WithMessage("Financial resolutions require amount allocations.");
+                .Must(entry => entry.AllocatedQty.HasValue && entry.AllocatedQty.Value > 0m)
+                .WithMessage("Financial resolutions require resolved quantity.");
 
             RuleForEach(request => request.Allocations)
-                .Must(entry => !entry.AllocatedQty.HasValue)
-                .WithMessage("Financial resolutions cannot store quantity allocations.");
+                .Must(entry => entry.ValuationRate.HasValue && entry.ValuationRate.Value > 0m)
+                .WithMessage("Financial resolutions require a valuation rate.");
         });
     }
 

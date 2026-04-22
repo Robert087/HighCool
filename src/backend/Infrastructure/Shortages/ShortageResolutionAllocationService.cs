@@ -24,12 +24,13 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
             var receipt = shortage.PurchaseReceipt
                 ?? throw new InvalidOperationException("Shortage resolution requires receipt traceability.");
 
-            if (resolution.ResolutionType == ShortageResolutionType.Physical)
+            if (allocation.AllocationType == ShortageAllocationType.Physical)
             {
                 var allocatedQty = Round(allocation.AllocatedQty!.Value);
                 var rate = EnsureValuationBasis(shortage, allocation.ValuationRate);
 
-                ApplyResolvedState(shortage, allocatedQty, rate, actor);
+                allocation.FinancialQtyEquivalent = null;
+                ApplyPhysicalResolvedState(shortage, allocatedQty, actor);
 
                 var stockKey = (shortage.ComponentItemId, receipt.WarehouseId);
                 if (!runningStockBalances.TryGetValue(stockKey, out var stockRunningBalance))
@@ -67,12 +68,15 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
                 continue;
             }
 
-            var allocatedAmount = Round(allocation.AllocatedAmount!.Value);
             var valuationRate = EnsureValuationBasis(shortage, allocation.ValuationRate)
                 ?? throw new InvalidOperationException("Financial allocations require a valuation basis.");
-            var quantityEquivalent = Round(allocatedAmount / valuationRate);
+            var quantityEquivalent = Round(allocation.AllocatedQty!.Value);
+            var allocatedAmount = Round(quantityEquivalent * valuationRate);
 
-            ApplyResolvedState(shortage, quantityEquivalent, valuationRate, actor);
+            allocation.AllocatedAmount = allocatedAmount;
+            allocation.FinancialQtyEquivalent = quantityEquivalent;
+            allocation.ValuationRate = valuationRate;
+            ApplyFinancialResolvedState(shortage, allocatedAmount, quantityEquivalent, actor);
 
             if (!runningSupplierBalances.TryGetValue(resolution.SupplierId, out var supplierRunningBalance))
             {
@@ -130,24 +134,46 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
         return rate;
     }
 
-    private static void ApplyResolvedState(ShortageLedgerEntry shortage, decimal quantityEquivalent, decimal? rate, string actor)
+    private static void ApplyPhysicalResolvedState(ShortageLedgerEntry shortage, decimal resolvedQty, string actor)
     {
-        shortage.ResolvedQty = Round(shortage.ResolvedQty + quantityEquivalent);
-        shortage.OpenQty = ClampToZero(Round(shortage.ShortageQty - shortage.ResolvedQty));
+        shortage.ResolvedPhysicalQty = Round(shortage.ResolvedPhysicalQty + resolvedQty);
+        RecalculateState(shortage, actor);
+    }
 
-        if (rate.HasValue)
+    private static void ApplyFinancialResolvedState(
+        ShortageLedgerEntry shortage,
+        decimal resolvedAmount,
+        decimal resolvedQtyEquivalent,
+        string actor)
+    {
+        shortage.ResolvedFinancialQtyEquivalent = Round(shortage.ResolvedFinancialQtyEquivalent + resolvedQtyEquivalent);
+        shortage.ResolvedAmount = Round(shortage.ResolvedAmount + resolvedAmount);
+        RecalculateState(shortage, actor);
+    }
+
+    private static void RecalculateState(ShortageLedgerEntry shortage, string actor)
+    {
+        var resolvedQtyEquivalent = GetResolvedQtyEquivalent(shortage);
+        shortage.OpenQty = ClampToZero(Round(shortage.ShortageQty - resolvedQtyEquivalent));
+
+        if (shortage.ShortageValue.HasValue && shortage.ShortageQty > 0m)
         {
-            shortage.ShortageValue ??= Round(shortage.ShortageQty * rate.Value);
-            shortage.ResolvedAmount = Round(shortage.ResolvedQty * rate.Value);
-            shortage.OpenAmount = ClampNullableToZero(Round(shortage.ShortageValue.Value - shortage.ResolvedAmount));
+            var valuationRate = Round(shortage.ShortageValue.Value / shortage.ShortageQty);
+            shortage.OpenAmount = ClampNullableToZero(Round(shortage.OpenQty * valuationRate));
         }
 
-        shortage.Status = shortage.OpenQty == 0m
-            ? ShortageEntryStatus.Resolved
-            : shortage.ResolvedQty > 0m || shortage.ResolvedAmount > 0m
-                ? ShortageEntryStatus.PartiallyResolved
-                : ShortageEntryStatus.Open;
+        shortage.Status = shortage.OpenQty switch
+        {
+            0m when shortage.ShortageQty > 0m => ShortageEntryStatus.Resolved,
+            _ when resolvedQtyEquivalent > 0m => ShortageEntryStatus.PartiallyResolved,
+            _ => ShortageEntryStatus.Open
+        };
         shortage.UpdatedBy = actor;
+    }
+
+    private static decimal GetResolvedQtyEquivalent(ShortageLedgerEntry shortage)
+    {
+        return Round(shortage.ResolvedPhysicalQty + shortage.ResolvedFinancialQtyEquivalent);
     }
 
     private static decimal ClampToZero(decimal value)
@@ -172,14 +198,26 @@ public sealed class ShortageResolutionAllocationService(AppDbContext dbContext) 
             return;
         }
 
-        if (shortage.OpenQty <= 0m && shortage.ShortageQty > shortage.ResolvedQty)
+        if (shortage.ResolvedPhysicalQty < 0m)
         {
-            shortage.OpenQty = Round(shortage.ShortageQty - shortage.ResolvedQty);
+            shortage.ResolvedPhysicalQty = 0m;
         }
 
-        if (!shortage.OpenAmount.HasValue && shortage.ShortageValue.HasValue)
+        if (shortage.ResolvedFinancialQtyEquivalent < 0m)
         {
-            shortage.OpenAmount = Round(shortage.ShortageValue.Value - shortage.ResolvedAmount);
+            shortage.ResolvedFinancialQtyEquivalent = 0m;
+        }
+
+        var resolvedQtyEquivalent = GetResolvedQtyEquivalent(shortage);
+        if (shortage.OpenQty <= 0m && shortage.ShortageQty > resolvedQtyEquivalent)
+        {
+            shortage.OpenQty = Round(shortage.ShortageQty - resolvedQtyEquivalent);
+        }
+
+        if (shortage.ShortageValue.HasValue && shortage.ShortageQty > 0m)
+        {
+            var valuationRate = Round(shortage.ShortageValue.Value / shortage.ShortageQty);
+            shortage.OpenAmount = Round(shortage.OpenQty * valuationRate);
         }
     }
 }

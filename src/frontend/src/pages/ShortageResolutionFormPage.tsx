@@ -57,6 +57,17 @@ function roundQuantity(value: number) {
   return Math.round(value * 1_000_000) / 1_000_000;
 }
 
+function calculateAmount(qty: number | "", rate: number | "") {
+  const normalizedQty = toNumber(qty);
+  const normalizedRate = toNumber(rate);
+
+  if (normalizedQty <= 0 || normalizedRate <= 0) {
+    return 0;
+  }
+
+  return roundQuantity(normalizedQty * normalizedRate);
+}
+
 function impliedRate(shortage: Pick<OpenShortage, "shortageValue" | "shortageQty">) {
   if (shortage.shortageValue === null || shortage.shortageQty <= 0) {
     return null;
@@ -72,9 +83,9 @@ function buildAllocationFromShortage(
 ): ShortageResolutionAllocationFormValues {
   return {
     shortageLedgerId: shortage.id,
-    allocatedQty: resolutionType === "Physical" ? shortage.openQty : "",
-    allocatedAmount: resolutionType === "Financial" ? (shortage.openAmount ?? "") : "",
-    valuationRate: impliedRate(shortage) ?? "",
+    allocatedQty: shortage.openQty,
+    allocatedAmount: resolutionType === "Financial" ? calculateAmount(shortage.openQty, impliedRate(shortage) ?? "") : "",
+    valuationRate: resolutionType === "Financial" ? (impliedRate(shortage) ?? "") : "",
     allocationMethod: "Manual",
     sequenceNo,
   };
@@ -125,10 +136,12 @@ function buildPersistedShortageLookup(resolution: ShortageResolution | null) {
         componentItemCode: allocation.componentItemCode,
         componentItemName: allocation.componentItemName,
         shortageQty: allocation.shortageQty,
-        resolvedQty: allocation.resolvedQty,
+        resolvedPhysicalQty: allocation.resolvedPhysicalQty,
+        resolvedFinancialQtyEquivalent: allocation.resolvedFinancialQtyEquivalent,
+        resolvedQtyEquivalent: allocation.resolvedQtyEquivalent,
         openQty: allocation.openQty,
         shortageValue: null,
-        resolvedAmount: 0,
+        resolvedAmount: allocation.allocatedAmount ?? 0,
         openAmount: allocation.openAmount,
         status: allocation.status as OpenShortage["status"],
         affectsSupplierBalance: allocation.affectsSupplierBalance,
@@ -170,30 +183,17 @@ export function ShortageResolutionFormPage() {
     [values.allocations],
   );
   const totalAmount = useMemo(
-    () => roundQuantity(values.allocations.reduce((sum, allocation) => sum + toNumber(allocation.allocatedAmount), 0)),
-    [values.allocations],
+    () => roundQuantity(values.allocations.reduce((sum, allocation) =>
+      sum + (values.resolutionType === "Financial"
+        ? calculateAmount(allocation.allocatedQty, allocation.valuationRate)
+        : 0), 0)),
+    [values.allocations, values.resolutionType],
   );
 
   const unselectedOpenShortages = useMemo(() => {
     const selectedIds = new Set(values.allocations.map((allocation) => allocation.shortageLedgerId));
     return openShortages.filter((row) => !selectedIds.has(row.id));
   }, [openShortages, values.allocations]);
-
-  const eligibleOpenShortages = useMemo(() => {
-    if (values.resolutionType !== "Financial") {
-      return unselectedOpenShortages;
-    }
-
-    return unselectedOpenShortages.filter((row) => row.affectsSupplierBalance);
-  }, [unselectedOpenShortages, values.resolutionType]);
-
-  const ineligibleFinancialShortages = useMemo(() => {
-    if (values.resolutionType !== "Financial") {
-      return [];
-    }
-
-    return unselectedOpenShortages.filter((row) => !row.affectsSupplierBalance);
-  }, [unselectedOpenShortages, values.resolutionType]);
 
   function renderEmptyGridRow(message: string, colSpan: number) {
     return (
@@ -273,9 +273,6 @@ export function ShortageResolutionFormPage() {
         const result = await listOpenShortages({
           ...openShortageFilters,
           supplierId: values.supplierId,
-          affectsSupplierBalance: values.resolutionType === "Physical"
-            ? openShortageFilters.affectsSupplierBalance
-            : "",
         });
 
         if (active) {
@@ -320,8 +317,11 @@ export function ShortageResolutionFormPage() {
       resolutionType,
       allocations: current.allocations.map((allocation) => ({
         ...allocation,
-        allocatedQty: resolutionType === "Physical" ? allocation.allocatedQty : "",
-        allocatedAmount: resolutionType === "Financial" ? allocation.allocatedAmount : "",
+        allocatedQty: allocation.allocatedQty,
+        allocatedAmount: resolutionType === "Financial"
+          ? calculateAmount(allocation.allocatedQty, allocation.valuationRate)
+          : "",
+        valuationRate: resolutionType === "Physical" ? "" : allocation.valuationRate,
       })),
     }));
   }
@@ -349,9 +349,76 @@ export function ShortageResolutionFormPage() {
     setValues((current) => ({
       ...current,
       allocations: current.allocations.map((allocation) =>
-        allocation.shortageLedgerId === shortageLedgerId ? { ...allocation, ...patch } : allocation,
+        allocation.shortageLedgerId === shortageLedgerId
+          ? {
+              ...allocation,
+              ...patch,
+              allocatedAmount: current.resolutionType === "Financial"
+                ? calculateAmount(
+                    patch.allocatedQty ?? allocation.allocatedQty,
+                    patch.valuationRate ?? allocation.valuationRate,
+                  )
+                : "",
+            }
+          : allocation,
       ),
     }));
+  }
+
+  function validateFinancialAllocations() {
+    if (values.resolutionType !== "Financial") {
+      return null;
+    }
+
+    for (const allocation of values.allocations) {
+      const shortage = liveShortageLookup.get(allocation.shortageLedgerId) ?? persistedShortageLookup.get(allocation.shortageLedgerId);
+      const qty = toNumber(allocation.allocatedQty);
+      const rate = toNumber(allocation.valuationRate);
+      const amount = calculateAmount(allocation.allocatedQty, allocation.valuationRate);
+
+      if (qty <= 0) {
+        return "Resolved quantity must be greater than zero for every financial allocation.";
+      }
+
+      if (rate <= 0) {
+        return "Valuation rate must be greater than zero for every financial allocation.";
+      }
+
+      if (shortage?.openAmount != null && amount > shortage.openAmount) {
+        return "Calculated amount cannot exceed the open shortage value.";
+      }
+
+      if (shortage && qty > shortage.openQty) {
+        return "Resolved quantity cannot exceed the open shortage quantity.";
+      }
+    }
+
+    return null;
+  }
+
+  function validatePhysicalAllocations() {
+    if (values.resolutionType !== "Physical") {
+      return null;
+    }
+
+    for (const allocation of values.allocations) {
+      const shortage = liveShortageLookup.get(allocation.shortageLedgerId) ?? persistedShortageLookup.get(allocation.shortageLedgerId);
+      const qty = toNumber(allocation.allocatedQty);
+
+      if (qty <= 0) {
+        return "Resolved quantity must be greater than zero for every physical allocation.";
+      }
+
+      if (toNumber(allocation.valuationRate) > 0) {
+        return "Physical resolution does not require a valuation rate.";
+      }
+
+      if (shortage && qty > shortage.openQty) {
+        return "Resolved quantity cannot exceed the open shortage quantity.";
+      }
+    }
+
+    return null;
   }
 
   async function handleAutoFillFifo() {
@@ -364,8 +431,8 @@ export function ShortageResolutionFormPage() {
       const suggestions = await suggestShortageAllocations(
         values.supplierId,
         values.resolutionType,
-        values.resolutionType === "Physical" ? totalQty || null : null,
-        values.resolutionType === "Financial" ? totalAmount || null : null,
+        totalQty || null,
+        null,
       );
 
       setValues((current) => ({
@@ -373,7 +440,9 @@ export function ShortageResolutionFormPage() {
         allocations: suggestions.map((suggestion, index) => ({
           shortageLedgerId: suggestion.shortageLedgerId,
           allocatedQty: suggestion.allocatedQty ?? "",
-          allocatedAmount: suggestion.allocatedAmount ?? "",
+          allocatedAmount: current.resolutionType === "Financial"
+            ? calculateAmount(suggestion.allocatedQty ?? "", suggestion.valuationRate ?? "")
+            : "",
           valuationRate: suggestion.valuationRate ?? "",
           allocationMethod: suggestion.allocationMethod,
           sequenceNo: index + 1,
@@ -385,6 +454,18 @@ export function ShortageResolutionFormPage() {
   }
 
   async function handleSave() {
+    const physicalValidationError = validatePhysicalAllocations();
+    if (physicalValidationError) {
+      setFormError(physicalValidationError);
+      return;
+    }
+
+    const financialValidationError = validateFinancialAllocations();
+    if (financialValidationError) {
+      setFormError(financialValidationError);
+      return;
+    }
+
     try {
       setSaving(true);
       setFormError("");
@@ -420,6 +501,18 @@ export function ShortageResolutionFormPage() {
   async function handlePost() {
     if (!shortageResolutionId) {
       setFormError("Save the draft before posting the shortage resolution.");
+      return;
+    }
+
+    const physicalValidationError = validatePhysicalAllocations();
+    if (physicalValidationError) {
+      setFormError(physicalValidationError);
+      return;
+    }
+
+    const financialValidationError = validateFinancialAllocations();
+    if (financialValidationError) {
+      setFormError(financialValidationError);
       return;
     }
 
@@ -515,7 +608,14 @@ export function ShortageResolutionFormPage() {
 
           <Field label="Totals">
             <div className="hc-shortage-resolution__totals">
-              <span>{values.resolutionType === "Physical" ? `${totalQty.toLocaleString()} qty` : `${totalAmount.toLocaleString()} ${values.currency || ""}`}</span>
+              {values.resolutionType === "Physical" ? (
+                <span>{totalQty.toLocaleString()} qty</span>
+              ) : (
+                <>
+                  <span>{totalQty.toLocaleString()} qty</span>
+                  <span>{totalAmount.toLocaleString()} {values.currency || ""}</span>
+                </>
+              )}
               <span>{values.allocations.length} allocations</span>
             </div>
           </Field>
@@ -534,16 +634,17 @@ export function ShortageResolutionFormPage() {
       </DocumentSection>
 
       <DocumentSection title="Allocation Grid" actions={isEditable ? <Button size="sm" variant="ghost" onClick={handleAutoFillFifo}>Auto-fill FIFO</Button> : null}>
-        {values.allocations.length === 0 ? renderEmptyGridRow("No allocations.", 7) : (
+        {values.allocations.length === 0 ? renderEmptyGridRow("No allocations.", values.resolutionType === "Financial" ? 8 : 6) : (
           <div className="hc-resolution-grid">
             <table className="hc-resolution-grid__table">
               <thead>
                 <tr>
                   <th>Shortage row</th>
                   <th>Open qty</th>
-                  <th>Open amount</th>
-                  <th>{values.resolutionType === "Physical" ? "Allocated qty" : "Allocated amount"}</th>
-                  <th>Valuation rate</th>
+                  <th>Resolved qty</th>
+                  {values.resolutionType === "Financial" ? <th>Valuation rate</th> : null}
+                  {values.resolutionType === "Financial" ? <th>Calculated amount</th> : null}
+                  <th>Remaining after post</th>
                   <th>Sequence</th>
                   <th aria-label="Actions" />
                 </tr>
@@ -561,37 +662,36 @@ export function ShortageResolutionFormPage() {
                         </div>
                       </td>
                       <td>{shortage?.openQty?.toLocaleString() ?? "-"}</td>
-                      <td>{shortage?.openAmount?.toLocaleString() ?? "Pending value"}</td>
-                      <td>
-                        {values.resolutionType === "Physical" ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.000001"
-                            value={allocation.allocatedQty}
-                            onChange={(event) => updateAllocation(allocation.shortageLedgerId, { allocatedQty: event.target.value === "" ? "" : Number(event.target.value) })}
-                            disabled={!isEditable}
-                          />
-                        ) : (
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.000001"
-                            value={allocation.allocatedAmount}
-                            onChange={(event) => updateAllocation(allocation.shortageLedgerId, { allocatedAmount: event.target.value === "" ? "" : Number(event.target.value) })}
-                            disabled={!isEditable}
-                          />
-                        )}
-                      </td>
                       <td>
                         <Input
                           type="number"
                           min="0"
                           step="0.000001"
-                          value={allocation.valuationRate}
-                          onChange={(event) => updateAllocation(allocation.shortageLedgerId, { valuationRate: event.target.value === "" ? "" : Number(event.target.value) })}
+                          value={allocation.allocatedQty}
+                          onChange={(event) => updateAllocation(allocation.shortageLedgerId, { allocatedQty: event.target.value === "" ? "" : Number(event.target.value) })}
                           disabled={!isEditable}
                         />
+                      </td>
+                      {values.resolutionType === "Financial" ? (
+                        <td>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.000001"
+                            value={allocation.valuationRate}
+                            onChange={(event) => updateAllocation(allocation.shortageLedgerId, { valuationRate: event.target.value === "" ? "" : Number(event.target.value) })}
+                            disabled={!isEditable}
+                          />
+                          {toNumber(allocation.valuationRate) <= 0 ? (
+                            <div className="hc-table__subtitle">Required</div>
+                          ) : null}
+                        </td>
+                      ) : null}
+                      {values.resolutionType === "Financial" ? (
+                        <td>{calculateAmount(allocation.allocatedQty, allocation.valuationRate).toLocaleString()}</td>
+                      ) : null}
+                      <td>
+                        {Math.max(roundQuantity((shortage?.openQty ?? 0) - toNumber(allocation.allocatedQty)), 0).toLocaleString()}
                       </td>
                       <td>{allocation.sequenceNo}</td>
                       <td className="hc-resolution-grid__actions">
@@ -622,14 +722,14 @@ export function ShortageResolutionFormPage() {
         </div>
 
         {!values.supplierId ? (
-          renderEmptyGridRow("Select supplier.", 8)
+          renderEmptyGridRow("Select supplier.", 9)
         ) : loadingShortages ? (
           <div className="hc-skeleton-stack">
             <SkeletonLoader height="3rem" variant="rect" />
             <SkeletonLoader height="3rem" variant="rect" />
           </div>
-        ) : eligibleOpenShortages.length === 0 ? (
-          renderEmptyGridRow(values.resolutionType === "Financial" && ineligibleFinancialShortages.length > 0 ? "No supplier-accountable shortages." : "No open shortages.", 8)
+        ) : unselectedOpenShortages.length === 0 ? (
+          renderEmptyGridRow("No open shortages.", 9)
         ) : (
           <div className="hc-resolution-grid">
             <table className="hc-resolution-grid__table">
@@ -639,6 +739,7 @@ export function ShortageResolutionFormPage() {
                   <th>Receipt</th>
                   <th>Item</th>
                   <th>Component</th>
+                  <th>Resolved</th>
                   <th>Open qty</th>
                   <th>Open amount</th>
                   <th>Status</th>
@@ -646,7 +747,7 @@ export function ShortageResolutionFormPage() {
                 </tr>
               </thead>
               <tbody>
-                {eligibleOpenShortages.map((shortage) => (
+                {unselectedOpenShortages.map((shortage) => (
                   <tr key={shortage.id}>
                     <td>
                       <div className="hc-table__cell-strong">
@@ -672,9 +773,17 @@ export function ShortageResolutionFormPage() {
                         <span className="hc-table__subtitle">{shortage.componentItemCode}</span>
                       </div>
                     </td>
+                    <td>
+                      <div className="hc-table__cell-strong">
+                        <span className="hc-table__title">{shortage.resolvedQtyEquivalent.toLocaleString()}</span>
+                        <span className="hc-table__subtitle">
+                          P {shortage.resolvedPhysicalQty.toLocaleString()} / F {shortage.resolvedFinancialQtyEquivalent.toLocaleString()}
+                        </span>
+                      </div>
+                    </td>
                     <td>{shortage.openQty.toLocaleString()}</td>
                     <td>{shortage.openAmount?.toLocaleString() ?? "Pending value"}</td>
-                    <td><Badge tone={shortage.affectsSupplierBalance ? "primary" : "neutral"}>{shortage.status}</Badge></td>
+                    <td><Badge tone={shortage.status === "PartiallyResolved" ? "warning" : "neutral"}>{shortage.status}</Badge></td>
                     <td className="hc-resolution-grid__actions">
                       {isEditable ? (
                         <Button size="sm" variant="secondary" onClick={() => addShortage(shortage)}>
@@ -688,35 +797,6 @@ export function ShortageResolutionFormPage() {
             </table>
           </div>
         )}
-
-        {values.resolutionType === "Financial" && ineligibleFinancialShortages.length > 0 ? (
-          <div className="hc-resolution-grid hc-shortage-resolution__secondary-grid">
-            <table className="hc-resolution-grid__table">
-              <thead>
-                <tr>
-                  <th>Receipt</th>
-                  <th>Item</th>
-                  <th>Component</th>
-                  <th>Open qty</th>
-                  <th>Status</th>
-                  <th>Financial eligibility</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ineligibleFinancialShortages.map((shortage) => (
-                  <tr key={shortage.id}>
-                    <td>{shortage.purchaseReceiptNo}</td>
-                    <td>{shortage.itemCode}</td>
-                    <td>{shortage.componentItemCode}</td>
-                    <td>{shortage.openQty.toLocaleString()}</td>
-                    <td><Badge tone="neutral">{shortage.status}</Badge></td>
-                    <td><span className="hc-table__subtitle">Does not affect supplier balance</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
       </DocumentSection>
     </DocumentPageLayout>
   );

@@ -42,7 +42,9 @@ export interface OpenShortage {
   componentItemCode: string;
   componentItemName: string;
   shortageQty: number;
-  resolvedQty: number;
+  resolvedPhysicalQty: number;
+  resolvedFinancialQtyEquivalent: number;
+  resolvedQtyEquivalent: number;
   openQty: number;
   shortageValue: number | null;
   resolvedAmount: number;
@@ -61,11 +63,13 @@ export interface ShortageResolutionAllocation {
   id: string;
   resolutionId: string;
   shortageLedgerId: string;
+  allocationType: ShortageResolutionType;
   sequenceNo: number;
   allocationMethod: string;
   allocatedQty: number | null;
   allocatedAmount: number | null;
   valuationRate: number | null;
+  financialQtyEquivalent: number | null;
   supplierId: string;
   supplierCode: string;
   supplierName: string;
@@ -78,7 +82,9 @@ export interface ShortageResolutionAllocation {
   componentItemCode: string;
   componentItemName: string;
   shortageQty: number;
-  resolvedQty: number;
+  resolvedPhysicalQty: number;
+  resolvedFinancialQtyEquivalent: number;
+  resolvedQtyEquivalent: number;
   openQty: number;
   openAmount: number | null;
   affectsSupplierBalance: boolean;
@@ -236,7 +242,9 @@ function normalizePayload(values: ShortageResolutionFormValues) {
     allocations: values.allocations.map((allocation) => ({
       shortageLedgerId: allocation.shortageLedgerId,
       allocatedQty: allocation.allocatedQty === "" ? null : Number(allocation.allocatedQty),
-      allocatedAmount: allocation.allocatedAmount === "" ? null : Number(allocation.allocatedAmount),
+      allocatedAmount: values.resolutionType === "Physical"
+        ? null
+        : null,
       valuationRate: allocation.valuationRate === "" ? null : Number(allocation.valuationRate),
       allocationMethod: allocation.allocationMethod.trim() || "Manual",
       sequenceNo: Number(allocation.sequenceNo),

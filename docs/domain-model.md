@@ -201,7 +201,8 @@ Fields:
 * `expected_qty`
 * `actual_qty`
 * `shortage_qty`
-* `resolved_qty`
+* `resolved_physical_qty`
+* `resolved_financial_qty_equivalent`
 * `open_qty`
 * `shortage_value`
 * `resolved_amount`
@@ -217,10 +218,17 @@ Rules:
 * created only when `expected_qty > actual_qty`
 * `shortage_qty = expected_qty - actual_qty`
 * new shortages start as `Open`
-* `resolved_qty` starts at `0`
+* `resolved_physical_qty` starts at `0`
+* `resolved_financial_qty_equivalent` starts at `0`
 * `open_qty` starts at `shortage_qty`
+* `open_qty = shortage_qty - resolved_physical_qty - resolved_financial_qty_equivalent`
+* status is derived from `open_qty`
 * value fields remain nullable until a valuation basis is known
 * shortage lifecycle state is updated only through posted shortage resolutions
+* one shortage row may be resolved many times over time
+* one shortage row may be settled by both physical and financial resolutions over time
+* shortage closes only when the full shortage quantity has been covered
+* shortage reason is informational and does not restrict physical or financial resolution eligibility
 
 ## Shortage Resolution
 
@@ -254,9 +262,11 @@ Fields:
 * `id`
 * `resolution_id`
 * `shortage_ledger_id`
+* `allocation_type`
 * `allocated_qty`
 * `allocated_amount`
 * `valuation_rate`
+* `financial_qty_equivalent`
 * `allocation_method`
 * `sequence_no`
 * audit fields
@@ -265,8 +275,10 @@ Rules:
 
 * allocation rows are mandatory before posting
 * physical resolution uses `allocated_qty`
-* financial resolution uses `allocated_amount`
-* `valuation_rate` is used when financial quantity-equivalent must be derived or when shortage value basis is initialized
+* financial resolution uses `allocated_qty` plus `valuation_rate`
+* financial `allocated_amount = allocated_qty x valuation_rate`
+* `financial_qty_equivalent = allocated_qty`
+* one shortage row may receive multiple allocations across multiple resolution documents
 
 ## Supplier Statement Entry
 

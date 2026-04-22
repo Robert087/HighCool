@@ -35,7 +35,9 @@ public sealed class ShortageLedgerEntry : AuditableEntity
 
     public decimal ShortageQty { get; set; }
 
-    public decimal ResolvedQty { get; set; }
+    public decimal ResolvedPhysicalQty { get; set; }
+
+    public decimal ResolvedFinancialQtyEquivalent { get; set; }
 
     public decimal OpenQty { get; set; }
 

@@ -77,10 +77,7 @@ Approved rules:
 * if `actual < expected`, a shortage ledger row is created
 * if `actual > expected`, no shortage row is created
 * shortage reason is optional when a positive shortage exists
-* shortage reason decides:
-  * affects supplier balance
-  * affects stock
-  * whether approval is required
+* shortage reason is informational and may still drive approval or reporting rules, but it does not control shortage resolution eligibility
 
 ### Shortage Resolution Lifecycle
 
@@ -93,10 +90,10 @@ Approved rules:
 * one shortage row may be settled across multiple shortage resolutions over time
 * allocation rows are mandatory for traceability
 * physical resolution adds stock and reduces open shortage quantity
-* financial resolution creates supplier statement impact and reduces open shortage quantity by quantity-equivalent based on valuation rate
+* financial resolution uses resolved quantity plus valuation rate, calculates amount automatically, creates supplier statement impact, and reduces open shortage quantity by the resolved quantity
 * shortage rows close only when the open shortage quantity reaches zero
 * if a valuation basis exists, shortage open amount is reduced proportionally as physical or financial settlement is posted
-* internal-only shortage rows cannot create supplier financial impact
+* any open shortage row may be settled physically or financially
 * no direct shortage closure is allowed outside posted shortage resolution flows
 
 ## Inventory Rules
@@ -121,7 +118,6 @@ Mandatory rules:
 * supplier statement entries are derived from posted business documents only
 * no manual supplier statement entries are allowed
 * shortage financial resolution posting creates supplier statement entries
-* only shortage rows that already affect supplier balance may create shortage financial statement impact
 * supplier statement rows remain traceable to shortage resolution allocations
 
 ## UI Expectations

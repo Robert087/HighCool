@@ -228,21 +228,22 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
     {
         var shortages = await BuildOpenShortagesQuery()
             .Where(entity => entity.PurchaseReceipt!.SupplierId == query.SupplierId)
-            .Where(entity => query.ResolutionType != ShortageResolutionType.Financial || entity.AffectsSupplierBalance)
             .OrderBy(entity => entity.PurchaseReceipt!.ReceiptDate)
             .ThenBy(entity => entity.CreatedAt)
             .ToListAsync(cancellationToken);
 
         var suggestions = new List<SuggestedShortageAllocationDto>();
         var remainingQty = query.TotalQty;
-        var remainingAmount = query.TotalAmount;
         var sequence = 1;
 
         foreach (var shortage in shortages)
         {
+            var openQty = GetEffectiveOpenQty(shortage);
+            var openAmount = GetEffectiveOpenAmount(shortage);
+
             if (query.ResolutionType == ShortageResolutionType.Physical)
             {
-                var suggestedQty = shortage.OpenQty;
+                var suggestedQty = openQty;
                 if (remainingQty.HasValue)
                 {
                     if (remainingQty.Value <= 0m)
@@ -250,7 +251,7 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
                         break;
                     }
 
-                    suggestedQty = Math.Min(shortage.OpenQty, remainingQty.Value);
+                    suggestedQty = Math.Min(openQty, remainingQty.Value);
                     remainingQty -= suggestedQty;
                 }
 
@@ -266,8 +267,8 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
                     suggestedQty,
                     null,
                     null,
-                    shortage.OpenQty,
-                    shortage.OpenAmount,
+                    openQty,
+                    openAmount,
                     shortage.PurchaseReceipt!.ReceiptNo,
                     shortage.PurchaseReceipt.ReceiptDate,
                     shortage.Item!.Code,
@@ -276,31 +277,36 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
                 continue;
             }
 
-            if (remainingAmount.HasValue && remainingAmount.Value <= 0m)
+            if (remainingQty.HasValue && remainingQty.Value <= 0m)
             {
                 break;
             }
 
-            var suggestedAmount = shortage.OpenAmount;
-            if (remainingAmount.HasValue)
+            var suggestedFinancialQty = openQty;
+            if (remainingQty.HasValue)
             {
-                suggestedAmount = suggestedAmount.HasValue
-                    ? Math.Min(suggestedAmount.Value, remainingAmount.Value)
-                    : remainingAmount.Value;
-                remainingAmount -= suggestedAmount.Value;
+                suggestedFinancialQty = Math.Min(openQty, remainingQty.Value);
+                remainingQty -= suggestedFinancialQty;
             }
+
+            if (suggestedFinancialQty <= 0m)
+            {
+                continue;
+            }
+
+            var suggestedRate = shortage.ShortageValue.HasValue && shortage.ShortageQty > 0m
+                ? Round(shortage.ShortageValue.Value / shortage.ShortageQty)
+                : (decimal?)null;
 
             suggestions.Add(new SuggestedShortageAllocationDto(
                 shortage.Id,
                 sequence++,
                 "FIFO",
-                null,
-                suggestedAmount,
-                shortage.ShortageValue.HasValue && shortage.ShortageQty > 0m
-                    ? Round(shortage.ShortageValue.Value / shortage.ShortageQty)
-                    : null,
-                shortage.OpenQty,
-                shortage.OpenAmount,
+                suggestedFinancialQty,
+                suggestedRate.HasValue ? Round(suggestedFinancialQty * suggestedRate.Value) : null,
+                suggestedRate,
+                openQty,
+                openAmount,
                 shortage.PurchaseReceipt!.ReceiptNo,
                 shortage.PurchaseReceipt.ReceiptDate,
                 shortage.Item!.Code,
@@ -349,7 +355,8 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             query = query.Where(entity =>
                 entity.Status != ShortageEntryStatus.Resolved &&
                 entity.Status != ShortageEntryStatus.Canceled &&
-                (entity.OpenQty > 0m || entity.ShortageQty > entity.ResolvedQty));
+                (entity.OpenQty > 0m ||
+                 entity.ShortageQty > entity.ResolvedPhysicalQty + entity.ResolvedFinancialQtyEquivalent));
         }
 
         return query;
@@ -424,9 +431,19 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             {
                 ResolutionId = resolution.Id,
                 ShortageLedgerId = request.ShortageLedgerId,
+                AllocationType = resolution.ResolutionType == ShortageResolutionType.Physical
+                    ? ShortageAllocationType.Physical
+                    : ShortageAllocationType.Financial,
                 AllocatedQty = request.AllocatedQty,
-                AllocatedAmount = request.AllocatedAmount,
+                AllocatedAmount = resolution.ResolutionType == ShortageResolutionType.Financial &&
+                                  request.AllocatedQty.HasValue &&
+                                  request.ValuationRate.HasValue
+                    ? Round(request.AllocatedQty.Value * request.ValuationRate.Value)
+                    : null,
                 ValuationRate = request.ValuationRate,
+                FinancialQtyEquivalent = resolution.ResolutionType == ShortageResolutionType.Financial
+                    ? request.AllocatedQty
+                    : null,
                 AllocationMethod = NormalizeOptionalText(request.AllocationMethod) ?? "Manual",
                 SequenceNo = request.SequenceNo,
                 CreatedBy = actor
@@ -482,7 +499,12 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
 
     private static decimal? ResolveTotalQty(UpsertShortageResolutionRequest request)
     {
-        if (request.ResolutionType == ShortageResolutionType.Physical && request.Allocations.Count > 0)
+        if (request.Allocations.Count == 0)
+        {
+            return request.TotalQty;
+        }
+
+        if (request.ResolutionType is ShortageResolutionType.Physical or ShortageResolutionType.Financial)
         {
             return request.Allocations.Sum(entity => entity.AllocatedQty ?? 0m);
         }
@@ -494,7 +516,10 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
     {
         if (request.ResolutionType == ShortageResolutionType.Financial && request.Allocations.Count > 0)
         {
-            return request.Allocations.Sum(entity => entity.AllocatedAmount ?? 0m);
+            return request.Allocations.Sum(entity =>
+                entity.AllocatedQty.HasValue && entity.ValuationRate.HasValue
+                    ? Round(entity.AllocatedQty.Value * entity.ValuationRate.Value)
+                    : 0m);
         }
 
         return request.TotalAmount;
@@ -531,11 +556,13 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             allocation.Id,
             allocation.ResolutionId,
             allocation.ShortageLedgerId,
+            allocation.AllocationType.ToString(),
             allocation.SequenceNo,
             allocation.AllocationMethod,
             allocation.AllocatedQty,
             allocation.AllocatedAmount,
             allocation.ValuationRate,
+            allocation.FinancialQtyEquivalent,
             shortage?.PurchaseReceipt?.SupplierId ?? Guid.Empty,
             shortage?.PurchaseReceipt?.Supplier?.Code ?? string.Empty,
             shortage?.PurchaseReceipt?.Supplier?.Name ?? string.Empty,
@@ -548,11 +575,13 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             shortage?.ComponentItem?.Code ?? string.Empty,
             shortage?.ComponentItem?.Name ?? string.Empty,
             shortage?.ShortageQty ?? 0m,
-            shortage?.ResolvedQty ?? 0m,
-            shortage?.OpenQty ?? 0m,
-            shortage?.OpenAmount,
+            shortage?.ResolvedPhysicalQty ?? 0m,
+            shortage?.ResolvedFinancialQtyEquivalent ?? 0m,
+            GetEffectiveResolvedQtyEquivalent(shortage),
+            shortage is null ? 0m : GetEffectiveOpenQty(shortage),
+            shortage is null ? null : GetEffectiveOpenAmount(shortage),
             shortage?.AffectsSupplierBalance ?? false,
-            shortage?.Status.ToString() ?? string.Empty,
+            shortage is null ? string.Empty : GetEffectiveStatus(shortage).ToString(),
             allocation.CreatedAt,
             allocation.CreatedBy);
     }
@@ -582,7 +611,9 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             entity.ComponentItem!.Code,
             entity.ComponentItem.Name,
             entity.ShortageQty,
-            entity.ResolvedQty,
+            entity.ResolvedPhysicalQty,
+            entity.ResolvedFinancialQtyEquivalent,
+            GetEffectiveResolvedQtyEquivalent(entity),
             openQty,
             shortageValue,
             entity.ResolvedAmount,
@@ -604,7 +635,7 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             return entity.OpenQty;
         }
 
-        return ClampToZero(Round(entity.ShortageQty - entity.ResolvedQty));
+        return ClampToZero(Round(entity.ShortageQty - GetEffectiveResolvedQtyEquivalent(entity)));
     }
 
     private static decimal? GetEffectiveShortageValue(ShortageLedgerEntry entity)
@@ -624,12 +655,26 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             return entity.OpenAmount;
         }
 
-        if (entity.OpenAmount.HasValue && entity.OpenAmount.Value > 0m)
+        var effectiveOpenQty = GetEffectiveOpenQty(entity);
+        if (effectiveOpenQty == 0m)
         {
-            return entity.OpenAmount.Value;
+            return 0m;
         }
 
-        return ClampToZero(Round(entity.ShortageValue.Value - entity.ResolvedAmount));
+        if (entity.ShortageQty <= 0m)
+        {
+            return entity.OpenAmount;
+        }
+
+        var valuationRate = Round(entity.ShortageValue.Value / entity.ShortageQty);
+        var computedOpenAmount = ClampToZero(Round(effectiveOpenQty * valuationRate));
+
+        if (entity.OpenAmount.HasValue && entity.OpenAmount.Value > 0m)
+        {
+            return computedOpenAmount;
+        }
+
+        return computedOpenAmount;
     }
 
     private static ShortageEntryStatus GetEffectiveStatus(ShortageLedgerEntry entity)
@@ -645,12 +690,22 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             return ShortageEntryStatus.Resolved;
         }
 
-        if (entity.ResolvedQty > 0m || entity.ResolvedAmount > 0m)
+        if (GetEffectiveResolvedQtyEquivalent(entity) > 0m)
         {
             return ShortageEntryStatus.PartiallyResolved;
         }
 
         return ShortageEntryStatus.Open;
+    }
+
+    private static decimal GetEffectiveResolvedQtyEquivalent(ShortageLedgerEntry? entity)
+    {
+        if (entity is null)
+        {
+            return 0m;
+        }
+
+        return Round(entity.ResolvedPhysicalQty + entity.ResolvedFinancialQtyEquivalent);
     }
 
     private static void EnsureDraftIsEditable(ShortageResolution resolution)

@@ -39,6 +39,9 @@ These decisions are mandatory for ongoing purchasing work:
 * physical shortage resolution writes stock ledger rows
 * financial shortage resolution writes supplier statement rows
 * shortage closure is allocation-driven and must support partial and multi-row settlement
+* one shortage row may be resolved repeatedly over time through physical and/or financial settlement
+* shortage closes only when the full shortage quantity has been covered
+* shortage reasons are informational and must not block resolution posting
 
 ## Delivery Rule
 
