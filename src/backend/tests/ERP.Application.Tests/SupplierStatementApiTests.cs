@@ -82,22 +82,22 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
                 SourceLineId = receipt.Id,
                 EffectType = Domain.Statements.SupplierStatementEffectType.PurchaseReceipt,
                 Debit = 0m,
-                Credit = 0m,
-                RunningBalance = 0m,
-                Notes = "Receipt amount pending valuation",
+                Credit = 120m,
+                RunningBalance = 120m,
+                Notes = "Receipt amount posted",
                 CreatedBy = "seed"
             },
             new Domain.Statements.SupplierStatementEntry
             {
                 SupplierId = supplier.Id,
                 EntryDate = resolution.ResolutionDate,
-                SourceDocType = Domain.Statements.SupplierStatementSourceDocumentType.ShortageResolution,
+                SourceDocType = Domain.Statements.SupplierStatementSourceDocumentType.ShortageFinancialResolution,
                 SourceDocId = resolution.Id,
                 SourceLineId = Guid.NewGuid(),
                 EffectType = Domain.Statements.SupplierStatementEffectType.ShortageFinancialResolution,
                 Debit = 30m,
                 Credit = 0m,
-                RunningBalance = -30m,
+                RunningBalance = 90m,
                 Currency = "EGP",
                 Notes = "Financial settlement",
                 CreatedBy = "seed"
@@ -107,10 +107,10 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
 
         var client = _factory.CreateClient();
 
-        var statementResponse = await client.GetAsync($"/api/suppliers/{supplier.Id}/statement?sourceDocType=ShortageResolution");
+        var statementResponse = await client.GetAsync($"/api/suppliers/{supplier.Id}/statement?sourceDocType=ShortageFinancialResolution");
         Assert.Equal(HttpStatusCode.OK, statementResponse.StatusCode);
-        var statementRows = await statementResponse.Content.ReadFromJsonAsync<SupplierStatementRowResponse[]>();
-        var row = Assert.Single(statementRows!);
+        var statementRows = await statementResponse.Content.ReadFromJsonAsync<PaginatedResponse<SupplierStatementRowResponse>>();
+        var row = Assert.Single(statementRows!.Items);
         Assert.Equal("SR-STMT-API-0001", row.SourceDocumentNo);
         Assert.Equal(30m, row.Debit);
 
@@ -118,7 +118,7 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
         Assert.Equal(HttpStatusCode.OK, summaryResponse.StatusCode);
         var summary = await summaryResponse.Content.ReadFromJsonAsync<SupplierStatementSummaryResponse>();
         Assert.NotNull(summary);
-        Assert.Equal(-30m, summary!.ClosingBalance);
+        Assert.Equal(90m, summary!.ClosingBalance);
         Assert.Equal(30m, summary.TotalDebit);
     }
 

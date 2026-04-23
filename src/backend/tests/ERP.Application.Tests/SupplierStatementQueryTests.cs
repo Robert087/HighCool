@@ -25,16 +25,16 @@ public sealed class SupplierStatementQueryTests
                 null,
                 references.SupplierA.Id,
                 SupplierStatementEffectType.ShortageFinancialResolution,
-                SupplierStatementSourceDocumentType.ShortageResolution,
+                SupplierStatementSourceDocumentType.ShortageFinancialResolution,
                 new DateTime(2026, 4, 21),
                 new DateTime(2026, 4, 21, 23, 59, 59)),
             CancellationToken.None);
 
-        var row = Assert.Single(result);
+        var row = Assert.Single(result.Items);
         Assert.Equal("SR-STMT-0001", row.SourceDocumentNo);
         Assert.Equal(30m, row.Debit);
         Assert.Equal(0m, row.Credit);
-        Assert.Equal(-30m, row.RunningBalance);
+        Assert.Equal(90m, row.RunningBalance);
     }
 
     [Fact]
@@ -56,12 +56,37 @@ public sealed class SupplierStatementQueryTests
 
         Assert.NotNull(summary);
         Assert.Equal(references.SupplierA.Id, summary!.SupplierId);
-        Assert.Equal(-30m, summary.CurrentBalance);
+        Assert.Equal(90m, summary.CurrentBalance);
         Assert.Equal(0m, summary.OpeningBalance);
-        Assert.Equal(-30m, summary.ClosingBalance);
+        Assert.Equal(90m, summary.ClosingBalance);
         Assert.Equal(30m, summary.TotalDebit);
-        Assert.Equal(0m, summary.TotalCredit);
+        Assert.Equal(120m, summary.TotalCredit);
         Assert.Equal(2, summary.EntryCount);
+    }
+
+    [Fact]
+    public async Task SaveChanges_ShouldRejectZeroValueFinancialRows()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedAsync(dbContext);
+
+        dbContext.SupplierStatementEntries.Add(new SupplierStatementEntry
+        {
+            SupplierId = references.SupplierA.Id,
+            EntryDate = new DateTime(2026, 4, 23),
+            SourceDocType = SupplierStatementSourceDocumentType.PurchaseReturn,
+            SourceDocId = Guid.NewGuid(),
+            SourceLineId = Guid.NewGuid(),
+            EffectType = SupplierStatementEffectType.PurchaseReturn,
+            Debit = 0m,
+            Credit = 0m,
+            RunningBalance = -30m,
+            Notes = "Legacy malformed row",
+            CreatedBy = "seed"
+        });
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => dbContext.SaveChangesAsync());
+        Assert.Contains("non-zero debit or credit", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static AppDbContext CreateDbContext()
@@ -160,22 +185,22 @@ public sealed class SupplierStatementQueryTests
                 SourceLineId = receiptA.Id,
                 EffectType = SupplierStatementEffectType.PurchaseReceipt,
                 Debit = 0m,
-                Credit = 0m,
-                RunningBalance = 0m,
-                Notes = "Receipt amount pending valuation",
+                Credit = 120m,
+                RunningBalance = 120m,
+                Notes = "Receipt amount posted",
                 CreatedBy = "seed"
             },
             new SupplierStatementEntry
             {
                 SupplierId = supplierA.Id,
                 EntryDate = resolution.ResolutionDate,
-                SourceDocType = SupplierStatementSourceDocumentType.ShortageResolution,
+                SourceDocType = SupplierStatementSourceDocumentType.ShortageFinancialResolution,
                 SourceDocId = resolution.Id,
                 SourceLineId = Guid.NewGuid(),
                 EffectType = SupplierStatementEffectType.ShortageFinancialResolution,
                 Debit = 30m,
                 Credit = 0m,
-                RunningBalance = -30m,
+                RunningBalance = 90m,
                 Currency = "EGP",
                 Notes = "Financial shortage settlement",
                 CreatedBy = "seed"
@@ -189,8 +214,8 @@ public sealed class SupplierStatementQueryTests
                 SourceLineId = receiptB.Id,
                 EffectType = SupplierStatementEffectType.PurchaseReceipt,
                 Debit = 0m,
-                Credit = 0m,
-                RunningBalance = 0m,
+                Credit = 45m,
+                RunningBalance = 45m,
                 Notes = "Supplier B receipt",
                 CreatedBy = "seed"
             });

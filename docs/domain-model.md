@@ -120,6 +120,8 @@ Rules:
   * `ordered_qty_snapshot` is required
   * snapshot equals PO line ordered quantity
   * `received_qty` cannot exceed remaining posted PO quantity
+* `remaining_receivable_qty = ordered_qty - posted non-reversed received_qty`
+* posted receipt lines expose `remaining_returnable_qty = posted received qty - posted active returned qty`
 
 ## Purchase Receipt Line Component
 
@@ -225,6 +227,8 @@ Rules:
 * `resolved_financial_qty_equivalent` starts at `0`
 * `open_qty` starts at `shortage_qty`
 * `open_qty = shortage_qty - resolved_physical_qty - resolved_financial_qty_equivalent`
+* `final_physical_component_qty = actual_qty + resolved_physical_qty`
+* financial resolution reduces open shortage quantity but does not increase physical component quantity
 * status is derived from `open_qty`
 * value fields remain nullable until a valuation basis is known
 * shortage lifecycle state is updated only through posted shortage resolutions
@@ -232,6 +236,7 @@ Rules:
 * one shortage row may be settled by both physical and financial resolutions over time
 * shortage closes only when the full shortage quantity has been covered
 * shortage reason is informational and does not restrict physical or financial resolution eligibility
+* actionable shortage lists expose only rows with `open_qty > 0`
 
 ## Shortage Resolution
 
@@ -257,6 +262,7 @@ Rules:
 * only `Draft` resolutions can be posted
 * one resolution may allocate across multiple shortage rows
 * one shortage row may be allocated by multiple resolutions over time
+* the same shortage row cannot appear twice inside one resolution document
 
 ## Shortage Resolution Allocation
 
@@ -306,12 +312,25 @@ Rules:
 * append-only
 * created only from posted supplier-affecting business documents
 * purchase receipt posting writes supplier statement rows
+* purchase return posting writes supplier statement rows only when a valid supplier financial basis is available from the referenced receipt valuation basis
 * shortage financial resolution writes supplier statement rows with source allocation traceability
 * physical shortage resolution does not write supplier statement rows
 * supplier payment posting writes supplier statement rows with source allocation traceability
+* purchase receipt reversal writes opposite supplier statement rows using source type `PurchaseReceiptReversal` and effect type `PurchaseReceiptReversal`
+* payment reversal writes opposite supplier statement rows using source type `PaymentReversal` and effect type `PaymentReversal`
+* shortage financial resolution reversal writes opposite supplier statement rows using source type `ShortageResolutionReversal` and effect type `ShortageResolutionReversal`
 * no manual statement entry flow exists
+* financial supplier statement rows must not be stored with both `debit = 0` and `credit = 0`
 * `running_balance = previous_running_balance + credit - debit`
 * purchase receipt rows currently use the explicit receipt header payable amount until receipt line pricing is implemented explicitly
+* current source document typing must remain explicit and auditable:
+  * `PurchaseReceipt`
+  * `PurchaseReturn`
+  * `Payment`
+  * `PurchaseReceiptReversal`
+  * `PaymentReversal`
+  * `ShortageFinancialResolution`
+  * `ShortageResolutionReversal`
 
 ## Payment
 
@@ -368,3 +387,61 @@ Rules:
   * `PurchaseReceipt` for outbound supplier payments
   * `ShortageResolution` for inbound supplier payments against financial shortage receivables
 * payment amount must equal total allocated amount before posting
+
+## Purchase Return Addendum
+
+Fields:
+
+* `id`
+* `return_no`
+* `supplier_id`
+* `reference_receipt_id`
+* `return_date`
+* `notes`
+* `status`
+* reversal tracking fields
+* audit fields
+
+Rules:
+
+* purchase returns start as `Draft`
+* only `Draft` purchase returns are editable or postable
+* posted purchase returns are immutable
+* receipt-linked and manual supplier-plus-item returns are both allowed
+* returned quantity cannot exceed the remaining returnable quantity on posted, non-reversed receipt history
+* partial and repeated returns against the same receipt are supported
+* posting creates stock ledger `OUT` rows
+* posting creates supplier statement rows only when a valid referenced receipt financial basis produces a positive return amount
+* posting must not create a fake zero-value supplier statement row when no financial basis is available
+* duplicate logical rows are blocked inside the same return document
+* receipt-linked supplier statement entries keep the reference receipt id for financial target state reduction
+
+## Supplier Financial Target State
+
+Fields:
+
+* `target_doc_type`
+* `target_doc_id`
+* `original_amount`
+* `adjusted_amount`
+* `net_amount`
+* `allocated_amount`
+* `open_amount`
+* `status`
+
+Rules:
+
+* receipt target `adjusted_amount` is reduced by posted, non-reversed purchase returns linked to that receipt
+* payment target `open_amount` uses only posted, non-reversed source documents and posted, non-reversed payment allocations
+* target status moves through `Open`, `PartiallySettled`, `Settled`, or `Reversed`
+* actionable payment allocation lists include only targets with `open_amount > 0`
+
+## Reversal Addendum
+
+Rules:
+
+* posted purchase receipts, supplier payments, and shortage resolutions are corrected only through reversal actions
+* reversal writes opposite business effects without deleting the original effects
+* supplier statement reversal rows must keep explicit reversal source typing and opposite debit/credit values relative to the original financial rows
+* the original posted document remains visible and auditable
+* one active reversal is allowed for each supported posted document

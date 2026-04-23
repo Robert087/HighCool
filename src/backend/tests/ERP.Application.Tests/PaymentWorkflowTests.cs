@@ -7,6 +7,8 @@ using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
 using ERP.Infrastructure.Payments;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Purchasing.PurchaseReceipts;
+using ERP.Infrastructure.Purchasing.PurchaseReturns;
 using ERP.Infrastructure.Statements;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -103,7 +105,7 @@ public sealed class PaymentWorkflowTests
             new SupplierOpenBalanceQuery(references.Supplier.Id, PaymentDirection.InboundFromParty, null, null, null),
             CancellationToken.None);
 
-        var openBalance = Assert.Single(balancesAfterFirstPayment);
+        var openBalance = Assert.Single(balancesAfterFirstPayment.Items);
         Assert.Equal(100m, openBalance.OriginalAmount);
         Assert.Equal(40m, openBalance.AllocatedAmount);
         Assert.Equal(60m, openBalance.OpenAmount);
@@ -123,7 +125,7 @@ public sealed class PaymentWorkflowTests
             new SupplierOpenBalanceQuery(references.Supplier.Id, PaymentDirection.InboundFromParty, null, null, null),
             CancellationToken.None);
 
-        Assert.Empty(balancesAfterSecondPayment);
+        Assert.Empty(balancesAfterSecondPayment.Items);
     }
 
     [Fact]
@@ -149,7 +151,7 @@ public sealed class PaymentWorkflowTests
             new SupplierOpenBalanceQuery(references.Supplier.Id, PaymentDirection.OutboundToParty, null, null, null),
             CancellationToken.None);
 
-        var openBalance = Assert.Single(balancesAfterFirstPayment);
+        var openBalance = Assert.Single(balancesAfterFirstPayment.Items);
         Assert.Equal(100m, openBalance.OriginalAmount);
         Assert.Equal(40m, openBalance.AllocatedAmount);
         Assert.Equal(60m, openBalance.OpenAmount);
@@ -169,7 +171,68 @@ public sealed class PaymentWorkflowTests
             new SupplierOpenBalanceQuery(references.Supplier.Id, PaymentDirection.OutboundToParty, null, null, null),
             CancellationToken.None);
 
-        Assert.Empty(balancesAfterSecondPayment);
+        Assert.Empty(balancesAfterSecondPayment.Items);
+    }
+
+    [Fact]
+    public async Task OpenBalances_ShouldReflectPostedPurchaseReturnsBeforePaymentAllocation()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedReferencesAsync(dbContext);
+        var receipt = await SeedPostedReceiptAsync(dbContext, references, "PR-PAY-RET-0001", 100m, 100m);
+        var quantityConversionService = new QuantityConversionService(dbContext);
+        var returnDraftService = new PurchaseReturnService(dbContext, quantityConversionService);
+        var returnPostingService = new PurchaseReturnPostingService(
+            dbContext,
+            returnDraftService,
+            new SupplierStatementPostingService(dbContext),
+            quantityConversionService);
+
+        var returnDraft = await returnDraftService.CreateDraftAsync(
+            new ERP.Application.Purchasing.PurchaseReturns.UpsertPurchaseReturnRequest(
+                "RTN-PAY-0001",
+                references.Supplier.Id,
+                receipt.Id,
+                DateTime.UtcNow.Date,
+                "Returned part of the receipt before payment",
+                [
+                    new ERP.Application.Purchasing.PurchaseReturns.UpsertPurchaseReturnLineRequest(
+                        1,
+                        references.Item.Id,
+                        null,
+                        references.Warehouse.Id,
+                        4m,
+                        references.Uom.Id,
+                        receipt.Lines.Single().Id)
+                ]),
+            "tester",
+            CancellationToken.None);
+
+        await returnPostingService.PostAsync(returnDraft.Id, "tester", CancellationToken.None);
+
+        var services = CreateServices(dbContext);
+        var balances = await services.OpenBalanceService.ListAsync(
+            new SupplierOpenBalanceQuery(references.Supplier.Id, PaymentDirection.OutboundToParty, null, null, null),
+            CancellationToken.None);
+
+        var balance = Assert.Single(balances.Items);
+        Assert.Equal(100m, balance.OriginalAmount);
+        Assert.Equal(40m, balance.AdjustedAmount);
+        Assert.Equal(60m, balance.NetAmount);
+        Assert.Equal(60m, balance.OpenAmount);
+        Assert.Equal("PartiallySettled", balance.Status);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            services.PaymentService.CreateDraftAsync(
+                BuildPaymentRequest(
+                    references.Supplier.Id,
+                    PaymentDirection.OutboundToParty,
+                    70m,
+                    new AllocationSeed(PaymentTargetDocumentType.PurchaseReceipt, receipt.Id, 70m)),
+                "tester",
+                CancellationToken.None));
+
+        Assert.Contains("cannot exceed the open amount", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -257,6 +320,28 @@ public sealed class PaymentWorkflowTests
         Assert.Equal(1, await dbContext.SupplierStatementEntries.CountAsync(entity => entity.SourceDocId == draft.Id));
     }
 
+    [Fact]
+    public async Task Draft_ShouldRejectDuplicateAllocationTargets()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedReferencesAsync(dbContext);
+        var receipt = await SeedPostedReceiptAsync(dbContext, references, "PR-PAY-DUP-0001", 100m, 100m);
+        var services = CreateServices(dbContext);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            services.PaymentService.CreateDraftAsync(
+                BuildPaymentRequest(
+                    references.Supplier.Id,
+                    PaymentDirection.OutboundToParty,
+                    100m,
+                    new AllocationSeed(PaymentTargetDocumentType.PurchaseReceipt, receipt.Id, 40m),
+                    new AllocationSeed(PaymentTargetDocumentType.PurchaseReceipt, receipt.Id, 60m)),
+                "tester",
+                CancellationToken.None));
+
+        Assert.Contains("duplicate payment allocation targets", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static UpsertPaymentRequest BuildPaymentRequest(
         Guid supplierId,
         PaymentDirection direction,
@@ -285,7 +370,8 @@ public sealed class PaymentWorkflowTests
 
     private static ServiceBundle CreateServices(AppDbContext dbContext)
     {
-        var openBalanceService = new SupplierOpenBalanceService(dbContext);
+        var targetStateService = new SupplierFinancialTargetStateService(dbContext);
+        var openBalanceService = new SupplierOpenBalanceService(targetStateService);
         var allocationService = new PaymentAllocationService(openBalanceService);
         var queryService = new PaymentQueryService(dbContext);
         var paymentService = new PaymentService(dbContext, allocationService, queryService);
@@ -326,9 +412,33 @@ public sealed class PaymentWorkflowTests
 
         dbContext.Suppliers.Add(supplier);
         dbContext.Warehouses.Add(warehouse);
+        var uom = new Uom
+        {
+            Code = "PCS",
+            Name = "Pieces",
+            Precision = 0,
+            AllowsFraction = false,
+            IsActive = true,
+            CreatedBy = "seed"
+        };
+        dbContext.Uoms.Add(uom);
         await dbContext.SaveChangesAsync();
 
-        return new PaymentReferences(supplier, warehouse);
+        var item = new Item
+        {
+            Code = "ITM-PAY",
+            Name = "Payment Item",
+            BaseUomId = uom.Id,
+            IsActive = true,
+            IsSellable = true,
+            HasComponents = false,
+            CreatedBy = "seed"
+        };
+
+        dbContext.Items.Add(item);
+        await dbContext.SaveChangesAsync();
+
+        return new PaymentReferences(supplier, warehouse, item, uom);
     }
 
     private static async Task<PurchaseReceipt> SeedPostedReceiptAsync(
@@ -346,7 +456,18 @@ public sealed class PaymentWorkflowTests
             ReceiptDate = DateTime.UtcNow.Date,
             SupplierPayableAmount = payableAmount,
             Status = DocumentStatus.Posted,
-            CreatedBy = "seed"
+            CreatedBy = "seed",
+            Lines =
+            [
+                new PurchaseReceiptLine
+                {
+                    LineNo = 1,
+                    ItemId = references.Item.Id,
+                    ReceivedQty = 10m,
+                    UomId = references.Uom.Id,
+                    CreatedBy = "seed"
+                }
+            ]
         };
 
         dbContext.PurchaseReceipts.Add(receipt);
@@ -398,7 +519,7 @@ public sealed class PaymentWorkflowTests
         {
             SupplierId = references.Supplier.Id,
             EntryDate = resolution.ResolutionDate,
-            SourceDocType = SupplierStatementSourceDocumentType.ShortageResolution,
+            SourceDocType = SupplierStatementSourceDocumentType.ShortageFinancialResolution,
             SourceDocId = resolution.Id,
             SourceLineId = Guid.NewGuid(),
             EffectType = SupplierStatementEffectType.ShortageFinancialResolution,
@@ -415,6 +536,6 @@ public sealed class PaymentWorkflowTests
     }
 
     private sealed record AllocationSeed(PaymentTargetDocumentType TargetDocType, Guid TargetDocId, decimal AllocatedAmount);
-    private sealed record PaymentReferences(Supplier Supplier, Warehouse Warehouse);
+    private sealed record PaymentReferences(Supplier Supplier, Warehouse Warehouse, Item Item, Uom Uom);
     private sealed record ServiceBundle(IPaymentService PaymentService, ISupplierPaymentPostingService PostingService, ISupplierOpenBalanceService OpenBalanceService);
 }
