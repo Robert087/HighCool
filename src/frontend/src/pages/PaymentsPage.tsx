@@ -14,10 +14,12 @@ import {
   Select,
   SkeletonLoader,
   type FilterChip,
+  useI18n,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listSuppliers, type Supplier } from "../services/masterDataApi";
 import { listPayments, type PaymentDirection, type PaymentFilters, type PaymentListItem, type PaymentMethod } from "../services/paymentsApi";
+import { formatCurrency, formatDate } from "../i18n";
 
 const PAGE_SIZE = 15;
 
@@ -31,17 +33,15 @@ const INITIAL_FILTERS: PaymentFilters = {
   toDate: "",
 };
 
-function formatDirection(direction: PaymentDirection) {
-  return direction === "OutboundToParty" ? "Paid to supplier" : "Received from supplier";
+function formatDirection(direction: PaymentDirection, t: (key: string) => string) {
+  return direction === "OutboundToParty" ? t("module.payments.paidToSupplier") : t("module.payments.receivedFromSupplier");
 }
 
-function formatMethod(method: PaymentMethod) {
-  return method === "BankTransfer" ? "Bank transfer" : method;
-}
-
-function formatAmount(amount: number, currency?: string | null) {
-  const label = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return currency ? `${label} ${currency}` : label;
+function formatMethod(method: PaymentMethod, t: (key: string) => string) {
+  if (method === "BankTransfer") return t("module.payments.bankTransfer");
+  if (method === "Cash") return t("module.payments.cash");
+  if (method === "Cheque") return t("module.payments.cheque");
+  return t("module.payments.other");
 }
 
 function badgeTone(status: PaymentListItem["status"]) {
@@ -51,10 +51,13 @@ function badgeTone(status: PaymentListItem["status"]) {
 export function PaymentsPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [rows, setRows] = useState<PaymentListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [filters, setFilters] = useState<PaymentFilters>(INITIAL_FILTERS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -67,7 +70,7 @@ export function PaymentsPage() {
         }
       } catch {
         if (active) {
-          setError("Failed to load payment filters.");
+          setError(t("module.payments.filterError"));
         }
       }
     }
@@ -85,14 +88,24 @@ export function PaymentsPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listPayments(filters);
+        const result = await listPayments({
+          filters,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy: "paymentDate",
+          sortDirection: "Desc",
+        });
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
           setRows([]);
-          setError(loadError instanceof ApiError ? loadError.message : "Unable to load supplier payments.");
+          setTotalCount(0);
+          setTotalPages(0);
+          setError(loadError instanceof ApiError ? loadError.message : t("module.payments.error"));
         }
       } finally {
         if (active) {
@@ -105,30 +118,29 @@ export function PaymentsPage() {
     return () => {
       active = false;
     };
-  }, [filters]);
+  }, [filters, page]);
 
   useEffect(() => {
     setPage(1);
   }, [filters]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
-  const resultLabel = rows.length === 1 ? "1 payment" : `${rows.length} payments`;
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+  const resultLabel = totalCount === 1
+    ? t("module.payments.resultLabel.one", { count: totalCount })
+    : t("module.payments.resultLabel.other", { count: totalCount });
 
   const activeFilters = useMemo(() => {
     const chips: FilterChip[] = [];
     const selectedSupplier = suppliers.find((supplier) => supplier.id === filters.supplierId);
 
     if (filters.search.trim()) {
-      chips.push({ key: "search", label: `Search: ${filters.search.trim()}`, onRemove: () => setFilter("search", "") });
+      chips.push({ key: "search", label: t("module.payments.searchChip", { value: filters.search.trim() }), onRemove: () => setFilter("search", "") });
     }
 
     if (selectedSupplier) {
       chips.push({
         key: "supplier",
-        label: `Supplier: ${selectedSupplier.code} - ${selectedSupplier.name}`,
+        label: t("module.payments.supplierChip", { value: `${selectedSupplier.code} - ${selectedSupplier.name}` }),
         onRemove: () => setFilter("supplierId", ""),
       });
     }
@@ -136,7 +148,7 @@ export function PaymentsPage() {
     if (filters.direction) {
       chips.push({
         key: "direction",
-        label: `Direction: ${formatDirection(filters.direction as PaymentDirection)}`,
+        label: t("module.payments.directionChip", { value: formatDirection(filters.direction as PaymentDirection, t) }),
         onRemove: () => setFilter("direction", ""),
       });
     }
@@ -144,7 +156,7 @@ export function PaymentsPage() {
     if (filters.status) {
       chips.push({
         key: "status",
-        label: `Status: ${filters.status}`,
+        label: t("module.payments.statusChip", { value: t(`status.${filters.status.toLowerCase()}`) }),
         onRemove: () => setFilter("status", ""),
       });
     }
@@ -152,7 +164,7 @@ export function PaymentsPage() {
     if (filters.paymentMethod) {
       chips.push({
         key: "paymentMethod",
-        label: `Method: ${formatMethod(filters.paymentMethod as PaymentMethod)}`,
+        label: t("module.payments.methodChip", { value: formatMethod(filters.paymentMethod as PaymentMethod, t) }),
         onRemove: () => setFilter("paymentMethod", ""),
       });
     }
@@ -160,7 +172,7 @@ export function PaymentsPage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.payments.dateChip", { from: filters.fromDate || t("common.any"), to: filters.toDate || t("common.any") }),
         onRemove: () => {
           setFilter("fromDate", "");
           setFilter("toDate", "");
@@ -178,10 +190,10 @@ export function PaymentsPage() {
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Supplier Payments"
-        eyebrow="Procurement"
-        description="Review draft and posted supplier payments with mandatory allocations against open procurement balances."
-        actions={<Link className="hc-button hc-button--primary hc-button--md" to="/payments/new">New payment</Link>}
+        title="module.payments"
+        eyebrow="route.section.purchasing"
+        description="module.payments.description"
+        actions={<Link className="hc-button hc-button--primary hc-button--md" to="/payments/new">{t("module.payments.new")}</Link>}
       />
 
       <FiltersToolbar
@@ -198,7 +210,7 @@ export function PaymentsPage() {
           <>
             <Field label="Supplier">
               <Select value={filters.supplierId} onChange={(event) => setFilter("supplierId", event.target.value)}>
-                <option value="">All suppliers</option>
+                <option value="">{t("module.payments.allSuppliers")}</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.code} - {supplier.name}
@@ -208,9 +220,9 @@ export function PaymentsPage() {
             </Field>
             <Field label="Direction">
               <Select value={filters.direction} onChange={(event) => setFilter("direction", event.target.value)}>
-                <option value="">All directions</option>
-                <option value="OutboundToParty">Paid to supplier</option>
-                <option value="InboundFromParty">Received from supplier</option>
+                <option value="">{t("module.payments.allDirections")}</option>
+                <option value="OutboundToParty">{t("module.payments.paidToSupplierShort")}</option>
+                <option value="InboundFromParty">{t("module.payments.receivedFromSupplierShort")}</option>
               </Select>
             </Field>
             <Field label="Status">
@@ -223,11 +235,11 @@ export function PaymentsPage() {
             </Field>
             <Field label="Payment method">
               <Select value={filters.paymentMethod} onChange={(event) => setFilter("paymentMethod", event.target.value)}>
-                <option value="">All methods</option>
-                <option value="Cash">Cash</option>
-                <option value="BankTransfer">Bank transfer</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Other">Other</option>
+                <option value="">{t("module.payments.allMethods")}</option>
+                <option value="Cash">{t("module.payments.cash")}</option>
+                <option value="BankTransfer">{t("module.payments.bankTransfer")}</option>
+                <option value="Cheque">{t("module.payments.cheque")}</option>
+                <option value="Other">{t("module.payments.other")}</option>
               </Select>
             </Field>
           </>
@@ -236,7 +248,7 @@ export function PaymentsPage() {
         primaryFilters={(
           <>
             <FilterDropdown aria-label="Supplier filter" value={filters.supplierId} onChange={(event) => setFilter("supplierId", event.target.value)}>
-              <option value="">Supplier</option>
+              <option value="">{t("common.supplier")}</option>
               {suppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.code} - {supplier.name}
@@ -244,17 +256,17 @@ export function PaymentsPage() {
               ))}
             </FilterDropdown>
             <FilterDropdown aria-label="Direction filter" value={filters.direction} onChange={(event) => setFilter("direction", event.target.value)}>
-              <option value="">Direction</option>
-              <option value="OutboundToParty">Paid to supplier</option>
-              <option value="InboundFromParty">Received from supplier</option>
+              <option value="">{t("common.direction")}</option>
+              <option value="OutboundToParty">{t("module.payments.paidToSupplierShort")}</option>
+              <option value="InboundFromParty">{t("module.payments.receivedFromSupplierShort")}</option>
             </FilterDropdown>
           </>
         )}
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search supplier payments"
-            placeholder="Search payment, supplier, or reference"
+            aria-label={t("module.payments")}
+            placeholder={t("module.payments.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
           />
@@ -272,11 +284,11 @@ export function PaymentsPage() {
             </Field>
             <Field label="Payment method">
               <Select value={filters.paymentMethod} onChange={(event) => setFilter("paymentMethod", event.target.value)}>
-                <option value="">All methods</option>
-                <option value="Cash">Cash</option>
-                <option value="BankTransfer">Bank transfer</option>
-                <option value="Cheque">Cheque</option>
-                <option value="Other">Other</option>
+                <option value="">{t("module.payments.allMethods")}</option>
+                <option value="Cash">{t("module.payments.cash")}</option>
+                <option value="BankTransfer">{t("module.payments.bankTransfer")}</option>
+                <option value="Cheque">{t("module.payments.cheque")}</option>
+                <option value="Other">{t("module.payments.other")}</option>
               </Select>
             </Field>
           </>
@@ -291,12 +303,12 @@ export function PaymentsPage() {
             <SkeletonLoader />
           </>
         ) : error ? (
-          <EmptyState title="Unable to load supplier payments" description={error} />
+          <EmptyState title="module.payments.error" description={error} />
         ) : rows.length === 0 ? (
           <EmptyState
-            title="No supplier payments found"
-            description="Create the first supplier payment once open purchase receipts or supplier receivables need settlement."
-            action={<Link className="hc-button hc-button--primary hc-button--md" to="/payments/new">New payment</Link>}
+            title="module.payments.empty"
+            description="module.payments.emptyDescription"
+            action={<Link className="hc-button hc-button--primary hc-button--md" to="/payments/new">{t("module.payments.new")}</Link>}
           />
         ) : (
           <>
@@ -316,7 +328,7 @@ export function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => (
+                  {rows.map((row) => (
                     <tr key={row.id}>
                       <td>
                         <Link className="hc-table__link" to={`/payments/${row.id}`}>
@@ -325,12 +337,12 @@ export function PaymentsPage() {
                         {row.referenceNote ? <div className="hc-table__subtext">{row.referenceNote}</div> : null}
                       </td>
                       <td>{row.partyCode} - {row.partyName}</td>
-                      <td>{formatDirection(row.direction)}</td>
-                      <td>{formatAmount(row.amount, row.currency)}</td>
-                      <td>{formatAmount(row.allocatedAmount, row.currency)}</td>
-                      <td>{formatAmount(row.unallocatedAmount, row.currency)}</td>
-                      <td>{new Date(row.paymentDate).toLocaleDateString()}</td>
-                      <td>{formatMethod(row.paymentMethod)}</td>
+                      <td>{formatDirection(row.direction, t)}</td>
+                      <td>{formatCurrency(row.amount, { currency: row.currency })}</td>
+                      <td>{formatCurrency(row.allocatedAmount, { currency: row.currency })}</td>
+                      <td>{formatCurrency(row.unallocatedAmount, { currency: row.currency })}</td>
+                      <td>{formatDate(row.paymentDate)}</td>
+                      <td>{formatMethod(row.paymentMethod, t)}</td>
                       <td><Badge tone={badgeTone(row.status)}>{row.status}</Badge></td>
                     </tr>
                   ))}
@@ -338,7 +350,7 @@ export function PaymentsPage() {
               </table>
             </div>
 
-            <Pagination currentPage={safePage} totalPages={totalPages} onPageChange={setPage} />
+            <Pagination currentPage={safePage} totalPages={Math.max(totalPages, 1)} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} />
           </>
         )}
       </div>

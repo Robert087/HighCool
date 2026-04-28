@@ -17,6 +17,7 @@ import {
   Select,
   SkeletonLoader,
   type FilterChip,
+  useI18n,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listItems, listSuppliers, type Item, type Supplier } from "../services/masterDataApi";
@@ -25,6 +26,7 @@ import {
   type OpenShortage,
   type OpenShortageFilters,
 } from "../services/shortageResolutionsApi";
+import { formatCurrency, formatDate, formatQuantity } from "../i18n";
 
 const PAGE_SIZE = 15;
 
@@ -41,6 +43,8 @@ const INITIAL_FILTERS: OpenShortageFilters = {
 
 export function OpenShortagesPage() {
   const [rows, setRows] = useState<OpenShortage[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [filters, setFilters] = useState<OpenShortageFilters>(INITIAL_FILTERS);
@@ -48,6 +52,7 @@ export function OpenShortagesPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -65,7 +70,7 @@ export function OpenShortagesPage() {
         }
       } catch {
         if (active) {
-          setError("Failed to load shortage filters.");
+          setError(t("module.shortages.filterError"));
         }
       }
     }
@@ -83,14 +88,25 @@ export function OpenShortagesPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listOpenShortages(filters);
+        const result = await listOpenShortages({
+          filters,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy: "receiptDate",
+          sortDirection: "Asc",
+        });
 
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof ApiError ? loadError.message : "Failed to load open shortages.");
+          setError(loadError instanceof ApiError ? loadError.message : t("module.shortages.error"));
+          setRows([]);
+          setTotalCount(0);
+          setTotalPages(0);
         }
       } finally {
         if (active) {
@@ -103,17 +119,14 @@ export function OpenShortagesPage() {
     return () => {
       active = false;
     };
-  }, [filters, reloadKey]);
+  }, [filters, page, reloadKey]);
 
   useEffect(() => {
     setPage(1);
   }, [filters]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
-  const resultLabel = rows.length === 1 ? "1 open shortage" : `${rows.length} open shortages`;
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+  const resultLabel = totalCount === 1 ? t("module.shortages.resultLabel.one", { count: totalCount }) : t("module.shortages.resultLabel.other", { count: totalCount });
   const hasFilters = useMemo(
     () => Object.values(filters).some((value) => value.trim().length > 0),
     [filters],
@@ -127,7 +140,7 @@ export function OpenShortagesPage() {
     if (filters.search.trim()) {
       chips.push({
         key: "search",
-        label: `Search: ${filters.search.trim()}`,
+        label: t("module.shortages.filter.searchChip", { value: filters.search.trim() }),
         onRemove: () => setFilter("search", ""),
       });
     }
@@ -135,7 +148,7 @@ export function OpenShortagesPage() {
     if (selectedSupplier) {
       chips.push({
         key: "supplier",
-        label: `Supplier: ${selectedSupplier.code} - ${selectedSupplier.name}`,
+        label: t("module.shortages.filter.supplierChip", { value: `${selectedSupplier.code} - ${selectedSupplier.name}` }),
         onRemove: () => setFilter("supplierId", ""),
       });
     }
@@ -143,7 +156,7 @@ export function OpenShortagesPage() {
     if (selectedItem) {
       chips.push({
         key: "item",
-        label: `Parent item: ${selectedItem.code} - ${selectedItem.name}`,
+        label: t("module.shortages.filter.parentItemChip", { value: `${selectedItem.code} - ${selectedItem.name}` }),
         onRemove: () => setFilter("itemId", ""),
       });
     }
@@ -151,7 +164,7 @@ export function OpenShortagesPage() {
     if (selectedComponent) {
       chips.push({
         key: "component",
-        label: `Component: ${selectedComponent.code} - ${selectedComponent.name}`,
+        label: t("module.shortages.filter.componentChip", { value: `${selectedComponent.code} - ${selectedComponent.name}` }),
         onRemove: () => setFilter("componentItemId", ""),
       });
     }
@@ -159,7 +172,7 @@ export function OpenShortagesPage() {
     if (filters.status) {
       chips.push({
         key: "status",
-        label: `Status: ${filters.status === "PartiallyResolved" ? "Partially resolved" : "Open"}`,
+        label: t("module.shortages.filter.statusChip", { value: filters.status === "PartiallyResolved" ? t("module.shortages.partiallyResolved") : t("module.shortages.open") }),
         onRemove: () => setFilter("status", ""),
       });
     }
@@ -167,7 +180,7 @@ export function OpenShortagesPage() {
     if (filters.affectsSupplierBalance) {
       chips.push({
         key: "affectsSupplierBalance",
-        label: `Supplier balance: ${filters.affectsSupplierBalance === "yes" ? "Affects supplier balance" : "Internal only"}`,
+        label: t("module.shortages.filter.supplierBalanceChip", { value: filters.affectsSupplierBalance === "yes" ? t("module.shortages.affectsSupplierBalance") : t("module.shortages.internalOnly") }),
         onRemove: () => setFilter("affectsSupplierBalance", ""),
       });
     }
@@ -175,7 +188,7 @@ export function OpenShortagesPage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.shortages.filter.dateChip", { from: filters.fromDate || t("common.any"), to: filters.toDate || t("common.any") }),
         onRemove: () => {
           setFilter("fromDate", "");
           setFilter("toDate", "");
@@ -193,12 +206,12 @@ export function OpenShortagesPage() {
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Open Shortages"
-        description="Review unresolved receipt shortages before settling them physically or financially through shortage resolutions."
-        eyebrow="Inventory"
+        title="module.shortages"
+        description="module.shortages.description"
+        eyebrow="route.section.inventory"
         actions={
           <Link className="hc-button hc-button--primary hc-button--md" to="/shortage-resolutions/new">
-            New shortage resolution
+            {t("module.shortages.new")}
           </Link>
         }
       />
@@ -299,7 +312,7 @@ export function OpenShortagesPage() {
         search={(
           <FilterTextInput
             aria-label="Search open shortages"
-            placeholder="Search supplier, receipt, item, component"
+            placeholder={t("module.shortages.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
           />
@@ -340,9 +353,9 @@ export function OpenShortagesPage() {
       {error ? (
         <Card padding="md">
           <EmptyState
-            title="Unable to load open shortages"
+            title="module.shortages.error"
             description={error}
-            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>}
+            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>{t("common.retry")}</Button>}
           />
         </Card>
       ) : null}
@@ -371,13 +384,13 @@ export function OpenShortagesPage() {
               <th scope="col">Reason</th>
             </tr>
           }
-          rows={visibleRows.map((row) => (
+          rows={rows.map((row) => (
             <tr key={row.id} className="hc-table__row">
               <td>
                 <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{row.purchaseReceiptNo}</span>
                   <span className="hc-table__subtitle">{row.supplierName} · {row.supplierCode}</span>
-                  <span className="hc-table__subtitle">{new Date(row.receiptDate).toLocaleDateString()}</span>
+                  <span className="hc-table__subtitle">{formatDate(row.receiptDate)}</span>
                 </div>
               </td>
               <td>
@@ -387,7 +400,7 @@ export function OpenShortagesPage() {
                     <span className="hc-table__subtitle">{row.itemCode}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Component</span>
+                    <span className="hc-table__metric-label">{t("module.shortages.componentLabel")}</span>
                     <span className="hc-table__subtitle">{row.componentItemName} · {row.componentItemCode}</span>
                   </div>
                 </div>
@@ -395,42 +408,54 @@ export function OpenShortagesPage() {
               <td>
                 <div className="hc-table__stack">
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Shortage</span>
-                    <span className="hc-table__subtitle">{row.shortageQty.toLocaleString()}</span>
+                    <span className="hc-table__metric-label">Expected</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.expectedComponentQty)}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Resolved</span>
-                    <span className="hc-table__subtitle">{row.resolvedQtyEquivalent.toLocaleString()}</span>
+                    <span className="hc-table__metric-label">{t("module.shortages.initialActual")}</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.initialActualComponentQty)}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Physical / Financial</span>
-                    <span className="hc-table__subtitle">{row.resolvedPhysicalQty.toLocaleString()} / {row.resolvedFinancialQtyEquivalent.toLocaleString()}</span>
+                    <span className="hc-table__metric-label">{t("module.shortages.physicalResolved")}</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.resolvedPhysicalQty)}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Open</span>
-                    <span className="hc-table__title">{row.openQty.toLocaleString()}</span>
+                    <span className="hc-table__metric-label">{t("module.shortages.finalPhysical")}</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.finalPhysicalComponentQty)}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Open amount</span>
-                    <span className="hc-table__subtitle">{row.openAmount?.toLocaleString() ?? "Pending value"}</span>
+                    <span className="hc-table__metric-label">{t("module.shortages.financiallySettled")}</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.resolvedFinancialQtyEquivalent)}</span>
+                  </div>
+                  <div className="hc-table__metric">
+                    <span className="hc-table__metric-label">{t("module.shortages.shortageResolved")}</span>
+                    <span className="hc-table__subtitle">{formatQuantity(row.shortageQty)} / {formatQuantity(row.resolvedQtyEquivalent)}</span>
+                  </div>
+                  <div className="hc-table__metric">
+                    <span className="hc-table__metric-label">{t("module.shortages.open")}</span>
+                    <span className="hc-table__title">{formatQuantity(row.openQty)}</span>
+                  </div>
+                  <div className="hc-table__metric">
+                    <span className="hc-table__metric-label">{t("module.shortages.openAmount")}</span>
+                    <span className="hc-table__subtitle">{row.openAmount != null ? formatCurrency(row.openAmount) : t("common.pendingValue")}</span>
                   </div>
                 </div>
               </td>
               <td><div className="hc-table__status-stack"><Badge tone={row.status === "PartiallyResolved" ? "warning" : "neutral"}>{row.status}</Badge></div></td>
-              <td><div className="hc-table__status-stack"><Badge tone={row.affectsSupplierBalance ? "primary" : "neutral"}>{row.affectsSupplierBalance ? "Supplier" : "Internal"}</Badge></div></td>
+              <td><div className="hc-table__status-stack"><Badge tone={row.affectsSupplierBalance ? "primary" : "neutral"}>{row.affectsSupplierBalance ? t("module.shortages.supplierImpactSupplier") : t("module.shortages.supplierImpactInternal")}</Badge></div></td>
               <td>
                 <div className="hc-table__cell-strong">
-                  <span className="hc-table__title">{row.shortageReasonName ?? "Not specified"}</span>
+                  <span className="hc-table__title">{row.shortageReasonName ?? t("module.shortages.notSpecified")}</span>
                   <span className="hc-table__subtitle">{row.shortageReasonCode ?? row.approvalStatus}</span>
                 </div>
               </td>
             </tr>
           ))}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={rows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={Math.max(totalPages, 1)} />}
           emptyState={
             hasFilters
-              ? <EmptyState title="No shortages match the current filters" description="Try broadening the supplier, item, or date filters." />
-              : <EmptyState title="No open shortages" description="All current receipt shortages are fully settled or no shortage rows have been generated yet." />
+              ? <EmptyState title="module.shortages.emptyFiltered" description="module.shortages.emptyFilteredDescription" />
+              : <EmptyState title="module.shortages.empty" description="module.shortages.emptyDescription" />
           }
         />
       ) : null}

@@ -67,5 +67,8 @@ public sealed class PurchaseReceiptLineConfiguration : AuditableEntityConfigurat
             .IsUnique();
 
         builder.HasIndex(entity => entity.PurchaseOrderLineId);
+        builder.HasIndex(entity => entity.ItemId);
+        builder.HasIndex(entity => entity.UomId);
+        builder.HasIndex(entity => new { entity.PurchaseReceiptId, entity.ItemId });
     }
 }

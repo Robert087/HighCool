@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../../lib/cn";
+import { localizeReactNode, useI18n } from "../../i18n";
 
 export interface FieldProps extends HTMLAttributes<HTMLDivElement> {
   label: ReactNode;
@@ -15,14 +16,16 @@ export function Field({
   required = false,
   ...props
 }: FieldProps) {
+  const { translateText } = useI18n();
+
   return (
     <div className={cn("hc-field", className)} {...props}>
       <div className="hc-field__label">
-        {label}
+        {localizeReactNode(label, translateText)}
         {required ? <span className="hc-field__required"> *</span> : null}
       </div>
       {children}
-      {hint ? <div className="hc-field__hint">{hint}</div> : null}
+      {hint ? <div className="hc-field__hint">{localizeReactNode(hint, translateText)}</div> : null}
     </div>
   );
 }

@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ERP.Infrastructure.Persistence.Configurations;
 
-public sealed class ShortageResolutionConfiguration : AuditableEntityConfigurationBase<ShortageResolution>
+public sealed class ShortageResolutionConfiguration : BusinessDocumentConfigurationBase<ShortageResolution>
 {
-    protected override void ConfigureAuditableEntity(EntityTypeBuilder<ShortageResolution> builder)
+    protected override void ConfigureDocument(EntityTypeBuilder<ShortageResolution> builder)
     {
         builder.ToTable("shortage_resolutions");
 
@@ -47,12 +47,6 @@ public sealed class ShortageResolutionConfiguration : AuditableEntityConfigurati
             .HasColumnName("notes")
             .HasMaxLength(1000);
 
-        builder.Property(entity => entity.Status)
-            .HasColumnName("status")
-            .HasConversion<string>()
-            .HasMaxLength(20)
-            .IsRequired();
-
         builder.Property(entity => entity.ApprovedBy)
             .HasColumnName("approved_by")
             .HasMaxLength(128);
@@ -70,5 +64,7 @@ public sealed class ShortageResolutionConfiguration : AuditableEntityConfigurati
         builder.HasIndex(entity => entity.ResolutionNo)
             .IsUnique();
         builder.HasIndex(entity => new { entity.SupplierId, entity.ResolutionType, entity.Status, entity.ResolutionDate });
+        builder.HasIndex(entity => new { entity.SupplierId, entity.Status, entity.ResolutionDate });
+        builder.HasIndex(entity => entity.ReversalDocumentId);
     }
 }

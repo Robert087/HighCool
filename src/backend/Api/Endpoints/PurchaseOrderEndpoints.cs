@@ -1,5 +1,8 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Purchasing.PurchaseOrders;
+using ERP.Domain.Common;
+using ERP.Domain.Purchasing;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -23,10 +26,35 @@ public static class PurchaseOrderEndpoints
 
     private static async Task<IResult> ListAsync(
         string? search,
+        DocumentStatus? status,
+        PurchaseOrderReceiptProgressStatus? receiptProgressStatus,
+        DateTime? fromDate,
+        DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IPurchaseOrderService service,
         CancellationToken cancellationToken)
     {
-        var result = await service.ListAsync(new PurchaseOrderListQuery(search), cancellationToken);
+        if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+        {
+            return Results.BadRequest(new { message = "From date cannot be later than to date." });
+        }
+
+        var result = await service.ListAsync(
+            new PurchaseOrderListQuery(
+                search,
+                status,
+                receiptProgressStatus,
+                fromDate,
+                toDate,
+                page ?? 1,
+                pageSize ?? 20,
+                sortBy,
+                sortDirection ?? SortDirection.Desc),
+            cancellationToken);
+
         return Results.Ok(result);
     }
 

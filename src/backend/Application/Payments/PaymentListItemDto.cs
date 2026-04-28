@@ -20,5 +20,7 @@ public sealed record PaymentListItemDto(
     string? ReferenceNote,
     DocumentStatus Status,
     int AllocationCount,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

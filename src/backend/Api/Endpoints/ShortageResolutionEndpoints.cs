@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Shortages;
 using ERP.Domain.Common;
 using ERP.Domain.Shortages;
@@ -36,6 +37,10 @@ public static class ShortageResolutionEndpoints
         ShortageEntryStatus? status,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IShortageResolutionService service,
         CancellationToken cancellationToken)
     {
@@ -46,7 +51,7 @@ public static class ShortageResolutionEndpoints
         }
 
         var result = await service.ListOpenShortagesAsync(
-            new OpenShortageQuery(search, supplierId, itemId, componentItemId, affectsSupplierBalance, status, fromDate, toDate),
+            new OpenShortageQuery(search, supplierId, itemId, componentItemId, affectsSupplierBalance, status, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Asc),
             cancellationToken);
 
         return Results.Ok(result);
@@ -68,6 +73,10 @@ public static class ShortageResolutionEndpoints
         DocumentStatus? status,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IShortageResolutionService service,
         CancellationToken cancellationToken)
     {
@@ -78,7 +87,7 @@ public static class ShortageResolutionEndpoints
         }
 
         var result = await service.ListAsync(
-            new ShortageResolutionListQuery(search, supplierId, resolutionType, status, fromDate, toDate),
+            new ShortageResolutionListQuery(search, supplierId, resolutionType, status, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Desc),
             cancellationToken);
 
         return Results.Ok(result);

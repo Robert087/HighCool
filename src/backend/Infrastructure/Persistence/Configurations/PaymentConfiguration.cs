@@ -78,8 +78,10 @@ public sealed class PaymentConfiguration : BusinessDocumentConfigurationBase<Pay
             .IsUnique();
 
         builder.HasIndex(entity => new { entity.PartyType, entity.PartyId, entity.PaymentDate });
+        builder.HasIndex(entity => new { entity.PartyType, entity.PartyId, entity.Direction, entity.Status, entity.PaymentDate });
         builder.HasIndex(entity => entity.Status);
         builder.HasIndex(entity => entity.PaymentMethod);
         builder.HasIndex(entity => entity.Direction);
+        builder.HasIndex(entity => entity.ReversalDocumentId);
     }
 }

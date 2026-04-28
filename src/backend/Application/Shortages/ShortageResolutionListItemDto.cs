@@ -16,5 +16,7 @@ public sealed record ShortageResolutionListItemDto(
     string? Currency,
     DocumentStatus Status,
     int AllocationCount,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

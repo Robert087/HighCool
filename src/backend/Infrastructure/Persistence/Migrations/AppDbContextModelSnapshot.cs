@@ -110,7 +110,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UomId");
 
-                    b.HasIndex("WarehouseId");
+                    b.HasIndex("SourceDocType", "SourceDocId");
+
+                    b.HasIndex("TransactionType", "TransactionDate");
+
+                    b.HasIndex("WarehouseId", "TransactionDate");
 
                     b.HasIndex("ItemId", "WarehouseId", "TransactionDate");
 
@@ -670,6 +674,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("reference_note");
 
+                    b.Property<Guid?>("ReversalDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversal_document_id");
+
+                    b.Property<DateTime?>("ReversedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversed_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -696,9 +708,13 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("PaymentNo")
                         .IsUnique();
 
+                    b.HasIndex("ReversalDocumentId");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("PartyType", "PartyId", "PaymentDate");
+
+                    b.HasIndex("PartyType", "PartyId", "Direction", "Status", "PaymentDate");
 
                     b.ToTable("payments", (string)null);
                 });
@@ -755,6 +771,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PaymentId");
+
                     b.HasIndex("PaymentId", "AllocationOrder")
                         .IsUnique();
 
@@ -797,6 +815,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(32)")
                         .HasColumnName("po_no");
 
+                    b.Property<Guid?>("ReversalDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversal_document_id");
+
+                    b.Property<DateTime?>("ReversedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversed_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -825,7 +851,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("SupplierId");
+                    b.HasIndex("SupplierId", "OrderDate");
+
+                    b.HasIndex("SupplierId", "Status", "OrderDate");
 
                     b.ToTable("purchase_orders", (string)null);
                 });
@@ -885,6 +913,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UomId");
 
+                    b.HasIndex("PurchaseOrderId", "ItemId");
+
                     b.HasIndex("PurchaseOrderId", "LineNo")
                         .IsUnique();
 
@@ -925,6 +955,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(32)")
                         .HasColumnName("receipt_no");
 
+                    b.Property<Guid?>("ReversalDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversal_document_id");
+
+                    b.Property<DateTime?>("ReversedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversed_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -961,11 +999,15 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("ReceiptNo")
                         .IsUnique();
 
+                    b.HasIndex("ReversalDocumentId");
+
                     b.HasIndex("Status");
 
-                    b.HasIndex("SupplierId");
+                    b.HasIndex("PurchaseOrderId", "ReceiptDate");
 
-                    b.HasIndex("WarehouseId");
+                    b.HasIndex("WarehouseId", "ReceiptDate");
+
+                    b.HasIndex("SupplierId", "Status", "ReceiptDate");
 
                     b.ToTable("purchase_receipts", (string)null);
                 });
@@ -1034,6 +1076,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("PurchaseOrderLineId");
 
                     b.HasIndex("UomId");
+
+                    b.HasIndex("PurchaseReceiptId", "ItemId");
 
                     b.HasIndex("PurchaseReceiptId", "LineNo")
                         .IsUnique();
@@ -1106,6 +1150,224 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("purchase_receipt_line_components", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReturn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid?>("ReferenceReceiptId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reference_receipt_id");
+
+                    b.Property<DateTime>("ReturnDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("return_date");
+
+                    b.Property<string>("ReturnNo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("return_no");
+
+                    b.Property<Guid?>("ReversalDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversal_document_id");
+
+                    b.Property<DateTime?>("ReversedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SupplierId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("supplier_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReferenceReceiptId");
+
+                    b.HasIndex("ReturnDate");
+
+                    b.HasIndex("ReturnNo")
+                        .IsUnique();
+
+                    b.HasIndex("ReversalDocumentId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SupplierId", "Status", "ReturnDate");
+
+                    b.ToTable("purchase_returns", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReturnLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("BaseQty")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("base_qty");
+
+                    b.Property<Guid?>("ComponentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("component_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("item_id");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("int")
+                        .HasColumnName("line_no");
+
+                    b.Property<Guid>("PurchaseReturnId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("purchase_return_id");
+
+                    b.Property<Guid?>("ReferenceReceiptLineId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reference_receipt_line_id");
+
+                    b.Property<decimal>("ReturnQty")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("return_qty");
+
+                    b.Property<Guid>("UomId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("uom_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComponentId");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("ReferenceReceiptLineId");
+
+                    b.HasIndex("UomId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("PurchaseReturnId", "LineNo")
+                        .IsUnique();
+
+                    b.ToTable("purchase_return_lines", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Reversals.DocumentReversal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("ReversalDate")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversal_date");
+
+                    b.Property<string>("ReversalNo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("reversal_no");
+
+                    b.Property<string>("ReversalReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("reversal_reason");
+
+                    b.Property<Guid>("ReversedDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversed_document_id");
+
+                    b.Property<string>("ReversedDocumentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("reversed_document_type");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReversalNo")
+                        .IsUnique();
+
+                    b.HasIndex("ReversedDocumentType", "ReversedDocumentId")
+                        .IsUnique();
+
+                    b.ToTable("document_reversals", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Shortages.ShortageLedgerEntry", b =>
@@ -1233,6 +1495,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("PurchaseReceiptLineId", "ComponentItemId")
                         .IsUnique();
 
+                    b.HasIndex("Status", "ComponentItemId");
+
+                    b.HasIndex("Status", "ItemId");
+
                     b.ToTable("shortage_ledger_entries", (string)null);
                 });
 
@@ -1347,6 +1613,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("resolution_type");
 
+                    b.Property<Guid?>("ReversalDocumentId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("reversal_document_id");
+
+                    b.Property<DateTime?>("ReversedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("reversed_at");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1378,6 +1652,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ResolutionNo")
                         .IsUnique();
+
+                    b.HasIndex("ReversalDocumentId");
+
+                    b.HasIndex("SupplierId", "Status", "ResolutionDate");
 
                     b.HasIndex("SupplierId", "ResolutionType", "Status", "ResolutionDate");
 
@@ -1460,6 +1738,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("ResolutionId", "ShortageLedgerId")
                         .IsUnique();
 
+                    b.HasIndex("ShortageLedgerId", "AllocationType");
+
                     b.ToTable("shortage_resolution_allocations", (string)null);
                 });
 
@@ -1540,6 +1820,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SupplierId", "EntryDate");
+
+                    b.HasIndex("SupplierId", "EffectType", "EntryDate");
+
+                    b.HasIndex("SupplierId", "SourceDocType", "EntryDate");
 
                     b.HasIndex("SourceDocType", "SourceDocId", "SourceLineId", "EffectType")
                         .IsUnique()
@@ -1786,6 +2070,73 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Navigation("Uom");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReturn", b =>
+                {
+                    b.HasOne("ERP.Domain.Purchasing.PurchaseReceipt", "ReferenceReceipt")
+                        .WithMany()
+                        .HasForeignKey("ReferenceReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.MasterData.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ReferenceReceipt");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReturnLine", b =>
+                {
+                    b.HasOne("ERP.Domain.MasterData.Item", "Component")
+                        .WithMany()
+                        .HasForeignKey("ComponentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.MasterData.Item", "Item")
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Purchasing.PurchaseReturn", "PurchaseReturn")
+                        .WithMany("Lines")
+                        .HasForeignKey("PurchaseReturnId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Purchasing.PurchaseReceiptLine", "ReferenceReceiptLine")
+                        .WithMany()
+                        .HasForeignKey("ReferenceReceiptLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.MasterData.Uom", "Uom")
+                        .WithMany()
+                        .HasForeignKey("UomId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.MasterData.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Component");
+
+                    b.Navigation("Item");
+
+                    b.Navigation("PurchaseReturn");
+
+                    b.Navigation("ReferenceReceiptLine");
+
+                    b.Navigation("Uom");
+
+                    b.Navigation("Warehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Shortages.ShortageLedgerEntry", b =>
                 {
                     b.HasOne("ERP.Domain.MasterData.Item", "ComponentItem")
@@ -1906,6 +2257,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReceiptLine", b =>
                 {
                     b.Navigation("Components");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Purchasing.PurchaseReturn", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("ERP.Domain.Shortages.ShortageLedgerEntry", b =>

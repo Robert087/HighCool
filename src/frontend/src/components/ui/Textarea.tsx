@@ -1,8 +1,19 @@
 import type { TextareaHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
+import { useI18n } from "../../i18n";
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
 export function Textarea({ className, ...props }: TextareaProps) {
-  return <textarea className={cn("hc-textarea", className)} {...props} />;
+  const { translateText } = useI18n();
+
+  return (
+    <textarea
+      className={cn("hc-textarea", className)}
+      aria-label={typeof props["aria-label"] === "string" ? translateText(props["aria-label"]) : props["aria-label"]}
+      placeholder={typeof props.placeholder === "string" ? translateText(props.placeholder) : props.placeholder}
+      title={typeof props.title === "string" ? translateText(props.title) : props.title}
+      {...props}
+    />
+  );
 }

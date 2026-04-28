@@ -17,11 +17,13 @@ import {
   PageHeader,
   Select,
   type FilterChip,
+  useI18n,
   useConfirmationDialog,
   useToast,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listPurchaseOrders, type PurchaseOrderListItem } from "../services/purchaseOrdersApi";
+import { formatDate } from "../i18n";
 
 const PAGE_SIZE = 10;
 const INITIAL_FILTERS = {
@@ -44,6 +46,8 @@ function progressTone(status: PurchaseOrderListItem["receiptProgressStatus"]) {
 
 export function PurchaseOrdersPage() {
   const [rows, setRows] = useState<PurchaseOrderListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [error, setError] = useState("");
@@ -52,30 +56,31 @@ export function PurchaseOrdersPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmationDialog();
+  const { t } = useI18n();
 
   async function handleDelete(row: PurchaseOrderListItem) {
     if (row.status === "Posted") {
       showToast({
         tone: "warning",
-        title: "Cannot delete posted order",
-        description: "Posted purchase orders cannot be deleted from the UI.",
+        title: t("module.purchaseOrders.deletePostedTitle"),
+        description: t("module.purchaseOrders.deletePostedDescription"),
       });
       return;
     }
 
     const confirmed = await confirm({
-      title: "Delete purchase order",
-      description: "Permanent delete is not available in this version. You can confirm this message and keep working, but no deletion will happen.",
-      confirmLabel: "Understood",
-      cancelLabel: "Close",
+      title: t("module.purchaseOrders.deleteTitle"),
+      description: t("module.purchaseOrders.deleteDescription"),
+      confirmLabel: t("module.purchaseOrders.deleteConfirm"),
+      cancelLabel: t("app.close"),
       tone: "warning",
     });
 
     if (confirmed) {
       showToast({
         tone: "info",
-        title: "Delete action unavailable",
-        description: "Permanent delete is not supported in this UI yet.",
+        title: t("module.purchaseOrders.deleteUnavailableTitle"),
+        description: t("module.purchaseOrders.deleteUnavailableDescription"),
       });
     }
   }
@@ -87,13 +92,28 @@ export function PurchaseOrdersPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listPurchaseOrders(search);
+        const result = await listPurchaseOrders({
+          search,
+          status: filters.status,
+          receiptProgress: filters.receiptProgress,
+          fromDate: filters.fromDate,
+          toDate: filters.toDate,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy: "orderDate",
+          sortDirection: "Desc",
+        });
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof ApiError ? loadError.message : "Failed to load purchase orders.");
+          setError(loadError instanceof ApiError ? loadError.message : t("module.purchaseOrders.error"));
+          setRows([]);
+          setTotalCount(0);
+          setTotalPages(0);
         }
       } finally {
         if (active) {
@@ -106,47 +126,19 @@ export function PurchaseOrdersPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey, search]);
+  }, [filters, page, reloadKey, search]);
 
   useEffect(() => {
     setPage(1);
   }, [search, filters]);
 
-  const filteredRows = useMemo(() => rows.filter((row) => {
-    if (filters.status && row.status !== filters.status) {
-      return false;
-    }
-
-    if (filters.receiptProgress && row.receiptProgressStatus !== filters.receiptProgress) {
-      return false;
-    }
-
-    if (filters.fromDate) {
-      const rowDate = new Date(row.orderDate);
-      const fromDate = new Date(filters.fromDate);
-      if (rowDate < fromDate) {
-        return false;
-      }
-    }
-
-    if (filters.toDate) {
-      const rowDate = new Date(row.orderDate);
-      const toDate = new Date(filters.toDate);
-      toDate.setHours(23, 59, 59, 999);
-      if (rowDate > toDate) {
-        return false;
-      }
-    }
-
-    return true;
-  }), [filters, rows]);
   const activeFilters = useMemo(() => {
     const chips: FilterChip[] = [];
 
     if (search.trim()) {
       chips.push({
         key: "search",
-        label: `Search: ${search.trim()}`,
+        label: t("module.purchaseOrders.filter.searchChip", { value: search.trim() }),
         onRemove: () => setSearch(""),
       });
     }
@@ -154,7 +146,7 @@ export function PurchaseOrdersPage() {
     if (filters.status) {
       chips.push({
         key: "status",
-        label: `Status: ${filters.status}`,
+        label: t("module.purchaseOrders.filter.statusChip", { value: t(`status.${filters.status.toLowerCase()}`) }),
         onRemove: () => setFilters((current) => ({ ...current, status: "" })),
       });
     }
@@ -162,7 +154,9 @@ export function PurchaseOrdersPage() {
     if (filters.receiptProgress) {
       chips.push({
         key: "receiptProgress",
-        label: `Progress: ${filters.receiptProgress}`,
+        label: t("module.purchaseOrders.filter.progressChip", {
+          value: t(`status.${filters.receiptProgress.charAt(0).toLowerCase()}${filters.receiptProgress.slice(1)}`),
+        }),
         onRemove: () => setFilters((current) => ({ ...current, receiptProgress: "" })),
       });
     }
@@ -170,7 +164,10 @@ export function PurchaseOrdersPage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Order date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.purchaseOrders.filter.dateChip", {
+          from: filters.fromDate || t("common.any"),
+          to: filters.toDate || t("common.any"),
+        }),
         onRemove: () => setFilters((current) => ({ ...current, fromDate: "", toDate: "" })),
       });
     }
@@ -178,19 +175,18 @@ export function PurchaseOrdersPage() {
     return chips;
   }, [filters, search]);
   const hasFilters = activeFilters.length > 0;
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = filteredRows.slice(pageStart, pageStart + PAGE_SIZE);
-  const resultLabel = filteredRows.length === 1 ? "1 purchase order" : `${filteredRows.length} purchase orders`;
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+  const resultLabel = totalCount === 1
+    ? t("module.purchaseOrders.resultLabel.one", { count: totalCount })
+    : t("module.purchaseOrders.resultLabel.other", { count: totalCount });
 
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Purchase Orders"
+        title="module.purchaseOrders"
         actions={
           <Link className="hc-button hc-button--primary hc-button--md" to="/purchase-orders/new">
-            New purchase order
+            {t("module.purchaseOrders.new")}
           </Link>
         }
       />
@@ -254,8 +250,8 @@ export function PurchaseOrdersPage() {
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search purchase orders"
-            placeholder="Search PO no, supplier, or notes"
+            aria-label={t("module.purchaseOrders")}
+            placeholder={t("module.purchaseOrders.searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -266,9 +262,9 @@ export function PurchaseOrdersPage() {
       {error ? (
         <div className="hc-card hc-card--md">
           <EmptyState
-            title="Unable to load purchase orders"
+            title="module.purchaseOrders.error"
             description={error}
-            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>}
+            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>{t("common.retry")}</Button>}
           />
         </div>
       ) : null}
@@ -285,7 +281,7 @@ export function PurchaseOrdersPage() {
 
       {!loading && !error ? (
         <DataTable
-          hasData={filteredRows.length > 0}
+          hasData={rows.length > 0}
           columns={
             <tr>
               <th scope="col">PO</th>
@@ -296,12 +292,16 @@ export function PurchaseOrdersPage() {
               <th scope="col" className="hc-table__head-actions" aria-label="Actions" />
             </tr>
           }
-          rows={visibleRows.map((row) => (
+          rows={rows.map((row) => (
             <tr key={row.id} className="hc-table__row">
               <td>
                 <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{row.poNo}</span>
-                  <span className="hc-table__subtitle">{row.lineCount} {row.lineCount === 1 ? "line" : "lines"}</span>
+                  <span className="hc-table__subtitle">
+                    {row.lineCount === 1
+                      ? t("module.purchaseReceipts.lineCount.one", { count: row.lineCount })
+                      : t("module.purchaseReceipts.lineCount.other", { count: row.lineCount })}
+                  </span>
                 </div>
               </td>
               <td>
@@ -313,12 +313,12 @@ export function PurchaseOrdersPage() {
               <td>
                 <div className="hc-table__stack">
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Order</span>
-                    <span className="hc-table__subtitle">{new Date(row.orderDate).toLocaleDateString()}</span>
+                    <span className="hc-table__metric-label">{t("common.orderDate")}</span>
+                    <span className="hc-table__subtitle">{formatDate(row.orderDate)}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Expected</span>
-                    <span className="hc-table__subtitle">{row.expectedDate ? new Date(row.expectedDate).toLocaleDateString() : "Not set"}</span>
+                    <span className="hc-table__metric-label">{t("common.date")}</span>
+                    <span className="hc-table__subtitle">{row.expectedDate ? formatDate(row.expectedDate) : t("status.notSet")}</span>
                   </div>
                 </div>
               </td>
@@ -334,22 +334,22 @@ export function PurchaseOrdersPage() {
               </td>
               <td className="hc-table__cell-actions">
                 <RowActions
-                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/purchase-orders/${row.id}/edit`}>View</Link>}
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/purchase-orders/${row.id}/edit`}>{t("common.view")}</Link>}
                   menuItems={[
-                    ...(row.status === "Draft" ? [{ label: "Edit", to: `/purchase-orders/${row.id}/edit` }] : []),
-                    ...(row.status === "Draft" ? [{ label: "Delete", onSelect: () => handleDelete(row), tone: "danger" as const }] : []),
+                    ...(row.status === "Draft" ? [{ label: t("common.edit"), to: `/purchase-orders/${row.id}/edit` }] : []),
+                    ...(row.status === "Draft" ? [{ label: t("common.delete"), onSelect: () => handleDelete(row), tone: "danger" as const }] : []),
                     ...(row.status === "Posted" && row.receiptProgressStatus !== "FullyReceived"
-                      ? [{ label: "Create receipt", to: `/purchase-receipts/new?purchaseOrderId=${row.id}` }]
+                      ? [{ label: t("module.purchaseReceipts.new"), to: `/purchase-receipts/new?purchaseOrderId=${row.id}` }]
                       : []),
                   ]}
                 />
               </td>
             </tr>
           ))}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={filteredRows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={Math.max(totalPages, 1)} />}
           emptyState={hasFilters
-            ? <EmptyState title="No purchase orders match the current filters" description="Try a broader search term or clear one of the filters." />
-            : <EmptyState title="No purchase orders yet" description="Create the first purchase order to define expected supplier quantities." action={<Link className="hc-button hc-button--primary hc-button--md" to="/purchase-orders/new">Create purchase order</Link>} />}
+            ? <EmptyState title="module.purchaseOrders.emptyFiltered" description="module.purchaseOrders.emptyFilteredDescription" />
+            : <EmptyState title="module.purchaseOrders.empty" description="module.purchaseOrders.emptyDescription" action={<Link className="hc-button hc-button--primary hc-button--md" to="/purchase-orders/new">{t("module.purchaseOrders.new")}</Link>} />}
         />
       ) : null}
       {dialog}

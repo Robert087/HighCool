@@ -8,6 +8,7 @@
 * React + TypeScript frontend
 * Server as source of truth
 * Draft-only offline support
+* Arabic/English bilingual UI with shared i18n and RTL/LTR support
 
 ## Backend Shape
 
@@ -167,3 +168,32 @@ Important constraints:
 * posted document data is never mutated into a different business effect
 * PO-to-receipt traceability is stored directly in receipt header and line rows
 * shortage rows keep lifecycle state while every settlement remains traceable through allocation rows
+
+## Performance Standards
+
+Performance is a mandatory architecture concern for every ERP module.
+
+Required rules:
+
+* all list and report endpoints must use server-side pagination
+* list endpoints must support server-side filtering and deterministic sorting
+* no unbounded operational list API is allowed
+* read-heavy screens must use dedicated query services and lightweight DTO projections
+* detail endpoints may load document graphs, but list endpoints must not load full aggregates by default
+* read-only queries should use `AsNoTracking`
+* summary cards and header metrics must use summary queries instead of full list downloads
+* schema work must define indexes for foreign keys, high-frequency filters, and traceability joins during design
+* frontend grids must request only the current page and must not paginate large datasets in the browser
+
+## Localization Standards
+
+Frontend architecture must treat localization as platform infrastructure rather than page-level customization.
+
+Required rules:
+
+* the root app shell controls locale and document direction
+* shared components must be safe for both Arabic/RTL and English/LTR
+* module pages must use shared translation dictionaries and shared locale-aware formatters
+* business values remain server-sourced, but display formatting is client-localized
+* form internals, dialogs, drawers, grid toolbars, and navigation are part of the localization contract and must not ship with visible hardcoded strings
+* list filters must be standardized, localized, RTL-safe, and bound to real server-side query parameters where applicable

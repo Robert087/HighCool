@@ -11,7 +11,10 @@ public sealed record SupplierOpenBalanceDto(
     string TargetDocumentNo,
     DateTime TargetDocumentDate,
     decimal OriginalAmount,
+    decimal AdjustedAmount,
+    decimal NetAmount,
     decimal AllocatedAmount,
     decimal OpenAmount,
+    string Status,
     string? Currency,
     string? Notes);

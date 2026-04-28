@@ -171,8 +171,8 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
 
         var openShortagesResponse = await client.GetAsync($"/api/shortages/open?supplierId={supplier.Id}");
         Assert.Equal(HttpStatusCode.OK, openShortagesResponse.StatusCode);
-        var openShortages = await openShortagesResponse.Content.ReadFromJsonAsync<OpenShortageResponse[]>();
-        var openShortage = Assert.Single(openShortages!);
+        var openShortages = await openShortagesResponse.Content.ReadFromJsonAsync<PaginatedResponse<OpenShortageResponse>>();
+        var openShortage = Assert.Single(openShortages!.Items);
         Assert.Equal(3m, openShortage.OpenQty);
         Assert.Equal(30m, openShortage.OpenAmount);
 

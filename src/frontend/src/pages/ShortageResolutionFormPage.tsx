@@ -6,6 +6,7 @@ import {
   Button,
   Field,
   Input,
+  ReversalDialog,
   Select,
   SkeletonLoader,
   Textarea,
@@ -27,6 +28,7 @@ import {
   type ShortageResolutionFormValues,
   type ShortageResolutionType,
 } from "../services/shortageResolutionsApi";
+import { reverseShortageResolution } from "../services/reversalsApi";
 
 const INITIAL_VALUES: ShortageResolutionFormValues = {
   resolutionNo: "",
@@ -136,7 +138,10 @@ function buildPersistedShortageLookup(resolution: ShortageResolution | null) {
         componentItemCode: allocation.componentItemCode,
         componentItemName: allocation.componentItemName,
         shortageQty: allocation.shortageQty,
+        expectedComponentQty: allocation.expectedComponentQty,
+        initialActualComponentQty: allocation.initialActualComponentQty,
         resolvedPhysicalQty: allocation.resolvedPhysicalQty,
+        finalPhysicalComponentQty: allocation.finalPhysicalComponentQty,
         resolvedFinancialQtyEquivalent: allocation.resolvedFinancialQtyEquivalent,
         resolvedQtyEquivalent: allocation.resolvedQtyEquivalent,
         openQty: allocation.openQty,
@@ -173,11 +178,14 @@ export function ShortageResolutionFormPage() {
   const [loadingShortages, setLoadingShortages] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [reversing, setReversing] = useState(false);
+  const [showReversalDialog, setShowReversalDialog] = useState(false);
 
   const liveShortageLookup = useMemo(() => new Map(openShortages.map((row) => [row.id, row])), [openShortages]);
   const persistedShortageLookup = useMemo(() => buildPersistedShortageLookup(resolution), [resolution]);
   const status = resolution?.status ?? "Draft";
   const isEditable = status === "Draft";
+  const isReversed = status === "Posted" && Boolean(resolution?.reversalDocumentId);
   const totalQty = useMemo(
     () => roundQuantity(values.allocations.reduce((sum, allocation) => sum + toNumber(allocation.allocatedQty), 0)),
     [values.allocations],
@@ -271,12 +279,18 @@ export function ShortageResolutionFormPage() {
         setFormError("");
 
         const result = await listOpenShortages({
-          ...openShortageFilters,
-          supplierId: values.supplierId,
+          filters: {
+            ...openShortageFilters,
+            supplierId: values.supplierId,
+          },
+          page: 1,
+          pageSize: 100,
+          sortBy: "receiptDate",
+          sortDirection: "Asc",
         });
 
         if (active) {
-          setOpenShortages(result);
+          setOpenShortages(result.items);
         }
       } catch (loadError) {
         if (active) {
@@ -329,10 +343,12 @@ export function ShortageResolutionFormPage() {
   function addShortage(shortage: OpenShortage) {
     setValues((current) => ({
       ...current,
-      allocations: [
-        ...current.allocations,
-        buildAllocationFromShortage(shortage, current.resolutionType, current.allocations.length + 1),
-      ],
+      allocations: current.allocations.some((allocation) => allocation.shortageLedgerId === shortage.id)
+        ? current.allocations
+        : [
+            ...current.allocations,
+            buildAllocationFromShortage(shortage, current.resolutionType, current.allocations.length + 1),
+          ],
     }));
   }
 
@@ -570,10 +586,42 @@ export function ShortageResolutionFormPage() {
                 {posting ? "Posting..." : "Post resolution"}
               </Button>
             </>
+          ) : shortageResolutionId && !isReversed ? (
+            <Button variant="secondary" size="md" onClick={() => setShowReversalDialog(true)} disabled={reversing}>
+              {reversing ? "Reversing..." : "Reverse"}
+            </Button>
           ) : null}
         </>
       }
     >
+      <ReversalDialog
+        description="This reversal will restore shortage open quantities and write opposite stock or supplier statement effects based on the posted resolution."
+        impactSummary="Financial shortage resolutions cannot be reversed while active supplier payment allocations still depend on them."
+        isLoading={reversing}
+        onCancel={() => setShowReversalDialog(false)}
+        onConfirm={async (reason) => {
+          if (!shortageResolutionId) {
+            return;
+          }
+
+          try {
+            setReversing(true);
+            setFormError("");
+            await reverseShortageResolution(shortageResolutionId, reason);
+            const refreshed = await getShortageResolution(shortageResolutionId);
+            setResolution(refreshed);
+            setValues(mapResolutionToFormValues(refreshed));
+            showToast({ tone: "success", title: "Shortage resolution reversed", description: `${refreshed.resolutionNo} was reversed successfully.` });
+            setShowReversalDialog(false);
+          } catch (error) {
+            setFormError(error instanceof ApiError ? error.message : "Failed to reverse shortage resolution.");
+          } finally {
+            setReversing(false);
+          }
+        }}
+        open={showReversalDialog}
+        title="Reverse shortage resolution"
+      />
       <DocumentSection title="Header">
         <div className="hc-form-grid">
           <Field label="Resolution no" hint={errors.resolutionNo?.[0]}>
@@ -634,12 +682,17 @@ export function ShortageResolutionFormPage() {
       </DocumentSection>
 
       <DocumentSection title="Allocation Grid" actions={isEditable ? <Button size="sm" variant="ghost" onClick={handleAutoFillFifo}>Auto-fill FIFO</Button> : null}>
-        {values.allocations.length === 0 ? renderEmptyGridRow("No allocations.", values.resolutionType === "Financial" ? 8 : 6) : (
+        {values.allocations.length === 0 ? renderEmptyGridRow("No allocations.", values.resolutionType === "Financial" ? 13 : 11) : (
           <div className="hc-resolution-grid">
             <table className="hc-resolution-grid__table">
               <thead>
                 <tr>
                   <th>Shortage row</th>
+                  <th>Expected</th>
+                  <th>Initial actual</th>
+                  <th>Physical resolved</th>
+                  <th>Final physical</th>
+                  <th>Financially settled</th>
                   <th>Open qty</th>
                   <th>Resolved qty</th>
                   {values.resolutionType === "Financial" ? <th>Valuation rate</th> : null}
@@ -661,6 +714,11 @@ export function ShortageResolutionFormPage() {
                           <span className="hc-table__subtitle">{shortage?.itemCode ?? "Item"} / {shortage?.componentItemCode ?? "Component"}</span>
                         </div>
                       </td>
+                      <td>{shortage?.expectedComponentQty?.toLocaleString() ?? "-"}</td>
+                      <td>{shortage?.initialActualComponentQty?.toLocaleString() ?? "-"}</td>
+                      <td>{shortage?.resolvedPhysicalQty?.toLocaleString() ?? "-"}</td>
+                      <td>{shortage?.finalPhysicalComponentQty?.toLocaleString() ?? "-"}</td>
+                      <td>{shortage?.resolvedFinancialQtyEquivalent?.toLocaleString() ?? "-"}</td>
                       <td>{shortage?.openQty?.toLocaleString() ?? "-"}</td>
                       <td>
                         <Input
@@ -722,14 +780,14 @@ export function ShortageResolutionFormPage() {
         </div>
 
         {!values.supplierId ? (
-          renderEmptyGridRow("Select supplier.", 9)
+          renderEmptyGridRow("Select supplier.", 14)
         ) : loadingShortages ? (
           <div className="hc-skeleton-stack">
             <SkeletonLoader height="3rem" variant="rect" />
             <SkeletonLoader height="3rem" variant="rect" />
           </div>
         ) : unselectedOpenShortages.length === 0 ? (
-          renderEmptyGridRow("No open shortages.", 9)
+          renderEmptyGridRow("No open shortages.", 14)
         ) : (
           <div className="hc-resolution-grid">
             <table className="hc-resolution-grid__table">
@@ -739,6 +797,11 @@ export function ShortageResolutionFormPage() {
                   <th>Receipt</th>
                   <th>Item</th>
                   <th>Component</th>
+                  <th>Expected</th>
+                  <th>Initial actual</th>
+                  <th>Physical resolved</th>
+                  <th>Final physical</th>
+                  <th>Financially settled</th>
                   <th>Resolved</th>
                   <th>Open qty</th>
                   <th>Open amount</th>
@@ -773,6 +836,11 @@ export function ShortageResolutionFormPage() {
                         <span className="hc-table__subtitle">{shortage.componentItemCode}</span>
                       </div>
                     </td>
+                    <td>{shortage.expectedComponentQty.toLocaleString()}</td>
+                    <td>{shortage.initialActualComponentQty.toLocaleString()}</td>
+                    <td>{shortage.resolvedPhysicalQty.toLocaleString()}</td>
+                    <td>{shortage.finalPhysicalComponentQty.toLocaleString()}</td>
+                    <td>{shortage.resolvedFinancialQtyEquivalent.toLocaleString()}</td>
                     <td>
                       <div className="hc-table__cell-strong">
                         <span className="hc-table__title">{shortage.resolvedQtyEquivalent.toLocaleString()}</span>

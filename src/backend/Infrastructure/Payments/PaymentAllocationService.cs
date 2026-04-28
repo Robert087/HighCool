@@ -35,7 +35,7 @@ public sealed class PaymentAllocationService(ISupplierOpenBalanceService openBal
             new SupplierOpenBalanceQuery(payment.PartyId, payment.Direction, null, null, null),
             cancellationToken);
 
-        var targetsByKey = openBalances.ToDictionary(
+        var targetsByKey = openBalances.Items.ToDictionary(
             target => BuildTargetKey(target.TargetDocType, target.TargetDocId, null),
             target => target);
 

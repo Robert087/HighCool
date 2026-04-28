@@ -16,5 +16,7 @@ public sealed record PurchaseReceiptListItemDto(
     DateTime ReceiptDate,
     DocumentStatus Status,
     int LineCount,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

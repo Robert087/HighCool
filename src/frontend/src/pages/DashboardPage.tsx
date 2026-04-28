@@ -1,189 +1,135 @@
-import { Link } from "react-router-dom";
-import { Button, Card, useToast } from "../components/ui";
+import { DashboardLayout, type DashboardActionItem, type DashboardAttentionItem, type DashboardKpiItem, type DashboardWorkSection } from "../components/patterns";
 
-const quickLinks = [
+const attentionItems: DashboardAttentionItem[] = [
   {
-    title: "Purchase Orders",
-    eyebrow: "Purchasing",
-    meta: "Draft, post, and review supplier demand",
-    href: "/purchase-orders",
-    actionLabel: "Open orders",
-    actionVariant: "primary",
-    cardTone: "primary",
-  },
-  {
-    title: "Purchase Receipts",
-    eyebrow: "Warehouse",
-    meta: "Capture deliveries and component shortages",
-    href: "/purchase-receipts",
-    actionLabel: "Open receipts",
-    actionVariant: "secondary",
-    cardTone: "supporting",
-  },
-  {
-    title: "Stock Balance",
-    eyebrow: "Inventory",
-    meta: "Check on-hand quantities by warehouse",
-    href: "/stock-balances",
-    actionLabel: "View balance",
-    actionVariant: "ghost",
-    cardTone: "neutral",
-  },
-  {
-    title: "Supplier Statement",
-    eyebrow: "Statements",
-    meta: "Review payable and receivable position",
-    href: "/supplier-statements",
-    actionLabel: "Open statement",
-    actionVariant: "ghost",
-    cardTone: "calm",
-  },
-] as const;
-
-const attentionItems = [
-  {
+    id: "shortages",
+    icon: "alert",
     title: "Review open shortages",
-    detail: "Confirm unresolved component shortages before new resolution work starts.",
-    href: "/open-shortages",
-    actionLabel: "Review",
-    actionVariant: "secondary",
+    description: "Resolve unresolved component shortages.",
+    count: 12,
+    ctaLabel: "Review",
+    to: "/open-shortages",
+    tone: "urgent",
   },
   {
+    id: "receipts",
+    icon: "receipt",
     title: "Check pending purchase receipts",
-    detail: "Keep receipt capture current for posted purchase orders and warehouse stock.",
-    href: "/purchase-receipts",
-    actionLabel: "Open",
-    actionVariant: "ghost",
+    description: "Capture receipts waiting on warehouse action.",
+    count: 8,
+    ctaLabel: "Open",
+    to: "/purchase-receipts",
+    tone: "pending",
   },
   {
+    id: "suppliers",
+    icon: "statement",
     title: "Validate supplier master data",
-    detail: "Clean supplier names and statement identities before deeper statement usage grows.",
-    href: "/suppliers",
-    actionLabel: "Review",
-    actionVariant: "ghost",
+    description: "Fix supplier records before statement activity grows.",
+    count: 3,
+    ctaLabel: "Review",
+    to: "/suppliers",
+    tone: "normal",
   },
   {
+    id: "items",
+    icon: "inventory",
     title: "Audit item setup",
-    detail: "Check item roles, base UOMs, and component definitions before posting volume increases.",
-    href: "/items",
-    actionLabel: "Open",
-    actionVariant: "ghost",
+    description: "Check item setup before posting volume grows.",
+    count: 5,
+    ctaLabel: "Open",
+    to: "/items",
+    tone: "normal",
   },
-] as const;
+];
 
-const aiSuggestions = [
-  "Show draft purchase orders that still need posting",
-  "Where do I have open shortages by supplier?",
-  "What should I review before posting receipts today?",
+const quickActions: DashboardActionItem[] = [
+  {
+    id: "purchase-orders",
+    icon: "document",
+    label: "Purchase Orders",
+    meta: "Create and post supplier demand",
+    to: "/purchase-orders",
+  },
+  {
+    id: "purchase-receipts",
+    icon: "receipt",
+    label: "Purchase Receipts",
+    meta: "Capture deliveries and shortages",
+    to: "/purchase-receipts",
+  },
+  {
+    id: "stock-balance",
+    icon: "inventory",
+    label: "Stock Balance",
+    meta: "Check on-hand quantities by warehouse",
+    to: "/stock-balances",
+  },
+  {
+    id: "supplier-statement",
+    icon: "statement",
+    label: "Supplier Statement",
+    meta: "Review supplier balance position",
+    to: "/supplier-statements",
+  },
+];
+
+const kpis: DashboardKpiItem[] = [
+  {
+    id: "purchasing",
+    label: "Purchasing",
+    value: "2",
+    description: "Core purchasing workflows live",
+  },
+  {
+    id: "inventory",
+    label: "Inventory",
+    value: "4",
+    description: "Inventory views ready for daily review",
+  },
+  {
+    id: "workspace",
+    label: "Workspace",
+    value: "0",
+    description: "Drafts pending in this workspace",
+  },
+];
+
+const workSections: DashboardWorkSection[] = [
+  {
+    id: "recent",
+    title: "Recent work",
+    description: "Open the latest work items without scanning full modules.",
+    items: [
+      { id: "recent-1", icon: "document", title: "Purchase order drafts", meta: "Continue supplier demand planning", to: "/purchase-orders" },
+      { id: "recent-2", icon: "receipt", title: "Latest purchase receipts", meta: "Review recently captured warehouse receipts", to: "/purchase-receipts" },
+      { id: "recent-3", icon: "statement", title: "Supplier statement review", meta: "Check recent supplier movement", to: "/supplier-statements" },
+    ],
+  },
+  {
+    id: "pending",
+    title: "Pending work",
+    description: "System-driven tasks that still need user action.",
+    items: [
+      { id: "pending-1", icon: "clock", title: "Posted orders waiting for receipt capture", meta: "Move from purchasing into warehouse receiving", to: "/purchase-receipts" },
+      { id: "pending-2", icon: "alert", title: "Shortages requiring resolution", meta: "Resolve physical or financial shortages", to: "/shortage-resolutions" },
+      { id: "pending-3", icon: "check", title: "Supplier balances requiring settlement review", meta: "Verify open supplier payment targets", to: "/payments" },
+    ],
+  },
 ];
 
 export function DashboardPage() {
-  const { showToast } = useToast();
-
   return (
-    <section className="hc-home">
-      <div className="hc-home__stats">
-        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--primary" muted padding="md">
-          <p className="hc-home__stat-kicker">Purchasing</p>
-          <p className="hc-home__stat-value">2</p>
-          <p className="hc-home__stat-label">Core purchasing workflows live</p>
-        </Card>
-        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--supporting" muted padding="md">
-          <p className="hc-home__stat-kicker">Inventory</p>
-          <p className="hc-home__stat-value">4</p>
-          <p className="hc-home__stat-label">Inventory views ready for daily review</p>
-        </Card>
-        <Card className="hc-home__stat hc-home__stat--layered hc-home__stat--neutral" muted padding="md">
-          <p className="hc-home__stat-kicker">Workspace</p>
-          <p className="hc-home__stat-value">0</p>
-          <p className="hc-home__stat-label">Drafts pending in this workspace</p>
-        </Card>
-      </div>
-
-      <div className="hc-home__shortcut-grid">
-        {quickLinks.map((link) => (
-          <Card
-            key={link.title}
-            className={`hc-home__shortcut-card hc-home__shortcut-card--surface hc-home__shortcut-card--${link.cardTone}`}
-            padding="md"
-          >
-            <div className="hc-home__shortcut-copy">
-              <p className="hc-home__shortcut-eyebrow">{link.eyebrow}</p>
-              <h3 className="hc-home__shortcut-title">{link.title}</h3>
-              <p className="hc-home__shortcut-meta">{link.meta}</p>
-            </div>
-            <Link className={`hc-button hc-button--${link.actionVariant} hc-button--sm`} to={link.href}>
-              {link.actionLabel}
-            </Link>
-          </Card>
-        ))}
-      </div>
-
-      <div className="hc-home__panels">
-        <Card className="hc-home__panel hc-home__panel--attention" padding="md">
-          <div className="hc-home__panel-header">
-            <h3 className="hc-home__panel-title">Needs attention</h3>
-          </div>
-
-          <div className="hc-home__list">
-            {attentionItems.map((action) => (
-              <div key={action.title} className="hc-home__list-item">
-                <div className="hc-home__list-main">
-                  <p className="hc-home__list-title">{action.title}</p>
-                  <p className="hc-home__list-copy">{action.detail}</p>
-                </div>
-
-                <Link className={`hc-button hc-button--${action.actionVariant} hc-button--sm`} to={action.href}>
-                  {action.actionLabel}
-                </Link>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="hc-home__panel hc-home__panel--ai" padding="md">
-          <div className="hc-home__panel-header">
-            <h3 className="hc-home__panel-title">Ask AI</h3>
-          </div>
-
-          <div className="hc-home__ai">
-            <div className="hc-home__ai-input" aria-label="Ask AI suggestions">
-              <span className="hc-home__ai-prompt">Ask AI about purchasing, shortages, or setup</span>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => {
-                  showToast({
-                    tone: "info",
-                    title: "Ask AI",
-                    description: "Start with shortages, pending receipts, or setup checks for the clearest guidance.",
-                  });
-                }}
-              >
-                Open
-              </Button>
-            </div>
-            <div className="hc-home__chip-row">
-              {aiSuggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  className="hc-home__chip"
-                  type="button"
-                  onClick={() => {
-                    showToast({
-                      tone: "info",
-                      title: "AI suggestion",
-                      description: suggestion,
-                    });
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Card>
-      </div>
-    </section>
+    <DashboardLayout
+      attentionDescription="Start with the highest-priority operational blockers."
+      attentionItems={attentionItems}
+      attentionTitle="Needs attention"
+      kpis={kpis}
+      kpiTitle="KPI overview"
+      quickActionDescription="Jump into the modules used most often."
+      quickActionTitle="Quick actions"
+      quickActions={quickActions}
+      workSections={workSections}
+    />
   );
 }

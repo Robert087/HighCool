@@ -338,11 +338,52 @@ public sealed class ShortageResolutionPostingTests
             new OpenShortageQuery(null, references.Supplier.Id, null, null, null, null, null, null),
             CancellationToken.None);
 
-        var shortage = Assert.Single(result);
+        var shortage = Assert.Single(result.Items);
         Assert.Equal(7m, shortage.OpenQty);
         Assert.Equal(0m, shortage.ResolvedPhysicalQty);
         Assert.Equal(0m, shortage.ResolvedFinancialQtyEquivalent);
         Assert.Equal(ShortageEntryStatus.Open, shortage.Status);
+    }
+
+    [Fact]
+    public async Task Query_ShouldExposeFinalPhysicalQtyWithoutCountingFinancialSettlement()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedShortageReferencesAsync(dbContext);
+        var shortage = await CreateShortageAsync(
+            dbContext,
+            references,
+            shortageQty: 10m,
+            affectsSupplierBalance: true,
+            shortageValue: 100m);
+
+        var physicalResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Physical,
+            [new AllocationSeed(shortage.Id, allocatedQty: 4m)],
+            resolutionNo: "SR-QRY-PHY");
+        var financialResolution = await CreateResolutionAsync(
+            dbContext,
+            references.Supplier,
+            ShortageResolutionType.Financial,
+            [new AllocationSeed(shortage.Id, allocatedQty: 3m, valuationRate: 10m)],
+            resolutionNo: "SR-QRY-FIN");
+
+        var postingService = CreatePostingService(dbContext);
+        await postingService.PostAsync(physicalResolution.Id, "tester", CancellationToken.None);
+        await postingService.PostAsync(financialResolution.Id, "tester", CancellationToken.None);
+
+        var queryService = new ShortageResolutionService(dbContext);
+        var dto = await queryService.GetShortageAsync(shortage.Id, CancellationToken.None);
+
+        Assert.NotNull(dto);
+        Assert.Equal(10m, dto!.ExpectedComponentQty);
+        Assert.Equal(0m, dto.InitialActualComponentQty);
+        Assert.Equal(4m, dto.ResolvedPhysicalQty);
+        Assert.Equal(4m, dto.FinalPhysicalComponentQty);
+        Assert.Equal(3m, dto.ResolvedFinancialQtyEquivalent);
+        Assert.Equal(3m, dto.OpenQty);
     }
 
     private static IShortageResolutionPostingService CreatePostingService(AppDbContext dbContext)

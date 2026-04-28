@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 
 export type DocumentStatus = "Draft" | "Posted" | "Canceled";
 
@@ -57,6 +57,8 @@ export interface PurchaseReceiptLine {
   itemName: string;
   orderedQtySnapshot: number | null;
   receivedQty: number;
+  returnedQty: number;
+  remainingReturnableQty: number;
   uomId: string;
   uomCode: string;
   uomName: string;
@@ -81,6 +83,8 @@ export interface PurchaseReceipt {
   supplierPayableAmount: number;
   notes: string | null;
   status: DocumentStatus;
+  reversalDocumentId: string | null;
+  reversedAt: string | null;
   lines: PurchaseReceiptLine[];
   createdAt: string;
   updatedAt: string | null;
@@ -114,14 +118,47 @@ export interface PurchaseReceiptFormValues {
   receiptDate: string;
   supplierPayableAmount: number | "";
   notes: string;
+  reversalDocumentId?: string | null;
   lines: PurchaseReceiptLineFormValues[];
 }
 
-function buildListUrl(search?: string): string {
+export interface PurchaseReceiptListFilters extends PaginationParams {
+  search: string;
+  status: string;
+  source: string;
+  fromDate: string;
+  toDate: string;
+}
+
+function buildListUrl(filters: PurchaseReceiptListFilters): string {
   const url = new URL("/api/purchase-receipts", window.location.origin);
-  if (search) {
-    url.searchParams.set("search", search);
+
+  if (filters.search.trim()) {
+    url.searchParams.set("search", filters.search.trim());
   }
+
+  if (filters.status) {
+    url.searchParams.set("status", filters.status);
+  }
+
+  if (filters.source) {
+    url.searchParams.set("linkedToPurchaseOrder", String(filters.source === "Linked"));
+  }
+
+  if (filters.fromDate) {
+    url.searchParams.set("fromDate", new Date(filters.fromDate).toISOString());
+  }
+
+  if (filters.toDate) {
+    const endOfDay = new Date(filters.toDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    url.searchParams.set("toDate", endOfDay.toISOString());
+  }
+
+  url.searchParams.set("page", String(filters.page));
+  url.searchParams.set("pageSize", String(filters.pageSize));
+  url.searchParams.set("sortBy", filters.sortBy ?? "receiptDate");
+  url.searchParams.set("sortDirection", filters.sortDirection ?? "Desc");
 
   return `${url.pathname}${url.search}`;
 }
@@ -154,8 +191,8 @@ function normalizeDraftPayload(values: PurchaseReceiptFormValues) {
   };
 }
 
-export function listPurchaseReceiptDrafts(search: string) {
-  return requestJson<PurchaseReceiptListItem[]>(buildListUrl(search));
+export function listPurchaseReceiptDrafts(filters: PurchaseReceiptListFilters) {
+  return requestJson<PaginatedResult<PurchaseReceiptListItem>>(buildListUrl(filters));
 }
 
 export function getPurchaseReceiptDraft(id: string) {

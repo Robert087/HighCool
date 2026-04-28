@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
-import { Badge, Button, EmptyState, Field, Input, Select, SkeletonLoader, Textarea, useToast } from "../components/ui";
+import { Badge, Button, Card, EmptyState, Field, Input, ReversalDialog, Select, SkeletonLoader, Textarea, useToast } from "../components/ui";
 import { ApiError, type ValidationErrors } from "../services/api";
 import { listSuppliers, type Supplier } from "../services/masterDataApi";
 import {
@@ -18,6 +18,7 @@ import {
   type PaymentMethod,
   type SupplierOpenBalance,
 } from "../services/paymentsApi";
+import { reversePayment } from "../services/reversalsApi";
 
 const INITIAL_VALUES: PaymentFormValues = {
   paymentNo: "",
@@ -53,6 +54,19 @@ function formatDirection(direction: PaymentDirection) {
 
 function formatTargetDocumentLabel(targetDocType: PaymentAllocationFormValues["targetDocType"]) {
   return targetDocType === "PurchaseReceipt" ? "Purchase receipt" : "Shortage financial resolution";
+}
+
+function formatTargetStatus(status: string) {
+  switch (status) {
+    case "PartiallySettled":
+      return "Partially settled";
+    case "Settled":
+      return "Settled";
+    case "Reversed":
+      return "Reversed";
+    default:
+      return "Open";
+  }
 }
 
 function buildAllocationFromTarget(target: SupplierOpenBalance, allocationOrder: number): PaymentAllocationFormValues {
@@ -106,11 +120,14 @@ export function PaymentFormPage() {
   const [loadingTargets, setLoadingTargets] = useState(false);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [reversing, setReversing] = useState(false);
+  const [showReversalDialog, setShowReversalDialog] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [formError, setFormError] = useState("");
 
   const status = payment?.status ?? "Draft";
   const isEditable = status === "Draft";
+  const isReversed = status === "Posted" && Boolean(payment?.reversalDocumentId);
   const selectedSupplier = suppliers.find((supplier) => supplier.id === values.partyId) ?? null;
   const targetLookup = useMemo(() => new Map(openBalances.map((target) => [`${target.targetDocType}:${target.targetDocId}`, target])), [openBalances]);
   const savedAllocationLookup = useMemo(
@@ -237,9 +254,12 @@ export function PaymentFormPage() {
         targetDocumentNo: liveTarget.targetDocumentNo,
         targetDocumentDate: liveTarget.targetDocumentDate,
         originalAmount: liveTarget.originalAmount,
+        adjustedAmount: liveTarget.adjustedAmount,
+        netAmount: liveTarget.netAmount,
         alreadyAllocatedAmount: liveTarget.allocatedAmount,
         openAmountBeforeAllocation: liveTarget.openAmount,
         openAmountAfterAllocation: roundAmount(Math.max(liveTarget.openAmount - currentAllocateAmount, 0)),
+        status: liveTarget.status,
       };
     }
 
@@ -249,9 +269,12 @@ export function PaymentFormPage() {
         targetDocumentNo: savedAllocation.targetDocumentNo,
         targetDocumentDate: savedAllocation.targetDocumentDate,
         originalAmount: savedAllocation.originalAmount,
+        adjustedAmount: savedAllocation.adjustedAmount,
+        netAmount: savedAllocation.netAmount,
         alreadyAllocatedAmount: savedAllocation.alreadyAllocatedAmount,
         openAmountBeforeAllocation: roundAmount(savedAllocation.openAmount + savedAllocation.allocatedAmount),
         openAmountAfterAllocation: savedAllocation.openAmount,
+        status: savedAllocation.status,
       };
     }
 
@@ -259,9 +282,12 @@ export function PaymentFormPage() {
       targetDocumentNo: allocation.targetDocId,
       targetDocumentDate: "",
       originalAmount: 0,
+      adjustedAmount: 0,
+      netAmount: 0,
       alreadyAllocatedAmount: 0,
       openAmountBeforeAllocation: 0,
       openAmountAfterAllocation: 0,
+      status: "Open",
     };
   }
 
@@ -293,6 +319,11 @@ export function PaymentFormPage() {
       }
     }
 
+    const targetKeys = currentValues.allocations.map((allocation) => `${allocation.targetDocType}:${allocation.targetDocId}`);
+    if (new Set(targetKeys).size !== targetKeys.length) {
+      nextErrors.allocations = ["The same target document cannot be added more than once."];
+    }
+
     currentValues.allocations.forEach((allocation, index) => {
       if (allocation.allocatedAmount === "" || Number(allocation.allocatedAmount) <= 0) {
         nextErrors[`allocations.${index}.allocatedAmount`] = ["Allocate amount must be greater than zero."];
@@ -318,10 +349,13 @@ export function PaymentFormPage() {
   function addTarget(target: SupplierOpenBalance) {
     setValues((current) => ({
       ...current,
-      allocations: [
-        ...current.allocations,
-        buildAllocationFromTarget(target, current.allocations.length + 1),
-      ],
+      allocations: current.allocations.some((allocation) =>
+        allocation.targetDocType === target.targetDocType && allocation.targetDocId === target.targetDocId)
+        ? current.allocations
+        : [
+            ...current.allocations,
+            buildAllocationFromTarget(target, current.allocations.length + 1),
+          ],
     }));
   }
 
@@ -451,7 +485,7 @@ export function PaymentFormPage() {
     <DocumentPageLayout
       eyebrow="Procurement"
       title={isEdit ? (status === "Posted" ? "Supplier payment details" : "Edit supplier payment") : "New supplier payment"}
-      description="Allocate supplier payments against open documents."
+      description="Allocate this supplier payment against the right open documents in a clear, step-by-step flow."
       status={<Badge tone={statusTone(status)}>{status}</Badge>}
       actions={(
         <div className="hc-document-actions">
@@ -465,11 +499,44 @@ export function PaymentFormPage() {
                 Post payment
               </Button>
             </>
+          ) : paymentId && !isReversed ? (
+            <Button disabled={reversing} isLoading={reversing} variant="secondary" onClick={() => setShowReversalDialog(true)}>
+              Reverse
+            </Button>
           ) : null}
         </div>
       )}
     >
+      <ReversalDialog
+        description="This reversal will restore supplier open balances and create opposite supplier statement entries without deleting the original allocation trail."
+        impactSummary="Use reversal instead of edit or delete whenever a posted supplier payment must be corrected."
+        isLoading={reversing}
+        onCancel={() => setShowReversalDialog(false)}
+        onConfirm={async (reason) => {
+          if (!paymentId) {
+            return;
+          }
+
+          try {
+            setReversing(true);
+            setFormError("");
+            await reversePayment(paymentId, reason);
+            const refreshed = await getPayment(paymentId);
+            setPayment(refreshed);
+            setValues(mapPaymentToFormValues(refreshed));
+            showToast({ tone: "success", title: "Payment reversed", description: `${refreshed.paymentNo} was reversed successfully.` });
+            setShowReversalDialog(false);
+          } catch (error) {
+            setFormError(error instanceof ApiError ? error.message : "Failed to reverse payment.");
+          } finally {
+            setReversing(false);
+          }
+        }}
+        open={showReversalDialog}
+        title="Reverse supplier payment"
+      />
       {formError ? <div className="hc-inline-error">{formError}</div> : null}
+      {isReversed ? <div className="hc-inline-help">This posted payment has already been reversed and no longer consumes supplier open balances.</div> : null}
 
       <DocumentSection title="Form Header" description="Keep supplier, direction, payment, and status context aligned in one ERP header grid.">
         <div className="hc-document-form-grid">
@@ -534,45 +601,74 @@ export function PaymentFormPage() {
         </div>
       </DocumentSection>
 
-      <DocumentSection
-        className="hc-allocation-stage hc-allocation-stage--first hc-allocation-stage--selected"
-        title="Selected Allocations"
-        description={isEditable
-          ? "Step 1: review the documents added to this payment and enter the amount for each one."
-          : "Review the documents that were settled by this posted payment."}
-        actions={isEditable ? (
-          <div className="hc-allocation-stage__actions">
-            <div className="hc-allocation-stage__status">
-              <Badge tone="neutral">{values.allocations.length} {values.allocations.length === 1 ? "document" : "documents"}</Badge>
-              <Badge tone={unallocatedAmount === 0 ? "success" : "warning"}>
-                {formatAmount(unallocatedAmount, values.currency || null)} left
-              </Badge>
-            </div>
-            <Button disabled={paymentAmount <= 0 || availableTargets.length === 0} variant="secondary" onClick={autoAllocateFifo} type="button">
-              Auto-fill FIFO
-            </Button>
+      <Card className="hc-task-summary-panel hc-payment-allocation-summary" padding="md">
+        <div className="hc-task-summary-panel__header">
+          <div>
+            <h2 className="hc-task-summary-panel__title">Allocation Summary</h2>
+            <p className="hc-task-summary-panel__description">
+              Review the totals here first, then fill the selected targets section, then add more documents from the available targets section.
+            </p>
           </div>
-        ) : undefined}
+          {isEditable ? (
+            <div className="hc-task-summary-panel__actions">
+              <Button disabled={paymentAmount <= 0 || availableTargets.length === 0} variant="secondary" onClick={autoAllocateFifo} type="button">
+                Auto-fill FIFO
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="hc-task-summary-grid">
+          <div className="hc-task-summary-metric">
+            <span className="hc-task-summary-metric__label">Selected targets</span>
+            <strong className="hc-task-summary-metric__value">
+              {values.allocations.length} {values.allocations.length === 1 ? "document" : "documents"}
+            </strong>
+            <span className="hc-task-summary-metric__caption">Documents already added to this payment.</span>
+          </div>
+          <div className="hc-task-summary-metric">
+            <span className="hc-task-summary-metric__label">Allocated amount</span>
+            <strong className="hc-task-summary-metric__value">{formatAmount(totalAllocated, values.currency || null)}</strong>
+            <span className="hc-task-summary-metric__caption">Amount currently assigned to selected targets.</span>
+          </div>
+          <div className="hc-task-summary-metric">
+            <span className="hc-task-summary-metric__label">Still to allocate</span>
+            <strong className="hc-task-summary-metric__value">{formatAmount(unallocatedAmount, values.currency || null)}</strong>
+            <span className="hc-task-summary-metric__caption">
+              {unallocatedAmount === 0
+                ? "This payment is fully allocated."
+                : "Add more documents below or adjust the selected rows."}
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      <DocumentSection
+        className="hc-task-stage hc-task-stage--selected"
+        title="Selected Targets"
+        description={isEditable
+          ? "Step 1: review the documents already chosen for this payment and enter the amount to apply to each one."
+          : "These are the documents that were settled by this posted payment."}
       >
         {errors.allocations ? <div className="hc-inline-error">{errors.allocations[0]}</div> : null}
         {values.allocations.length === 0 ? (
-          <div className="hc-allocation-empty-state">
+          <div className="hc-task-empty-state">
             <EmptyState
               title="No targets added yet"
               description="Search and add one or more documents from the section below."
             />
           </div>
         ) : (
-          <div className="hc-document-table-wrap hc-document-table-wrap--task hc-document-table-wrap--selected">
+          <div className="hc-document-table-wrap hc-document-table-wrap--task hc-document-table-wrap--selected hc-task-table-wrap">
             <table className="hc-table hc-table--compact">
               <thead>
                 <tr>
                   <th>Document</th>
-                  <th className="hc-table__numeric">Original</th>
-                  <th className="hc-table__numeric">Already settled</th>
-                  <th className="hc-table__numeric">Still open</th>
-                  <th className="hc-table__numeric">Amount for this payment</th>
-                  <th className="hc-table__numeric">Priority</th>
+                  <th className="hc-table__numeric">Net target</th>
+                  <th className="hc-table__numeric">Already paid</th>
+                  <th className="hc-table__numeric">Open before this payment</th>
+                  <th className="hc-table__numeric">Amount to apply</th>
+                  <th className="hc-table__numeric">Order</th>
                   {isEditable ? <th className="hc-table__head-actions" /> : null}
                 </tr>
               </thead>
@@ -587,12 +683,22 @@ export function PaymentFormPage() {
                         <div className="hc-table__cell-strong">
                           <span className="hc-table__title">{display.targetDocumentNo}</span>
                           <span className="hc-table__subtitle">
-                            {formatTargetDocumentLabel(allocation.targetDocType)} on{" "}
+                            {formatTargetDocumentLabel(allocation.targetDocType)} dated{" "}
                             {display.targetDocumentDate ? new Date(display.targetDocumentDate).toLocaleDateString() : "Unknown date"}
+                            {" • "}
+                            {formatTargetStatus(display.status)}
                           </span>
                         </div>
                       </td>
-                      <td className="hc-table__numeric">{formatAmount(display.originalAmount, values.currency || null)}</td>
+                      <td className="hc-table__numeric">
+                        <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                          <span className="hc-table__title">{formatAmount(display.netAmount, values.currency || null)}</span>
+                          <span className="hc-table__subtitle">
+                            Base {formatAmount(display.originalAmount, values.currency || null)}
+                            {display.adjustedAmount > 0 ? ` • Adjusted ${formatAmount(display.adjustedAmount, values.currency || null)}` : ""}
+                          </span>
+                        </div>
+                      </td>
                       <td className="hc-table__numeric">{formatAmount(display.alreadyAllocatedAmount, values.currency || null)}</td>
                       <td className="hc-table__numeric">
                         <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
@@ -618,7 +724,7 @@ export function PaymentFormPage() {
                               <small className="hc-field-error">{errors[`allocations.${index}.allocatedAmount`][0]}</small>
                             ) : null}
                           </div>
-                        ) : (
+                      ) : (
                           formatAmount(currentAllocateAmount, values.currency || null)
                         )}
                       </td>
@@ -647,64 +753,78 @@ export function PaymentFormPage() {
 
       {isEditable ? (
         <DocumentSection
-          className="hc-allocation-stage hc-allocation-stage--available"
-          title={values.direction === "OutboundToParty" ? "Available Purchase Receipts" : "Available Shortage Resolutions"}
-          description="Step 2: search open documents for this supplier, then add the ones you want to settle in this payment."
+          className="hc-task-stage hc-task-stage--available"
+          title={values.direction === "OutboundToParty" ? "Available Supplier Documents" : "Available Supplier Recovery Documents"}
+          description="Step 2: search the open documents for this supplier, then use Add to move the right ones into the selected targets section above."
           actions={(
-            <Field className="hc-allocation-search" label="Search available documents">
-              <Input placeholder="Search by document number or notes" value={openBalanceSearch} onChange={(event) => setOpenBalanceSearch(event.target.value)} />
+            <Field className="hc-task-search" label="Search available documents">
+              <Input
+                placeholder="Search by document number or notes"
+                value={openBalanceSearch}
+                onChange={(event) => setOpenBalanceSearch(event.target.value)}
+              />
             </Field>
           )}
         >
           {!values.partyId ? (
-            <EmptyState title="Select a supplier first" description="Open supplier targets load once the supplier and direction are selected on the header." />
+            <div className="hc-task-empty-state">
+              <EmptyState title="Select a supplier first" description="Open documents will appear here after you choose the supplier and payment direction above." />
+            </div>
           ) : loadingTargets ? (
             <div className="hc-list-card">
               <SkeletonLoader />
               <SkeletonLoader />
             </div>
-          ) : openBalances.length === 0 ? (
-            <EmptyState title="No open documents available" description="There are no open documents for this supplier and payment direction right now." />
+          ) : availableTargets.length === 0 ? (
+            <div className="hc-task-empty-state">
+              <EmptyState title="No documents available to add" description="There are no open documents for this supplier and payment direction right now." />
+            </div>
           ) : (
-            <div className="hc-document-table-wrap hc-document-table-wrap--task hc-document-table-wrap--available">
+            <div className="hc-document-table-wrap hc-document-table-wrap--task hc-document-table-wrap--available hc-task-table-wrap">
               <table className="hc-table hc-table--compact">
                 <thead>
                   <tr>
                     <th>Document</th>
-                    <th className="hc-table__numeric">Original</th>
-                    <th className="hc-table__numeric">Already settled</th>
+                    <th className="hc-table__numeric">Net target</th>
+                    <th className="hc-table__numeric">Already paid</th>
                     <th className="hc-table__numeric">Still open</th>
-                    <th className="hc-table__numeric">Left after this draft</th>
+                    <th className="hc-table__numeric">Open after adding</th>
                     <th className="hc-table__head-actions" />
                   </tr>
                 </thead>
                 <tbody>
-                  {openBalances.map((target) => {
+                  {availableTargets.map((target) => {
                     const targetKey = `${target.targetDocType}:${target.targetDocId}`;
                     const allocatedInDraft = allocationAmountByTargetKey.get(targetKey) ?? 0;
                     const draftRemainingAmount = roundAmount(Math.max(target.openAmount - allocatedInDraft, 0));
-                    const isSelected = selectedTargetKeys.has(targetKey);
 
                     return (
                       <tr className="hc-table__row--actionable" key={`${target.targetDocType}-${target.targetDocId}`}>
                         <td className="hc-table__primary-cell">
-                          <div className="hc-table__cell-strong">
+                          <div className="hc-table__cell-strong hc-task-table__document">
                             <span className="hc-table__title">{target.targetDocumentNo}</span>
                             <span className="hc-table__subtitle">
-                              {formatTargetDocumentLabel(target.targetDocType)} on {new Date(target.targetDocumentDate).toLocaleDateString()}
-                              {isSelected ? " • Added to this draft" : ""}
+                              {formatTargetDocumentLabel(target.targetDocType)} dated {new Date(target.targetDocumentDate).toLocaleDateString()}
+                              {" • "}
+                              {formatTargetStatus(target.status)}
                             </span>
                           </div>
                         </td>
-                        <td className="hc-table__numeric">{formatAmount(target.originalAmount, target.currency)}</td>
+                        <td className="hc-table__numeric">
+                          <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                            <span className="hc-table__title">{formatAmount(target.netAmount, target.currency)}</span>
+                            <span className="hc-table__subtitle">
+                              Base {formatAmount(target.originalAmount, target.currency)}
+                              {target.adjustedAmount > 0 ? ` • Adjusted ${formatAmount(target.adjustedAmount, target.currency)}` : ""}
+                            </span>
+                          </div>
+                        </td>
                         <td className="hc-table__numeric">{formatAmount(target.allocatedAmount, target.currency)}</td>
                         <td className="hc-table__numeric">{formatAmount(target.openAmount, target.currency)}</td>
                         <td className="hc-table__numeric">{formatAmount(draftRemainingAmount, target.currency)}</td>
                         <td className="hc-table__cell-actions">
                           <div className="hc-table__actions">
-                            <Button disabled={isSelected} onClick={() => addTarget(target)} size="sm" type="button">
-                              {isSelected ? "Added" : "Add"}
-                            </Button>
+                            <Button className="hc-task-table__add-action" onClick={() => addTarget(target)} size="sm" type="button">Add</Button>
                           </div>
                         </td>
                       </tr>

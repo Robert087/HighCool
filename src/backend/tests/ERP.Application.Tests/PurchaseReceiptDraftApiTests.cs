@@ -135,9 +135,9 @@ public sealed class PurchaseReceiptDraftApiTests : IClassFixture<PurchaseReceipt
 
         var listResponse = await client.GetAsync("/api/purchase-receipts");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var drafts = await listResponse.Content.ReadFromJsonAsync<List<PurchaseReceiptListApiResponse>>();
+        var drafts = await listResponse.Content.ReadFromJsonAsync<PaginatedResponse<PurchaseReceiptListApiResponse>>();
         Assert.NotNull(drafts);
-        Assert.Single(drafts!);
+        Assert.Single(drafts!.Items);
 
         var updateResponse = await client.PutAsJsonAsync($"/api/purchase-receipts/{created.Id}", new
         {

@@ -130,9 +130,9 @@ public sealed class PaymentApiTests : IClassFixture<PaymentApiTests.ApiFactory>
 
         var openBalancesResponse = await client.GetAsync($"/api/suppliers/{supplier.Id}/open-balances?direction=OutboundToParty");
         Assert.Equal(HttpStatusCode.OK, openBalancesResponse.StatusCode);
-        var balances = await openBalancesResponse.Content.ReadFromJsonAsync<SupplierOpenBalanceResponse[]>();
+        var balances = await openBalancesResponse.Content.ReadFromJsonAsync<PaginatedResponse<SupplierOpenBalanceResponse>>();
         Assert.NotNull(balances);
-        Assert.Empty(balances!);
+        Assert.Empty(balances!.Items);
     }
 
     public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime

@@ -36,11 +36,13 @@ app.MapMasterDataEndpoints();
 app.MapItemMasterDataEndpoints();
 app.MapPurchaseOrderEndpoints();
 app.MapPurchaseReceiptEndpoints();
+app.MapPurchaseReturnEndpoints();
 app.MapShortageReasonCodeEndpoints();
 app.MapShortageResolutionEndpoints();
 app.MapPaymentEndpoints();
 app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
+app.MapReversalEndpoints();
 
 app.Run();
 
