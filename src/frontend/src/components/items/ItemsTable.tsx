@@ -29,11 +29,11 @@ export function ItemsTable({
       hasData={items.length > 0}
       columns={
         <tr>
-          <th scope="col">Item</th>
-          <th scope="col">Base UOM</th>
-          <th scope="col">Roles</th>
-          <th scope="col">Status</th>
-          <th scope="col" className="hc-table__head-actions" aria-label="Actions" />
+          <th scope="col">table.item</th>
+          <th scope="col">table.baseUom</th>
+          <th scope="col">table.roles</th>
+          <th scope="col">table.status</th>
+          <th scope="col" className="hc-table__head-actions" aria-label="common.actions" />
         </tr>
       }
       rows={items.map((item) => (
@@ -52,9 +52,9 @@ export function ItemsTable({
           </td>
           <td>
             <div className="hc-role-tags">
-              {item.isSellable ? <RoleTag label="Sellable" /> : null}
-              {item.hasComponents ? <RoleTag label="Has Components" /> : null}
-              {!item.isSellable && !item.hasComponents ? <span className="hc-table__subtitle">No special flags</span> : null}
+              {item.isSellable ? <RoleTag label="role.sellable" /> : null}
+              {item.hasComponents ? <RoleTag label="role.hasComponents" /> : null}
+              {!item.isSellable && !item.hasComponents ? <span className="hc-table__subtitle">role.noSpecialFlags</span> : null}
             </div>
           </td>
           <td>
@@ -66,12 +66,12 @@ export function ItemsTable({
             <RowActions
               primaryAction={(
                 <Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/items/${item.id}/edit`}>
-                  View
+                  common.view
                 </Link>
               )}
               menuItems={[
-                { label: "Edit", to: `/items/${item.id}/edit` },
-                ...(item.isActive ? [{ label: "Deactivate", onSelect: () => void onDeactivate(item.id) }] : []),
+                { label: "common.edit", to: `/items/${item.id}/edit` },
+                ...(item.isActive ? [{ label: "common.deactivate", onSelect: () => void onDeactivate(item.id) }] : []),
               ]}
             />
           </td>
@@ -79,7 +79,7 @@ export function ItemsTable({
       ))}
       footer={
         <>
-          <p className="hc-table__footer-note">Client-side pagination for the current result set.</p>
+          <p className="hc-table__footer-note">module.items.clientPaginationNote</p>
           <Pagination
             currentPage={safePage}
             onPageChange={onPageChange}
@@ -91,14 +91,14 @@ export function ItemsTable({
       }
       emptyState={
         hasFilters ? (
-          <EmptyState title="No items match the current filters" description="Try a broader search or reset the filters." />
+          <EmptyState title="module.items.emptyFiltered" description="module.items.emptyFilteredDescription" />
         ) : (
           <EmptyState
-            title="No items yet"
-            description="Add your first item to start the catalog."
+            title="module.items.empty"
+            description="module.items.emptyDescription"
             action={
               <Link className="hc-button hc-button--primary hc-button--md" to="/items/new">
-                Create item
+                module.items.new
               </Link>
             }
           />

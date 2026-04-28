@@ -17,11 +17,13 @@ import {
   PageHeader,
   Select,
   type FilterChip,
+  useI18n,
   useConfirmationDialog,
   useToast,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listPurchaseReceiptDrafts, type PurchaseReceiptListItem } from "../services/purchaseReceiptsApi";
+import { formatDate } from "../i18n";
 
 const PAGE_SIZE = 10;
 const INITIAL_FILTERS = {
@@ -33,6 +35,8 @@ const INITIAL_FILTERS = {
 
 export function PurchaseReceiptsPage() {
   const [rows, setRows] = useState<PurchaseReceiptListItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [error, setError] = useState("");
@@ -41,30 +45,31 @@ export function PurchaseReceiptsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmationDialog();
+  const { t } = useI18n();
 
   async function handleDelete(row: PurchaseReceiptListItem) {
     if (row.status === "Posted") {
       showToast({
         tone: "warning",
-        title: "Cannot delete posted receipt",
-        description: "Posted receipts cannot be deleted from the UI.",
+        title: t("Cannot delete posted receipt"),
+        description: t("Posted receipts cannot be deleted from the UI."),
       });
       return;
     }
 
     const confirmed = await confirm({
-      title: "Delete purchase receipt",
-      description: "Permanent delete is not available in this version. You can confirm this message and keep working, but no deletion will happen.",
-      confirmLabel: "Understood",
-      cancelLabel: "Close",
+      title: t("Delete purchase receipt"),
+      description: t("Permanent delete is not available in this version. You can confirm this message and keep working, but no deletion will happen."),
+      confirmLabel: t("module.purchaseOrders.deleteConfirm"),
+      cancelLabel: t("app.close"),
       tone: "warning",
     });
 
     if (confirmed) {
       showToast({
         tone: "info",
-        title: "Delete action unavailable",
-        description: "Permanent delete is not supported in this UI yet.",
+        title: t("module.purchaseOrders.deleteUnavailableTitle"),
+        description: t("module.purchaseOrders.deleteUnavailableDescription"),
       });
     }
   }
@@ -76,14 +81,29 @@ export function PurchaseReceiptsPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listPurchaseReceiptDrafts(search);
+        const result = await listPurchaseReceiptDrafts({
+          search,
+          status: filters.status,
+          source: filters.source,
+          fromDate: filters.fromDate,
+          toDate: filters.toDate,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy: "receiptDate",
+          sortDirection: "Desc",
+        });
 
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof ApiError ? loadError.message : "Failed to load purchase receipts.");
+          setError(loadError instanceof ApiError ? loadError.message : t("module.purchaseReceipts.error"));
+          setRows([]);
+          setTotalCount(0);
+          setTotalPages(0);
         }
       } finally {
         if (active) {
@@ -96,51 +116,19 @@ export function PurchaseReceiptsPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey, search]);
+  }, [filters, page, reloadKey, search]);
 
   useEffect(() => {
     setPage(1);
   }, [search, filters]);
 
-  const filteredRows = useMemo(() => rows.filter((row) => {
-    if (filters.status && row.status !== filters.status) {
-      return false;
-    }
-
-    if (filters.source === "Manual" && row.purchaseOrderId) {
-      return false;
-    }
-
-    if (filters.source === "Linked" && !row.purchaseOrderId) {
-      return false;
-    }
-
-    if (filters.fromDate) {
-      const rowDate = new Date(row.receiptDate);
-      const fromDate = new Date(filters.fromDate);
-      if (rowDate < fromDate) {
-        return false;
-      }
-    }
-
-    if (filters.toDate) {
-      const rowDate = new Date(row.receiptDate);
-      const toDate = new Date(filters.toDate);
-      toDate.setHours(23, 59, 59, 999);
-      if (rowDate > toDate) {
-        return false;
-      }
-    }
-
-    return true;
-  }), [filters, rows]);
   const activeFilters = useMemo(() => {
     const chips: FilterChip[] = [];
 
     if (search.trim()) {
       chips.push({
         key: "search",
-        label: `Search: ${search.trim()}`,
+        label: t("module.purchaseReceipts.filter.searchChip", { value: search.trim() }),
         onRemove: () => setSearch(""),
       });
     }
@@ -148,7 +136,7 @@ export function PurchaseReceiptsPage() {
     if (filters.status) {
       chips.push({
         key: "status",
-        label: `Status: ${filters.status}`,
+        label: t("module.purchaseReceipts.filter.statusChip", { value: t(`status.${filters.status.toLowerCase()}`) }),
         onRemove: () => setFilters((current) => ({ ...current, status: "" })),
       });
     }
@@ -156,7 +144,7 @@ export function PurchaseReceiptsPage() {
     if (filters.source) {
       chips.push({
         key: "source",
-        label: `Source: ${filters.source === "Linked" ? "PO linked" : "Manual"}`,
+        label: t("module.purchaseReceipts.filter.sourceChip", { value: filters.source === "Linked" ? t("module.purchaseReceipts.poLinked") : t("status.manual") }),
         onRemove: () => setFilters((current) => ({ ...current, source: "" })),
       });
     }
@@ -164,7 +152,10 @@ export function PurchaseReceiptsPage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Receipt date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.purchaseReceipts.filter.dateChip", {
+          from: filters.fromDate || t("common.any"),
+          to: filters.toDate || t("common.any"),
+        }),
         onRemove: () => setFilters((current) => ({ ...current, fromDate: "", toDate: "" })),
       });
     }
@@ -172,19 +163,18 @@ export function PurchaseReceiptsPage() {
     return chips;
   }, [filters, search]);
   const hasFilters = activeFilters.length > 0;
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = filteredRows.slice(pageStart, pageStart + PAGE_SIZE);
-  const resultLabel = filteredRows.length === 1 ? "1 purchase receipt" : `${filteredRows.length} purchase receipts`;
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
+  const resultLabel = totalCount === 1
+    ? t("module.purchaseReceipts.resultLabel.one", { count: totalCount })
+    : t("module.purchaseReceipts.resultLabel.other", { count: totalCount });
 
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Purchase Receipts"
+        title="module.purchaseReceipts"
         actions={
           <Link className="hc-button hc-button--primary hc-button--md" to="/purchase-receipts/new">
-            New purchase receipt
+            {t("module.purchaseReceipts.new")}
           </Link>
         }
       />
@@ -246,8 +236,8 @@ export function PurchaseReceiptsPage() {
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search purchase receipts"
-            placeholder="Search receipt no, supplier, warehouse, PO, or notes"
+            aria-label={t("module.purchaseReceipts")}
+            placeholder={t("module.purchaseReceipts.searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -258,9 +248,9 @@ export function PurchaseReceiptsPage() {
       {error ? (
         <div className="hc-card hc-card--md">
           <EmptyState
-            title="Unable to load purchase receipts"
+            title="module.purchaseReceipts.error"
             description={error}
-            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>Retry</Button>}
+            action={<Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>{t("common.retry")}</Button>}
           />
         </div>
       ) : null}
@@ -277,7 +267,7 @@ export function PurchaseReceiptsPage() {
 
       {!loading && !error ? (
         <DataTable
-          hasData={filteredRows.length > 0}
+          hasData={rows.length > 0}
           columns={
             <tr>
               <th scope="col">Receipt</th>
@@ -287,12 +277,16 @@ export function PurchaseReceiptsPage() {
               <th scope="col" className="hc-table__head-actions" aria-label="Actions" />
             </tr>
           }
-          rows={visibleRows.map((row) => (
+          rows={rows.map((row) => (
             <tr key={row.id} className="hc-table__row">
               <td>
                 <div className="hc-table__cell-strong hc-table__primary-cell">
                   <span className="hc-table__title">{row.receiptNo}</span>
-                  <span className="hc-table__subtitle">{row.lineCount} {row.lineCount === 1 ? "line" : "lines"}</span>
+                  <span className="hc-table__subtitle">
+                    {row.lineCount === 1
+                      ? t("module.purchaseReceipts.lineCount.one", { count: row.lineCount })
+                      : t("module.purchaseReceipts.lineCount.other", { count: row.lineCount })}
+                  </span>
                 </div>
               </td>
               <td>
@@ -308,12 +302,12 @@ export function PurchaseReceiptsPage() {
                     <span className="hc-table__subtitle">{row.warehouseCode}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Source</span>
-                    <span className="hc-table__subtitle">{row.purchaseOrderNo ?? "Manual"}</span>
+                    <span className="hc-table__metric-label">{t("common.source")}</span>
+                    <span className="hc-table__subtitle">{row.purchaseOrderNo ?? t("status.manual")}</span>
                   </div>
                   <div className="hc-table__metric">
-                    <span className="hc-table__metric-label">Date</span>
-                    <span className="hc-table__subtitle">{new Date(row.receiptDate).toLocaleDateString()}</span>
+                    <span className="hc-table__metric-label">{t("common.date")}</span>
+                    <span className="hc-table__subtitle">{formatDate(row.receiptDate)}</span>
                   </div>
                 </div>
               </td>
@@ -324,19 +318,19 @@ export function PurchaseReceiptsPage() {
               </td>
               <td className="hc-table__cell-actions">
                 <RowActions
-                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/purchase-receipts/${row.id}/edit`}>View</Link>}
+                  primaryAction={<Link className="hc-button hc-button--secondary hc-button--sm hc-table__action-button" to={`/purchase-receipts/${row.id}/edit`}>{t("common.view")}</Link>}
                   menuItems={[
-                    ...(row.status === "Draft" ? [{ label: "Edit", to: `/purchase-receipts/${row.id}/edit` }] : []),
-                    ...(row.status === "Draft" ? [{ label: "Delete", onSelect: () => handleDelete(row), tone: "danger" as const }] : []),
+                    ...(row.status === "Draft" ? [{ label: t("common.edit"), to: `/purchase-receipts/${row.id}/edit` }] : []),
+                    ...(row.status === "Draft" ? [{ label: t("common.delete"), onSelect: () => handleDelete(row), tone: "danger" as const }] : []),
                   ]}
                 />
               </td>
             </tr>
           ))}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={filteredRows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={Math.max(totalPages, 1)} />}
           emptyState={hasFilters
-            ? <EmptyState title="No purchase receipts match the current filters" description="Try a broader search term or clear one of the filters." />
-            : <EmptyState title="No purchase receipts yet" description="Create your first purchase receipt." action={<Link className="hc-button hc-button--primary hc-button--md" to="/purchase-receipts/new">Create purchase receipt</Link>} />}
+            ? <EmptyState title="module.purchaseReceipts.emptyFiltered" description="module.purchaseReceipts.emptyFilteredDescription" />
+            : <EmptyState title="module.purchaseReceipts.empty" description="module.purchaseReceipts.emptyDescription" action={<Link className="hc-button hc-button--primary hc-button--md" to="/purchase-receipts/new">{t("module.purchaseReceipts.new")}</Link>} />}
         />
       ) : null}
       {dialog}

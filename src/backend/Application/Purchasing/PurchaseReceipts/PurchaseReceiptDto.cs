@@ -17,6 +17,8 @@ public sealed record PurchaseReceiptDto(
     decimal SupplierPayableAmount,
     string? Notes,
     DocumentStatus Status,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     IReadOnlyList<PurchaseReceiptLineDto> Lines,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

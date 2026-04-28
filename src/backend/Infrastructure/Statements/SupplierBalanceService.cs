@@ -19,7 +19,7 @@ public sealed class SupplierBalanceService(AppDbContext dbContext) : ISupplierBa
 
         var currentBalance = await dbContext.SupplierStatementEntries
             .AsNoTracking()
-            .Where(entity => entity.SupplierId == query.SupplierId)
+            .Where(entity => entity.SupplierId == query.SupplierId && (entity.Debit > 0m || entity.Credit > 0m))
             .OrderByDescending(entity => entity.EntryDate)
             .ThenByDescending(entity => entity.CreatedAt)
             .ThenByDescending(entity => entity.Id)
@@ -28,7 +28,7 @@ public sealed class SupplierBalanceService(AppDbContext dbContext) : ISupplierBa
 
         var filteredQuery = dbContext.SupplierStatementEntries
             .AsNoTracking()
-            .Where(entity => entity.SupplierId == query.SupplierId);
+            .Where(entity => entity.SupplierId == query.SupplierId && (entity.Debit > 0m || entity.Credit > 0m));
 
         if (query.EffectType.HasValue)
         {
@@ -61,7 +61,10 @@ public sealed class SupplierBalanceService(AppDbContext dbContext) : ISupplierBa
         {
             openingBalance = await dbContext.SupplierStatementEntries
                 .AsNoTracking()
-                .Where(entity => entity.SupplierId == query.SupplierId && entity.EntryDate < query.FromDate.Value)
+                .Where(entity =>
+                    entity.SupplierId == query.SupplierId &&
+                    entity.EntryDate < query.FromDate.Value &&
+                    (entity.Debit > 0m || entity.Credit > 0m))
                 .OrderByDescending(entity => entity.EntryDate)
                 .ThenByDescending(entity => entity.CreatedAt)
                 .ThenByDescending(entity => entity.Id)

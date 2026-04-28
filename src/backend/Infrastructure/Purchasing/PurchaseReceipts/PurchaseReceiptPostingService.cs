@@ -136,7 +136,8 @@ public sealed class PurchaseReceiptPostingService(
                     line.PurchaseOrderLineId.HasValue &&
                     line.PurchaseReceiptId != receipt.Id &&
                     line.PurchaseReceipt!.PurchaseOrderId == receipt.PurchaseOrderId &&
-                    line.PurchaseReceipt.Status == DocumentStatus.Posted)
+                    line.PurchaseReceipt.Status == DocumentStatus.Posted &&
+                    line.PurchaseReceipt.ReversalDocumentId == null)
                 .Select(line => new
                 {
                     PurchaseOrderLineId = line.PurchaseOrderLineId!.Value,

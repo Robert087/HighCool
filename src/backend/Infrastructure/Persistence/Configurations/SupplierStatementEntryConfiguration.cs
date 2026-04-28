@@ -68,6 +68,8 @@ public sealed class SupplierStatementEntryConfiguration : AuditableEntityConfigu
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(entity => new { entity.SupplierId, entity.EntryDate });
+        builder.HasIndex(entity => new { entity.SupplierId, entity.EffectType, entity.EntryDate });
+        builder.HasIndex(entity => new { entity.SupplierId, entity.SourceDocType, entity.EntryDate });
         builder.HasIndex(entity => new { entity.SourceDocType, entity.SourceDocId, entity.SourceLineId, entity.EffectType })
             .IsUnique();
     }

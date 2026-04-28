@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 import type { DocumentStatus } from "./purchaseReceiptsApi";
 
 export type PurchaseOrderReceiptProgressStatus = "NotReceived" | "PartiallyReceived" | "FullyReceived";
@@ -83,11 +83,43 @@ export interface PurchaseOrderFormValues {
   lines: PurchaseOrderLineFormValues[];
 }
 
-function buildListUrl(search?: string): string {
+export interface PurchaseOrderListFilters extends PaginationParams {
+  search: string;
+  status: string;
+  receiptProgress: string;
+  fromDate: string;
+  toDate: string;
+}
+
+function buildListUrl(filters: PurchaseOrderListFilters): string {
   const url = new URL("/api/purchase-orders", window.location.origin);
-  if (search) {
-    url.searchParams.set("search", search);
+
+  if (filters.search.trim()) {
+    url.searchParams.set("search", filters.search.trim());
   }
+
+  if (filters.status) {
+    url.searchParams.set("status", filters.status);
+  }
+
+  if (filters.receiptProgress) {
+    url.searchParams.set("receiptProgressStatus", filters.receiptProgress);
+  }
+
+  if (filters.fromDate) {
+    url.searchParams.set("fromDate", new Date(filters.fromDate).toISOString());
+  }
+
+  if (filters.toDate) {
+    const endOfDay = new Date(filters.toDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    url.searchParams.set("toDate", endOfDay.toISOString());
+  }
+
+  url.searchParams.set("page", String(filters.page));
+  url.searchParams.set("pageSize", String(filters.pageSize));
+  url.searchParams.set("sortBy", filters.sortBy ?? "orderDate");
+  url.searchParams.set("sortDirection", filters.sortDirection ?? "Desc");
 
   return `${url.pathname}${url.search}`;
 }
@@ -109,8 +141,8 @@ function normalizePayload(values: PurchaseOrderFormValues) {
   };
 }
 
-export function listPurchaseOrders(search: string) {
-  return requestJson<PurchaseOrderListItem[]>(buildListUrl(search));
+export function listPurchaseOrders(filters: PurchaseOrderListFilters) {
+  return requestJson<PaginatedResult<PurchaseOrderListItem>>(buildListUrl(filters));
 }
 
 export function getPurchaseOrder(id: string) {

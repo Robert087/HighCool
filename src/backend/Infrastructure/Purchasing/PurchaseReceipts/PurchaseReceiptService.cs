@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Purchasing.PurchaseReceipts;
 using ERP.Domain.Common;
 using ERP.Domain.MasterData;
@@ -14,14 +15,12 @@ public sealed class PurchaseReceiptService(
 {
     private const int QuantityScale = 6;
 
-    public async Task<IReadOnlyList<PurchaseReceiptListItemDto>> ListAsync(PurchaseReceiptListQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<PurchaseReceiptListItemDto>> ListAsync(PurchaseReceiptListQuery query, CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
+
         var receipts = dbContext.PurchaseReceipts
             .AsNoTracking()
-            .Include(entity => entity.Supplier)
-            .Include(entity => entity.Warehouse)
-            .Include(entity => entity.PurchaseOrder)
-            .Include(entity => entity.Lines)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -37,9 +36,34 @@ public sealed class PurchaseReceiptService(
                 (entity.Notes != null && entity.Notes.Contains(search)));
         }
 
-        return await receipts
-            .OrderByDescending(entity => entity.ReceiptDate)
-            .ThenByDescending(entity => entity.CreatedAt)
+        if (query.Status.HasValue)
+        {
+            receipts = receipts.Where(entity => entity.Status == query.Status.Value);
+        }
+
+        if (query.LinkedToPurchaseOrder.HasValue)
+        {
+            receipts = query.LinkedToPurchaseOrder.Value
+                ? receipts.Where(entity => entity.PurchaseOrderId != null)
+                : receipts.Where(entity => entity.PurchaseOrderId == null);
+        }
+
+        if (query.FromDate.HasValue)
+        {
+            receipts = receipts.Where(entity => entity.ReceiptDate >= query.FromDate.Value);
+        }
+
+        if (query.ToDate.HasValue)
+        {
+            receipts = receipts.Where(entity => entity.ReceiptDate <= query.ToDate.Value);
+        }
+
+        receipts = ApplySorting(receipts, query);
+
+        var totalCount = await receipts.CountAsync(cancellationToken);
+        var items = await receipts
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
             .Select(entity => new PurchaseReceiptListItemDto(
                 entity.Id,
                 entity.ReceiptNo,
@@ -54,9 +78,27 @@ public sealed class PurchaseReceiptService(
                 entity.ReceiptDate,
                 entity.Status,
                 entity.Lines.Count,
+                entity.ReversalDocumentId,
+                entity.ReversedAt,
                 entity.CreatedAt,
                 entity.UpdatedAt))
             .ToListAsync(cancellationToken);
+
+        return new PagedResult<PurchaseReceiptListItemDto>(
+            items,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new
+            {
+                query.Search,
+                query.Status,
+                query.LinkedToPurchaseOrder,
+                query.FromDate,
+                query.ToDate
+            },
+            new PagedSort(ResolveSortBy(query.SortBy), query.SortDirection));
     }
 
     public async Task<PurchaseReceiptDto?> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -64,7 +106,16 @@ public sealed class PurchaseReceiptService(
         var entity = await IncludeReceiptDetails()
             .SingleOrDefaultAsync(receipt => receipt.Id == id, cancellationToken);
 
-        return entity is null ? null : ToDto(entity);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var returnStateByLineId = entity.Status == DocumentStatus.Posted && entity.ReversalDocumentId is null
+            ? await BuildReturnStateByReceiptLineIdAsync(entity.Lines.ToArray(), cancellationToken)
+            : entity.Lines.ToDictionary(line => line.Id, _ => new ReceiptLineReturnState(0m, 0m));
+
+        return ToDto(entity, returnStateByLineId);
     }
 
     public async Task<PurchaseReceiptDto> CreateDraftAsync(UpsertPurchaseReceiptDraftRequest request, string actor, CancellationToken cancellationToken)
@@ -337,7 +388,8 @@ public sealed class PurchaseReceiptService(
             .Where(line =>
                 line.PurchaseOrderLineId.HasValue &&
                 line.PurchaseReceipt!.PurchaseOrderId == purchaseOrder.Id &&
-                line.PurchaseReceipt.Status == DocumentStatus.Posted)
+                line.PurchaseReceipt.Status == DocumentStatus.Posted &&
+                line.PurchaseReceipt.ReversalDocumentId == null)
             .Select(line => new
             {
                 PurchaseOrderLineId = line.PurchaseOrderLineId!.Value,
@@ -509,7 +561,129 @@ public sealed class PurchaseReceiptService(
         return decimal.Round(value, QuantityScale, MidpointRounding.AwayFromZero);
     }
 
-    private static PurchaseReceiptDto ToDto(PurchaseReceipt entity)
+    private static IQueryable<PurchaseReceipt> ApplySorting(IQueryable<PurchaseReceipt> query, PurchaseReceiptListQuery request)
+    {
+        var sortBy = ResolveSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("receiptNo", true) => query.OrderBy(entity => entity.ReceiptNo).ThenBy(entity => entity.Id),
+            ("receiptNo", false) => query.OrderByDescending(entity => entity.ReceiptNo).ThenByDescending(entity => entity.Id),
+            ("supplierName", true) => query.OrderBy(entity => entity.Supplier!.Name).ThenBy(entity => entity.ReceiptDate),
+            ("supplierName", false) => query.OrderByDescending(entity => entity.Supplier!.Name).ThenByDescending(entity => entity.ReceiptDate),
+            ("warehouseName", true) => query.OrderBy(entity => entity.Warehouse!.Name).ThenBy(entity => entity.ReceiptDate),
+            ("warehouseName", false) => query.OrderByDescending(entity => entity.Warehouse!.Name).ThenByDescending(entity => entity.ReceiptDate),
+            ("status", true) => query.OrderBy(entity => entity.Status).ThenBy(entity => entity.ReceiptDate),
+            ("status", false) => query.OrderByDescending(entity => entity.Status).ThenByDescending(entity => entity.ReceiptDate),
+            _ when ascending => query.OrderBy(entity => entity.ReceiptDate).ThenBy(entity => entity.CreatedAt),
+            _ => query.OrderByDescending(entity => entity.ReceiptDate).ThenByDescending(entity => entity.CreatedAt)
+        };
+    }
+
+    private static string ResolveSortBy(string? sortBy)
+    {
+        return string.IsNullOrWhiteSpace(sortBy) ? "receiptDate" : sortBy.Trim();
+    }
+
+    private static int CalculateTotalPages(int totalCount, int pageSize)
+    {
+        return totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, ReceiptLineReturnState>> BuildReturnStateByReceiptLineIdAsync(
+        IReadOnlyCollection<PurchaseReceiptLine> receiptLines,
+        CancellationToken cancellationToken)
+    {
+        if (receiptLines.Count == 0)
+        {
+            return new Dictionary<Guid, ReceiptLineReturnState>();
+        }
+
+        var receiptLineIds = receiptLines.Select(line => line.Id).ToArray();
+
+        var returnedRows = await dbContext.PurchaseReturnLines
+            .AsNoTracking()
+            .Where(line =>
+                line.ReferenceReceiptLineId.HasValue &&
+                receiptLineIds.Contains(line.ReferenceReceiptLineId.Value) &&
+                line.PurchaseReturn!.Status == DocumentStatus.Posted &&
+                line.PurchaseReturn.ReversalDocumentId == null)
+            .Select(line => new
+            {
+                ReferenceReceiptLineId = line.ReferenceReceiptLineId!.Value,
+                line.BaseQty
+            })
+            .ToListAsync(cancellationToken);
+
+        var returnedByLineId = returnedRows
+            .GroupBy(line => line.ReferenceReceiptLineId)
+            .ToDictionary(group => group.Key, group => Round(group.Sum(line => line.BaseQty)));
+
+        var stateByLineId = new Dictionary<Guid, ReceiptLineReturnState>();
+
+        foreach (var line in receiptLines)
+        {
+            if (line.Item is null)
+            {
+                throw new InvalidOperationException("Purchase receipt line is missing item information required for returnable quantity conversion.");
+            }
+
+            var receivedBaseQty = await quantityConversionService.ConvertAsync(
+                line.ReceivedQty,
+                line.UomId,
+                line.Item.BaseUomId,
+                cancellationToken);
+
+            var returnedBaseQty = returnedByLineId.TryGetValue(line.Id, out var returnedQty) ? returnedQty : 0m;
+            var remainingBaseQty = ClampToZero(Round(receivedBaseQty - returnedBaseQty));
+
+            var returnedDocumentQty = await ConvertBaseQtyToDocumentQtyAsync(returnedBaseQty, line, cancellationToken);
+            var remainingDocumentQty = await ConvertBaseQtyToDocumentQtyAsync(remainingBaseQty, line, cancellationToken);
+
+            stateByLineId[line.Id] = new ReceiptLineReturnState(returnedDocumentQty, remainingDocumentQty);
+        }
+
+        return stateByLineId;
+    }
+
+    private async Task<decimal> ConvertBaseQtyToDocumentQtyAsync(
+        decimal baseQty,
+        PurchaseReceiptLine line,
+        CancellationToken cancellationToken)
+    {
+        if (baseQty == 0m)
+        {
+            return 0m;
+        }
+
+        if (line.Item is null)
+        {
+            throw new InvalidOperationException("Purchase receipt line is missing item information required for returnable quantity conversion.");
+        }
+
+        if (line.UomId == line.Item.BaseUomId)
+        {
+            return Round(baseQty);
+        }
+
+        var forwardConversion = await dbContext.UomConversions
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                entity => entity.FromUomId == line.UomId &&
+                          entity.ToUomId == line.Item.BaseUomId &&
+                          entity.IsActive,
+                cancellationToken);
+
+        if (forwardConversion is null || forwardConversion.Factor == 0m)
+        {
+            throw new InvalidOperationException("A required global UOM conversion could not be resolved.");
+        }
+
+        return Round(baseQty / forwardConversion.Factor);
+    }
+
+    private static PurchaseReceiptDto ToDto(PurchaseReceipt entity, IReadOnlyDictionary<Guid, ReceiptLineReturnState> returnStateByLineId)
     {
         return new PurchaseReceiptDto(
             entity.Id,
@@ -526,6 +700,8 @@ public sealed class PurchaseReceiptService(
             entity.SupplierPayableAmount,
             entity.Notes,
             entity.Status,
+            entity.ReversalDocumentId,
+            entity.ReversedAt,
             entity.Lines
                 .OrderBy(line => line.LineNo)
                 .Select(line => new PurchaseReceiptLineDto(
@@ -537,6 +713,8 @@ public sealed class PurchaseReceiptService(
                     line.Item?.Name ?? string.Empty,
                     line.OrderedQtySnapshot,
                     line.ReceivedQty,
+                    returnStateByLineId.TryGetValue(line.Id, out var returnState) ? returnState.ReturnedQty : 0m,
+                    returnStateByLineId.TryGetValue(line.Id, out returnState) ? returnState.RemainingReturnableQty : 0m,
                     line.UomId,
                     line.Uom?.Code ?? string.Empty,
                     line.Uom?.Name ?? string.Empty,
@@ -566,4 +744,11 @@ public sealed class PurchaseReceiptService(
             entity.CreatedAt,
             entity.UpdatedAt);
     }
+
+    private static decimal ClampToZero(decimal value)
+    {
+        return Math.Abs(value) < 0.000001m ? 0m : Math.Max(value, 0m);
+    }
+
+    private sealed record ReceiptLineReturnState(decimal ReturnedQty, decimal RemainingReturnableQty);
 }

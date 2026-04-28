@@ -1,5 +1,42 @@
 # API Spec v1 — Procurement and Inventory
 
+## Standard List Contract
+
+All operational list endpoints must use server-side pagination.
+
+Standard query parameters:
+
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+* module-specific filters
+
+Standard list response shape:
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 0,
+  "totalPages": 0,
+  "appliedFilters": {},
+  "sort": {
+    "sortBy": "entryDate",
+    "direction": "Desc"
+  }
+}
+```
+
+Rules:
+
+* no future list endpoint may return an unbounded operational result set
+* sorting and filtering must be applied on the server
+* list endpoints must return lightweight summary DTOs
+* detail endpoints remain separate from list endpoints
+* clients are responsible for locale-aware display formatting; APIs should return stable raw values, document numbers, and status codes
+
 ## Customers
 
 ### `GET /api/customers`
@@ -44,6 +81,14 @@ Lists purchase orders.
 Optional query parameters:
 
 * `search`
+* `status`
+* `receiptProgressStatus`
+* `fromDate`
+* `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
 
 ### `GET /api/purchase-orders/{id}`
 
@@ -52,6 +97,11 @@ Returns one purchase order with nested lines and computed receipt progress.
 ### `GET /api/purchase-orders/{id}/available-lines-for-receipt`
 
 Returns posted PO lines with remaining receivable quantity greater than zero.
+
+Behavior:
+
+* fully received rows are excluded from this actionable endpoint
+* remaining receivable quantity uses posted, non-reversed receipts only
 
 ### `POST /api/purchase-orders`
 
@@ -99,10 +149,23 @@ Lists purchase receipts.
 Optional query parameters:
 
 * `search`
+* `status`
+* `linkedToPurchaseOrder`
+* `fromDate`
+* `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
 
 ### `GET /api/purchase-receipts/{id}`
 
-Returns one purchase receipt with nested lines and auto-filled component rows. Each component row includes system-derived `expectedQty` plus editable `actualReceivedQty`.
+Returns one purchase receipt with nested lines and auto-filled component rows. Each line includes `remainingReturnableQty`. Each component row includes system-derived `expectedQty` plus editable `actualReceivedQty`.
+
+Behavior:
+
+* `remainingReturnableQty` is returned in the receipt line UOM
+* fully returned lines remain visible on the document detail view but are excluded from active return candidate lists
 
 ### `POST /api/purchase-receipts`
 
@@ -160,10 +223,12 @@ Behavior:
 * only `Draft` receipts can be posted
 * posting is idempotent
 * linked PO quantities cannot exceed remaining posted PO quantity
+* duplicate component rows inside the same receipt line are rejected
 * posting creates stock ledger entries
-* posting creates supplier statement rows from the current receipt financial basis
+* posting creates supplier statement rows from the current receipt financial basis only when that basis is positive
 * posting creates shortage ledger entries when actual components are below expected BOM quantities
 * `supplierPayableAmount` is the current explicit receipt financial basis until receipt line pricing exists
+* if `supplierPayableAmount <= 0`, posting still succeeds but no zero-value supplier statement row is created
 
 ## Shortage Reason Codes
 
@@ -187,10 +252,19 @@ Optional query parameters:
 * `status`
 * `fromDate`
 * `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
 
 ### `GET /api/shortages/{id}`
 
-Returns one shortage row with current open balance, physical resolved quantity, financial resolved quantity-equivalent, and monetary balances.
+Returns one shortage row with expected quantity, initial actual quantity, physical resolved quantity, final physical quantity, financial resolved quantity-equivalent, open quantity, and monetary balances.
+
+Behavior:
+
+* resolved rows do not appear in `GET /api/shortages/open`
+* final physical quantity is `initial actual quantity + physical resolved quantity`
 
 ## Shortage Resolutions
 
@@ -206,6 +280,10 @@ Optional query parameters:
 * `status`
 * `fromDate`
 * `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
 
 ### `GET /api/shortage-resolutions/{id}`
 
@@ -258,6 +336,7 @@ Behavior:
 * one shortage row may be settled across multiple resolutions over time
 * one shortage row may be settled by both physical and financial resolutions over time
 * any shortage row with `open_qty > 0` may be settled in either physical or financial mode
+* duplicate shortage targets inside one draft resolution are rejected
 * physical posting requires `allocated_qty` only
 * financial posting requires `allocated_qty` plus `valuation_rate`
 * financial posting calculates and stores `allocated_amount = allocated_qty x valuation_rate`
@@ -265,6 +344,8 @@ Behavior:
 ## Supplier Statements
 
 ### `GET /api/supplier-statements`
+
+Supports paginated statement entry queries and must not return unbounded statement history.
 
 Lists supplier statement rows across suppliers.
 
@@ -278,6 +359,8 @@ Optional query parameters:
 * `toDate`
 
 ### `GET /api/suppliers/{supplierId}/statement`
+
+Supports the same pagination, filter, and sort contract as `GET /api/supplier-statements`.
 
 Lists supplier statement rows for one supplier.
 
@@ -304,17 +387,32 @@ Behavior:
 
 * supplier statements are generated from posted business documents only
 * purchase receipt posting creates supplier statement rows
+* purchase return posting creates supplier statement rows only when a valid referenced receipt financial basis produces a positive return amount
 * financial shortage resolution posting creates supplier statement rows
 * physical shortage resolution posting does not create supplier statement rows
+* purchase receipt reversal rows use source type `PurchaseReceiptReversal` and effect type `PurchaseReceiptReversal`
+* supplier payment reversal rows use source type `PaymentReversal` and effect type `PaymentReversal`
+* shortage financial resolution reversal rows use source type `ShortageResolutionReversal` and effect type `ShortageResolutionReversal`
+* financial supplier statement rows with both `debit = 0` and `credit = 0` are not returned in the supplier statement view
 * no manual create, update, or delete supplier statement endpoint exists
 * purchase receipt statement amount currently comes from the posted receipt header payable amount
 * financial posting stores `financial_qty_equivalent = allocated_qty`
 * shortage status stays `PartiallyResolved` until `open_qty` reaches `0`
 * posting is idempotent
+* current effect and source document values include:
+  * `PurchaseReceipt`
+  * `PurchaseReturn`
+  * `Payment`
+  * `PurchaseReceiptReversal`
+  * `PaymentReversal`
+  * `ShortageFinancialResolution`
+  * `ShortageResolutionReversal`
 
 ## Supplier Payments
 
 ### `GET /api/payments`
+
+Supports paginated payment list queries with server-side search, filters, and sorting.
 
 Lists supplier payments.
 
@@ -390,6 +488,8 @@ Behavior:
 
 ### `GET /api/suppliers/{supplierId}/open-balances`
 
+Supports paginated open-target queries for payment allocation candidates.
+
 Lists currently open supplier-side targets that can be allocated from a payment.
 
 Required query parameters:
@@ -406,7 +506,9 @@ Behavior:
 
 * `direction = OutboundToParty` returns open posted purchase receipts
 * `direction = InboundFromParty` returns open posted financial shortage resolutions
-* open amount is derived from source document amount minus posted payment allocations
+* purchase receipt target state includes `originalAmount`, `adjustedAmount`, `netAmount`, `allocatedAmount`, `openAmount`, and `status`
+* purchase receipt `adjustedAmount` is reduced by posted, non-reversed purchase returns linked to that receipt
+* open amount is derived from active source document amount minus posted payment allocations
 
 ### `POST /api/shortage-resolutions/suggest-allocations`
 
@@ -470,3 +572,64 @@ The API returns:
 * `400` for business rule violations
 * `409` for duplicate document numbers or duplicate entity constraints
 * `404` when the target record does not exist
+
+## Purchase Return Addendum
+
+### `GET /api/purchase-returns`
+
+Lists purchase return documents.
+
+### `GET /api/purchase-returns/{id}`
+
+Returns one purchase return with nested lines.
+
+### `POST /api/purchase-returns`
+
+Creates a purchase return draft.
+
+### `PUT /api/purchase-returns/{id}`
+
+Updates a purchase return draft.
+
+### `POST /api/purchase-returns/{id}/post`
+
+Posts a draft purchase return and creates stock ledger plus supplier statement effects when a valid return financial basis exists.
+
+Behavior:
+
+* linked rows validate against `remainingReturnableQty`
+* return quantity greater than remaining returnable quantity is rejected
+* the same receipt line cannot appear twice inside one return
+* fully returned receipt lines must not appear in active return candidate lists
+* purchase return supplier statement rows use source type `PurchaseReturn` and effect type `PurchaseReturn`
+* if no valid referenced receipt financial basis exists, posting still succeeds but no zero-value supplier statement row is created
+
+## Reversal Addendum
+
+### `POST /api/purchase-receipts/{id}/reverse`
+
+Reverses a posted purchase receipt.
+
+### `POST /api/payments/{id}/reverse`
+
+Reverses a posted supplier payment.
+
+### `POST /api/shortage-resolutions/{id}/reverse`
+
+Reverses a posted shortage resolution.
+
+All reversal endpoints accept:
+
+```json
+{
+  "reversalDate": "2026-04-23T00:00:00.000Z",
+  "reversalReason": "Explain why the posted document must be reversed"
+}
+```
+
+Behavior:
+
+* duplicate reversal is rejected
+* receipt reversal is blocked by active posted returns, payment allocations, or shortage resolutions that depend on that receipt
+* shortage resolution reversal is blocked by active posted payment allocations that depend on that resolution
+* supplier statement reversal rows always invert the original financial supplier statement rows instead of generating unrelated generic payment effects

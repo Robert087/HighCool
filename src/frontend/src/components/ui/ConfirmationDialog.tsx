@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useI18n } from "../../i18n";
 import { Button } from "./Button";
 
 type ConfirmationTone = "default" | "danger" | "warning";
@@ -28,8 +29,8 @@ interface PendingConfirmation {
 }
 
 function ConfirmationDialog({
-  cancelLabel = "Keep current changes",
-  confirmLabel = "Confirm",
+  cancelLabel = "common.keepCurrentChanges",
+  confirmLabel = "common.confirm",
   description,
   onCancel,
   onConfirm,
@@ -37,6 +38,8 @@ function ConfirmationDialog({
   title,
   tone = "default",
 }: ConfirmationDialogProps) {
+  const { translateText } = useI18n();
+
   if (!open) {
     return null;
   }
@@ -52,13 +55,13 @@ function ConfirmationDialog({
     <div className="hc-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="hc-confirmation-dialog-title">
       <div className={`hc-confirmation-dialog__panel ${toneClassName}`.trim()}>
         <div className="hc-confirmation-dialog__copy">
-          <p className="hc-confirmation-dialog__eyebrow">Please confirm</p>
-          <h2 className="hc-confirmation-dialog__title" id="hc-confirmation-dialog-title">{title}</h2>
-          <p className="hc-confirmation-dialog__description">{description}</p>
+          <p className="hc-confirmation-dialog__eyebrow">{translateText("dialog.pleaseConfirm")}</p>
+          <h2 className="hc-confirmation-dialog__title" id="hc-confirmation-dialog-title">{translateText(title)}</h2>
+          <p className="hc-confirmation-dialog__description">{translateText(description)}</p>
         </div>
         <div className="hc-confirmation-dialog__actions">
-          <Button variant="ghost" onClick={onCancel} type="button">{cancelLabel}</Button>
-          <Button variant={confirmVariant} onClick={onConfirm} type="button">{confirmLabel}</Button>
+          <Button variant="ghost" onClick={onCancel} type="button">{translateText(cancelLabel)}</Button>
+          <Button variant={confirmVariant} onClick={onConfirm} type="button">{translateText(confirmLabel)}</Button>
         </div>
       </div>
     </div>

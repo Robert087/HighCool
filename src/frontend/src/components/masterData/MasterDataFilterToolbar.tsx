@@ -1,4 +1,5 @@
 import { FilterDropdown, FiltersToolbar, FilterTextInput, type FilterChip } from "../ui";
+import { useI18n } from "../../i18n";
 
 interface MasterDataFilterToolbarProps {
   hasFilters: boolean;
@@ -29,12 +30,13 @@ export function MasterDataFilterToolbar({
   statusEnabled = true,
   statusValue = "all",
 }: MasterDataFilterToolbarProps) {
+  const { t } = useI18n();
   const activeFilters: FilterChip[] = [];
 
   if (searchValue.trim()) {
     activeFilters.push({
       key: "search",
-      label: `Search: ${searchValue.trim()}`,
+      label: t("masterData.filter.searchChip", { value: searchValue.trim() }),
       onRemove: () => onSearchChange(""),
     });
   }
@@ -42,7 +44,9 @@ export function MasterDataFilterToolbar({
   if (statusEnabled && statusValue !== "all") {
     activeFilters.push({
       key: "status",
-      label: `Status: ${statusValue === "active" ? "Active" : "Inactive"}`,
+      label: t("masterData.filter.statusChip", {
+        value: statusValue === "active" ? t("status.active") : t("status.inactive"),
+      }),
       onRemove: () => onStatusChange?.("all"),
     });
   }
@@ -59,14 +63,14 @@ export function MasterDataFilterToolbar({
         />
       )}
       primaryFilters={statusEnabled ? (
-        <FilterDropdown aria-label="Status filter" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
-          <option value="all">Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
+        <FilterDropdown aria-label="masterData.filter.statusAria" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
+          <option value="all">common.status</option>
+          <option value="active">status.active</option>
+          <option value="inactive">status.inactive</option>
         </FilterDropdown>
       ) : null}
       resultLabel={resultLabel}
-      resetLabel="Reset"
+      resetLabel="common.resetFilters"
       onReset={() => {
         onSearchChange("");
         if (statusEnabled) {

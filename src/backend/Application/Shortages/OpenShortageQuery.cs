@@ -1,3 +1,4 @@
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Shortages;
 
 namespace ERP.Application.Shortages;
@@ -10,4 +11,8 @@ public sealed record OpenShortageQuery(
     bool? AffectsSupplierBalance,
     ShortageEntryStatus? Status,
     DateTime? FromDate,
-    DateTime? ToDate);
+    DateTime? ToDate,
+    int Page = 1,
+    int PageSize = 20,
+    string? SortBy = null,
+    SortDirection SortDirection = SortDirection.Asc);

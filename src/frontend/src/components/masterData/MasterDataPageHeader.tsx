@@ -16,7 +16,7 @@ export function MasterDataPageHeader({
 }: MasterDataPageHeaderProps) {
   return (
     <PageHeader
-      eyebrow="Master Data"
+      eyebrow="route.section.masterData"
       title={title}
       description={description}
       actions={

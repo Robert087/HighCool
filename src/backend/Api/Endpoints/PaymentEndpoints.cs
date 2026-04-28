@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Payments;
 using ERP.Domain.Common;
 using ERP.Domain.Payments;
@@ -32,6 +33,10 @@ public static class PaymentEndpoints
         PaymentMethod? paymentMethod,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IPaymentQueryService service,
         CancellationToken cancellationToken)
     {
@@ -42,7 +47,7 @@ public static class PaymentEndpoints
         }
 
         var result = await service.ListAsync(
-            new PaymentListQuery(search, supplierId, direction, status, paymentMethod, fromDate, toDate),
+            new PaymentListQuery(search, supplierId, direction, status, paymentMethod, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Desc),
             cancellationToken);
 
         return Results.Ok(result);
@@ -116,6 +121,10 @@ public static class PaymentEndpoints
         string? search,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         ISupplierOpenBalanceService service,
         CancellationToken cancellationToken)
     {
@@ -126,7 +135,7 @@ public static class PaymentEndpoints
         }
 
         var result = await service.ListAsync(
-            new SupplierOpenBalanceQuery(supplierId, direction, search, fromDate, toDate),
+            new SupplierOpenBalanceQuery(supplierId, direction, search, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Asc),
             cancellationToken);
 
         return Results.Ok(result);

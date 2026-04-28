@@ -9,6 +9,8 @@ public sealed record PurchaseReceiptLineDto(
     string ItemName,
     decimal? OrderedQtySnapshot,
     decimal ReceivedQty,
+    decimal ReturnedQty,
+    decimal RemainingReturnableQty,
     Guid UomId,
     string UomCode,
     string UomName,

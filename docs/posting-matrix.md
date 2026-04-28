@@ -83,12 +83,13 @@ Preconditions:
 * actual component rows match the BOM component set for BOM items
 * shortage rows are allowed with or without a shortage reason
 * shortage rows are based on persisted `expected_qty` vs `actual_received_qty` on the receipt line component rows
+* duplicate component rows inside one receipt line are rejected
 
 Posting effects:
 
 * status changes from `Draft` to `Posted`
 * one stock ledger `IN` row is written per receipt line
-* one supplier statement row is written per posted receipt header
+* one supplier statement row is written per posted receipt header only when `supplier_payable_amount > 0`
 * expected component quantities are expanded from the item BOM using `received_qty`
 * actual components are compared against expected quantities
 * shortage ledger rows are written only for positive shortages
@@ -97,6 +98,7 @@ Current receipt financial assumption:
 
 * receipt statement amount uses `supplier_payable_amount` from the posted receipt header
 * because receipt pricing is not yet implemented per line, `supplier_payable_amount` is the temporary explicit procurement financial basis for supplier statement and payment allocation
+* if `supplier_payable_amount <= 0`, posting is still allowed but no financial supplier statement row is written
 
 Idempotency:
 
@@ -139,14 +141,18 @@ Preconditions:
 * financial allocations require `allocated_qty` plus `valuation_rate`
 * financial `allocated_amount = allocated_qty x valuation_rate`
 * financial `financial_qty_equivalent = allocated_qty`
+* the same shortage row cannot appear more than once inside the same resolution
 * any shortage row with open quantity may be posted physically or financially
+* fully resolved shortage rows are excluded from active allocation candidates
 
 Posting effects:
 
 * status changes from `Draft` to `Posted`
 * physical resolution writes one stock ledger `IN` row per allocation using transaction type `ShortagePhysicalResolution`
-* financial resolution writes one supplier statement row per allocation using effect type `ShortageFinancialResolution`
+* financial resolution writes one supplier statement row per allocation using source type `ShortageFinancialResolution` and effect type `ShortageFinancialResolution`
 * shortage ledger updates `resolved_physical_qty`, `resolved_financial_qty_equivalent`, and `open_qty` per allocation
+* `final_physical_component_qty` is `initial actual qty + resolved_physical_qty`
+* financial resolution closes shortage exposure without increasing physical component quantity
 * shortage status changes from `Open` to `PartiallyResolved` to `Resolved` based on remaining open quantity
 * the same shortage row may be settled many times across multiple posted resolutions
 * mixed physical plus financial settlement is supported until the shortage quantity is fully covered
@@ -189,14 +195,17 @@ Preconditions:
 * allocated total must equal payment amount before posting
 * each allocation points to an open target owned by the same supplier
 * allocation amount does not exceed current open amount
+* the same target document cannot appear more than once inside one payment
 * `direction = OutboundToParty` may allocate only to `PurchaseReceipt`
 * `direction = InboundFromParty` may allocate only to financial `ShortageResolution`
+* purchase receipt target open amount is `supplier_payable_amount - active posted purchase returns - active posted payment allocations`
+* fully settled targets are excluded from active allocation candidates
 
 Posting effects:
 
 * status changes from `Draft` to `Posted`
 * no stock ledger effect
-* supplier statement rows are written using effect type `Payment`
+* supplier statement rows are written using source type `Payment` and effect type `Payment`
 * outbound supplier payment writes debit rows and reduces supplier payable balance
 * inbound supplier payment writes credit rows and reduces supplier receivable balance created by financial shortage resolutions
 * open supplier target amount is reduced only through posted payment allocations
@@ -205,3 +214,68 @@ Idempotency:
 
 * reposting an already posted payment returns the current posted document
 * duplicate supplier statement rows are guarded by payment source document plus allocation indexing
+
+## Purchase Return
+
+### Post
+
+Action:
+
+* `POST /api/purchase-returns/{id}/post`
+
+Preconditions:
+
+* linked return rows must point to posted, non-reversed receipt lines
+* `return_qty` must not exceed remaining returnable quantity
+* duplicate logical rows are blocked inside one return
+* `remaining returnable quantity` is validated in the referenced receipt line UOM and must remain correct after prior posted returns
+
+Posting effects:
+
+* status changes from `Draft` to `Posted`
+* stock ledger `OUT` rows are written
+* supplier statement rows are written using source type `PurchaseReturn` and effect type `PurchaseReturn` only when a valid referenced receipt financial basis produces a positive return amount
+* if no valid supplier financial basis is available, posting still succeeds but no zero-value supplier statement row is written
+* receipt traceability is preserved when provided
+
+## Reversal Actions
+
+### Purchase Receipt Reverse
+
+Action:
+
+* `POST /api/purchase-receipts/{id}/reverse`
+
+Effects:
+
+* creates a reversal audit record
+* writes stock ledger `OUT` rows that reverse the original receipt stock `IN`
+* writes supplier statement reversal rows using source type `PurchaseReceiptReversal` and effect type `PurchaseReceiptReversal`
+* cancels unresolved shortage rows created by the receipt
+* blocked when active purchase returns, payment allocations, or shortage resolutions already depend on the receipt
+
+### Supplier Payment Reverse
+
+Action:
+
+* `POST /api/payments/{id}/reverse`
+
+Effects:
+
+* creates a reversal audit record
+* writes opposite supplier statement rows per allocation using source type `PaymentReversal` and effect type `PaymentReversal`
+* restores supplier open balances
+* duplicate reversal is blocked
+
+### Shortage Resolution Reverse
+
+Action:
+
+* `POST /api/shortage-resolutions/{id}/reverse`
+
+Effects:
+
+* creates a reversal audit record
+* physical allocations write stock ledger `OUT` rows
+* financial allocations write opposite supplier statement rows using source type `ShortageResolutionReversal` and effect type `ShortageResolutionReversal`
+* shortage open quantity and status are restored

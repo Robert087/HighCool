@@ -9,6 +9,8 @@ import { PurchaseOrderFormPage } from "../pages/PurchaseOrderFormPage";
 import { PurchaseOrdersPage } from "../pages/PurchaseOrdersPage";
 import { PurchaseReceiptFormPage } from "../pages/PurchaseReceiptFormPage";
 import { PurchaseReceiptsPage } from "../pages/PurchaseReceiptsPage";
+import { PurchaseReturnFormPage } from "../pages/PurchaseReturnFormPage";
+import { PurchaseReturnsPage } from "../pages/PurchaseReturnsPage";
 import { OpenShortagesPage } from "../pages/OpenShortagesPage";
 import { PaymentFormPage } from "../pages/PaymentFormPage";
 import { PaymentsPage } from "../pages/PaymentsPage";
@@ -39,6 +41,10 @@ export function AppRoutes() {
       <Route path="/purchase-receipts" element={<PurchaseReceiptsPage />} />
       <Route path="/purchase-receipts/new" element={<PurchaseReceiptFormPage />} />
       <Route path="/purchase-receipts/:purchaseReceiptId/edit" element={<PurchaseReceiptFormPage />} />
+      <Route path="/purchase-returns" element={<PurchaseReturnsPage />} />
+      <Route path="/purchase-returns/new" element={<PurchaseReturnFormPage />} />
+      <Route path="/purchase-returns/:purchaseReturnId" element={<PurchaseReturnFormPage />} />
+      <Route path="/purchase-returns/:purchaseReturnId/edit" element={<PurchaseReturnFormPage />} />
       <Route path="/open-shortages" element={<OpenShortagesPage />} />
       <Route path="/shortage-resolutions" element={<ShortageResolutionsPage />} />
       <Route path="/shortage-resolutions/new" element={<ShortageResolutionFormPage />} />

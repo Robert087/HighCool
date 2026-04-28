@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.Purchasing.PurchaseReceipts;
 
 public interface IPurchaseReceiptService
 {
-    Task<IReadOnlyList<PurchaseReceiptListItemDto>> ListAsync(PurchaseReceiptListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<PurchaseReceiptListItemDto>> ListAsync(PurchaseReceiptListQuery query, CancellationToken cancellationToken);
 
     Task<PurchaseReceiptDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

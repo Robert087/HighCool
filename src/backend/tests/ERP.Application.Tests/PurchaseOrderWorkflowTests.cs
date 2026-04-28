@@ -178,6 +178,75 @@ public sealed class PurchaseOrderWorkflowTests
         Assert.Contains("remaining purchase order quantity", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task AvailableLinesForReceipt_ShouldDisappearOncePurchaseOrderIsFullyReceived()
+    {
+        await using var dbContext = CreateDbContext();
+        var references = await SeedReferencesAsync(dbContext);
+        var purchaseOrder = await CreatePostedPurchaseOrderAsync(dbContext, references, orderedQty: 10m);
+
+        dbContext.PurchaseReceipts.Add(new PurchaseReceipt
+        {
+            ReceiptNo = "PR-FULL-0001",
+            SupplierId = references.Supplier.Id,
+            WarehouseId = references.Warehouse.Id,
+            PurchaseOrderId = purchaseOrder.Id,
+            ReceiptDate = DateTime.UtcNow.Date,
+            Status = DocumentStatus.Posted,
+            CreatedBy = "seed",
+            Lines =
+            [
+                new PurchaseReceiptLine
+                {
+                    LineNo = 1,
+                    PurchaseOrderLineId = purchaseOrder.Lines.Single().Id,
+                    ItemId = references.Item.Id,
+                    OrderedQtySnapshot = 10m,
+                    ReceivedQty = 4m,
+                    UomId = references.Uom.Id,
+                    CreatedBy = "seed"
+                }
+            ]
+        });
+
+        dbContext.PurchaseReceipts.Add(new PurchaseReceipt
+        {
+            ReceiptNo = "PR-FULL-0002",
+            SupplierId = references.Supplier.Id,
+            WarehouseId = references.Warehouse.Id,
+            PurchaseOrderId = purchaseOrder.Id,
+            ReceiptDate = DateTime.UtcNow.Date,
+            Status = DocumentStatus.Posted,
+            CreatedBy = "seed",
+            Lines =
+            [
+                new PurchaseReceiptLine
+                {
+                    LineNo = 1,
+                    PurchaseOrderLineId = purchaseOrder.Lines.Single().Id,
+                    ItemId = references.Item.Id,
+                    OrderedQtySnapshot = 10m,
+                    ReceivedQty = 6m,
+                    UomId = references.Uom.Id,
+                    CreatedBy = "seed"
+                }
+            ]
+        });
+
+        await dbContext.SaveChangesAsync();
+
+        var service = new PurchaseOrderService(dbContext);
+
+        var availableLines = await service.ListAvailableLinesForReceiptAsync(purchaseOrder.Id, CancellationToken.None);
+        var reloadedOrder = await service.GetAsync(purchaseOrder.Id, CancellationToken.None);
+
+        Assert.Empty(availableLines);
+        Assert.NotNull(reloadedOrder);
+        Assert.Equal(PurchaseOrderReceiptProgressStatus.FullyReceived, reloadedOrder!.ReceiptProgressStatus);
+        Assert.Equal(10m, reloadedOrder.Lines.Single().ReceivedQty);
+        Assert.Equal(0m, reloadedOrder.Lines.Single().RemainingQty);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-po-tests-{Guid.NewGuid():N}.db");

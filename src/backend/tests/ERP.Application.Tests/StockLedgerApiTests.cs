@@ -108,14 +108,14 @@ public sealed class StockLedgerApiTests : IClassFixture<StockLedgerApiTests.ApiF
 
         var movementResponse = await client.GetAsync($"/api/stock-ledger/item/{item.Id}?warehouseId={warehouse.Id}");
         Assert.Equal(HttpStatusCode.OK, movementResponse.StatusCode);
-        var movements = await movementResponse.Content.ReadFromJsonAsync<StockLedgerEntryResponse[]>();
-        var movement = Assert.Single(movements!);
+        var movements = await movementResponse.Content.ReadFromJsonAsync<PaginatedResponse<StockLedgerEntryResponse>>();
+        var movement = Assert.Single(movements!.Items);
         Assert.Equal("PR-LEDGER-0001", movement.SourceDocumentNo);
 
         var balanceResponse = await client.GetAsync($"/api/stock-balance/item/{item.Id}?warehouseId={warehouse.Id}");
         Assert.Equal(HttpStatusCode.OK, balanceResponse.StatusCode);
-        var balances = await balanceResponse.Content.ReadFromJsonAsync<StockBalanceResponse[]>();
-        var balance = Assert.Single(balances!);
+        var balances = await balanceResponse.Content.ReadFromJsonAsync<PaginatedResponse<StockBalanceResponse>>();
+        var balance = Assert.Single(balances!.Items);
         Assert.Equal(5m, balance.BalanceQty);
     }
 
@@ -232,15 +232,15 @@ public sealed class StockLedgerApiTests : IClassFixture<StockLedgerApiTests.ApiF
 
         var movementResponse = await client.GetAsync($"/api/stock-ledger?itemId={item.Id}&warehouseId={warehouse.Id}");
         Assert.Equal(HttpStatusCode.OK, movementResponse.StatusCode);
-        var movements = await movementResponse.Content.ReadFromJsonAsync<StockLedgerMovementResponse[]>();
-        var movement = Assert.Single(movements!);
+        var movements = await movementResponse.Content.ReadFromJsonAsync<PaginatedResponse<StockLedgerMovementResponse>>();
+        var movement = Assert.Single(movements!.Items);
         Assert.Equal("PR-STOCK-0001", movement.SourceDocumentNo);
         Assert.Equal(20m, movement.RunningBalanceQty);
 
         var balanceResponse = await client.GetAsync($"/api/stock-balance?itemId={item.Id}&warehouseId={warehouse.Id}");
         Assert.Equal(HttpStatusCode.OK, balanceResponse.StatusCode);
-        var balances = await balanceResponse.Content.ReadFromJsonAsync<StockBalanceResponse[]>();
-        var balance = Assert.Single(balances!);
+        var balances = await balanceResponse.Content.ReadFromJsonAsync<PaginatedResponse<StockBalanceResponse>>();
+        var balance = Assert.Single(balances!.Items);
         Assert.Equal(20m, balance.BalanceQty);
     }
 

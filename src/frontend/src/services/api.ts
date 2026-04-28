@@ -1,4 +1,25 @@
 export type ValidationErrors = Record<string, string[]>;
+export type SortDirection = "Asc" | "Desc";
+
+export interface PaginatedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  appliedFilters?: unknown;
+  sort: {
+    sortBy: string;
+    direction: SortDirection;
+  };
+}
+
+export interface PaginationParams {
+  page: number;
+  pageSize: number;
+  sortBy?: string;
+  sortDirection?: SortDirection;
+}
 
 export class ApiError extends Error {
   status: number;

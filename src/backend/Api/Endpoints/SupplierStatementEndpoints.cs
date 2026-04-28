@@ -1,4 +1,5 @@
 using ERP.Application.Statements;
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Statements;
 
 namespace ERP.Api.Endpoints;
@@ -21,6 +22,10 @@ public static class SupplierStatementEndpoints
         SupplierStatementSourceDocumentType? sourceDocType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         ISupplierStatementQueryService service,
         CancellationToken cancellationToken)
     {
@@ -31,7 +36,7 @@ public static class SupplierStatementEndpoints
         }
 
         var result = await service.ListAsync(
-            new SupplierStatementQuery(search, supplierId, effectType, sourceDocType, fromDate, toDate),
+            new SupplierStatementQuery(search, supplierId, effectType, sourceDocType, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Desc),
             cancellationToken);
 
         return Results.Ok(result);
@@ -44,6 +49,10 @@ public static class SupplierStatementEndpoints
         SupplierStatementSourceDocumentType? sourceDocType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         ISupplierStatementQueryService service,
         CancellationToken cancellationToken)
     {
@@ -54,6 +63,10 @@ public static class SupplierStatementEndpoints
             sourceDocType,
             fromDate,
             toDate,
+            page,
+            pageSize,
+            sortBy,
+            sortDirection,
             service,
             cancellationToken);
     }

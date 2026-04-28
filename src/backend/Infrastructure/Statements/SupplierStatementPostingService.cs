@@ -2,6 +2,7 @@ using ERP.Application.Statements;
 using ERP.Domain.Inventory;
 using ERP.Domain.Payments;
 using ERP.Domain.Purchasing;
+using ERP.Domain.Reversals;
 using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
 using ERP.Infrastructure.Persistence;
@@ -32,8 +33,13 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
         }
 
         var amount = Round(receipt.SupplierPayableAmount);
+        if (amount <= 0m)
+        {
+            return [];
+        }
+
         var runningBalance = await GetLatestRunningBalanceAsync(receipt.SupplierId, cancellationToken);
-        runningBalance = Round(runningBalance + amount);
+        runningBalance = ApplyRunningBalance(runningBalance, 0m, amount);
 
         var entry = new SupplierStatementEntry
         {
@@ -47,9 +53,7 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
             Credit = amount,
             RunningBalance = runningBalance,
             Currency = null,
-            Notes = amount == 0m
-                ? $"Purchase receipt {receipt.ReceiptNo} posted with zero supplier payable amount. Until receipt pricing is modeled per line, payable value is tracked from the explicit receipt header amount."
-                : $"Purchase receipt {receipt.ReceiptNo}",
+            Notes = $"Purchase receipt {receipt.ReceiptNo}",
             CreatedBy = actor
         };
 
@@ -75,7 +79,8 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
         var allocationIds = financialAllocations.Select(entity => entity.Id).ToArray();
         var duplicateExists = await dbContext.SupplierStatementEntries
             .AnyAsync(
-                entity => entity.SourceDocType == SupplierStatementSourceDocumentType.ShortageResolution &&
+                entity => (entity.SourceDocType == SupplierStatementSourceDocumentType.ShortageFinancialResolution ||
+                           entity.SourceDocType == SupplierStatementSourceDocumentType.ShortageResolution) &&
                           entity.SourceDocId == resolution.Id &&
                           entity.SourceLineId.HasValue &&
                           allocationIds.Contains(entity.SourceLineId.Value) &&
@@ -95,8 +100,12 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
             var shortage = allocation.ShortageLedgerEntry
                 ?? throw new InvalidOperationException("Supplier statement posting requires shortage allocation traceability.");
             var amount = Round(allocation.AllocatedAmount ?? 0m);
+            if (amount <= 0m)
+            {
+                throw new InvalidOperationException("Financial shortage resolutions require a positive supplier statement amount.");
+            }
 
-            runningBalance = Round(runningBalance - amount);
+            runningBalance = ApplyRunningBalance(runningBalance, amount, 0m);
 
             var notes = shortage.PurchaseReceipt is null
                 ? $"Financial shortage resolution {resolution.ResolutionNo}"
@@ -106,7 +115,7 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
             {
                 SupplierId = resolution.SupplierId,
                 EntryDate = resolution.ResolutionDate,
-                SourceDocType = SupplierStatementSourceDocumentType.ShortageResolution,
+                SourceDocType = SupplierStatementSourceDocumentType.ShortageFinancialResolution,
                 SourceDocId = resolution.Id,
                 SourceLineId = allocation.Id,
                 EffectType = SupplierStatementEffectType.ShortageFinancialResolution,
@@ -191,6 +200,11 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
         foreach (var allocation in allocations)
         {
             var amount = Round(allocation.AllocatedAmount);
+            if (amount <= 0m)
+            {
+                throw new InvalidOperationException("Supplier payments require positive allocated amounts before statement rows can be created.");
+            }
+
             var targetDocumentNo = allocation.TargetDocType switch
             {
                 PaymentTargetDocumentType.PurchaseReceipt when receiptNumbers.TryGetValue(allocation.TargetDocId, out var receiptNo) => receiptNo,
@@ -205,14 +219,14 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
             {
                 debit = amount;
                 credit = 0m;
-                runningBalance = Round(runningBalance - amount);
             }
             else
             {
                 debit = 0m;
                 credit = amount;
-                runningBalance = Round(runningBalance + amount);
             }
+
+            runningBalance = ApplyRunningBalance(runningBalance, debit, credit);
 
             entries.Add(new SupplierStatementEntry
             {
@@ -233,6 +247,270 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
 
         dbContext.SupplierStatementEntries.AddRange(entries);
         return entries;
+    }
+
+    public async Task<IReadOnlyList<SupplierStatementEntry>> CreatePurchaseReturnEntriesAsync(
+        PurchaseReturn purchaseReturn,
+        decimal returnAmount,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var duplicateExists = await dbContext.SupplierStatementEntries
+            .AnyAsync(
+                entity => entity.SourceDocType == SupplierStatementSourceDocumentType.PurchaseReturn &&
+                          entity.SourceDocId == purchaseReturn.Id &&
+                          entity.EffectType == SupplierStatementEffectType.PurchaseReturn,
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new InvalidOperationException("Supplier statement effects already exist for this purchase return.");
+        }
+
+        var amount = Round(returnAmount);
+        if (amount <= 0m)
+        {
+            return [];
+        }
+
+        var runningBalance = await GetLatestRunningBalanceAsync(purchaseReturn.SupplierId, cancellationToken);
+        runningBalance = ApplyRunningBalance(runningBalance, amount, 0m);
+
+        var entry = new SupplierStatementEntry
+        {
+            SupplierId = purchaseReturn.SupplierId,
+            EntryDate = purchaseReturn.ReturnDate,
+            SourceDocType = SupplierStatementSourceDocumentType.PurchaseReturn,
+            SourceDocId = purchaseReturn.Id,
+            SourceLineId = purchaseReturn.ReferenceReceiptId,
+            EffectType = SupplierStatementEffectType.PurchaseReturn,
+            Debit = amount,
+            Credit = 0m,
+            RunningBalance = runningBalance,
+            Currency = null,
+            Notes = $"Purchase return {purchaseReturn.ReturnNo}",
+            CreatedBy = actor
+        };
+
+        dbContext.SupplierStatementEntries.Add(entry);
+        return [entry];
+    }
+
+    public async Task<IReadOnlyList<SupplierStatementEntry>> CreatePurchaseReceiptReversalEntriesAsync(
+        PurchaseReceipt receipt,
+        DocumentReversal reversal,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var originalEntries = await LoadOriginalEntriesAsync(
+            receipt.Id,
+            [SupplierStatementSourceDocumentType.PurchaseReceipt],
+            SupplierStatementEffectType.PurchaseReceipt,
+            cancellationToken);
+
+        if (originalEntries.Count == 0)
+        {
+            return [];
+        }
+
+        var duplicateExists = await dbContext.SupplierStatementEntries
+            .AnyAsync(
+                entity => entity.SourceDocType == SupplierStatementSourceDocumentType.PurchaseReceiptReversal &&
+                          entity.SourceDocId == reversal.Id &&
+                          entity.EffectType == SupplierStatementEffectType.PurchaseReceiptReversal,
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new InvalidOperationException("Supplier statement reversal effects already exist for this purchase receipt.");
+        }
+
+        var runningBalance = await GetLatestRunningBalanceAsync(receipt.SupplierId, cancellationToken);
+        var entries = new List<SupplierStatementEntry>(originalEntries.Count);
+
+        foreach (var originalEntry in originalEntries)
+        {
+            var debit = Round(originalEntry.Credit);
+            var credit = Round(originalEntry.Debit);
+            runningBalance = ApplyRunningBalance(runningBalance, debit, credit);
+
+            entries.Add(new SupplierStatementEntry
+            {
+                SupplierId = receipt.SupplierId,
+                EntryDate = reversal.ReversalDate,
+                SourceDocType = SupplierStatementSourceDocumentType.PurchaseReceiptReversal,
+                SourceDocId = reversal.Id,
+                SourceLineId = originalEntry.SourceLineId ?? receipt.Id,
+                EffectType = SupplierStatementEffectType.PurchaseReceiptReversal,
+                Debit = debit,
+                Credit = credit,
+                RunningBalance = runningBalance,
+                Currency = originalEntry.Currency,
+                Notes = $"Reversal {reversal.ReversalNo} for purchase receipt {receipt.ReceiptNo}",
+                CreatedBy = actor
+            });
+        }
+
+        dbContext.SupplierStatementEntries.AddRange(entries);
+        return entries;
+    }
+
+    public async Task<IReadOnlyList<SupplierStatementEntry>> CreatePaymentReversalEntriesAsync(
+        Payment payment,
+        DocumentReversal reversal,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        if (payment.PartyType != PaymentPartyType.Supplier)
+        {
+            throw new InvalidOperationException("Only supplier payments can create supplier statement reversal entries.");
+        }
+
+        var originalEntries = await LoadOriginalEntriesAsync(
+            payment.Id,
+            [SupplierStatementSourceDocumentType.Payment],
+            SupplierStatementEffectType.Payment,
+            cancellationToken);
+
+        if (originalEntries.Count == 0)
+        {
+            return [];
+        }
+
+        var allocationIds = originalEntries
+            .Where(entity => entity.SourceLineId.HasValue)
+            .Select(entity => entity.SourceLineId!.Value)
+            .ToArray();
+        var duplicateExists = await dbContext.SupplierStatementEntries
+            .AnyAsync(
+                entity => entity.SourceDocType == SupplierStatementSourceDocumentType.PaymentReversal &&
+                          entity.SourceDocId == reversal.Id &&
+                          entity.SourceLineId.HasValue &&
+                          allocationIds.Contains(entity.SourceLineId.Value) &&
+                          entity.EffectType == SupplierStatementEffectType.PaymentReversal,
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new InvalidOperationException("Supplier statement reversal effects already exist for this payment.");
+        }
+
+        var runningBalance = await GetLatestRunningBalanceAsync(payment.PartyId, cancellationToken);
+        var entries = new List<SupplierStatementEntry>(originalEntries.Count);
+
+        foreach (var originalEntry in originalEntries)
+        {
+            var debit = Round(originalEntry.Credit);
+            var credit = Round(originalEntry.Debit);
+            runningBalance = ApplyRunningBalance(runningBalance, debit, credit);
+
+            entries.Add(new SupplierStatementEntry
+            {
+                SupplierId = payment.PartyId,
+                EntryDate = reversal.ReversalDate,
+                SourceDocType = SupplierStatementSourceDocumentType.PaymentReversal,
+                SourceDocId = reversal.Id,
+                SourceLineId = originalEntry.SourceLineId,
+                EffectType = SupplierStatementEffectType.PaymentReversal,
+                Debit = debit,
+                Credit = credit,
+                RunningBalance = runningBalance,
+                Currency = originalEntry.Currency ?? payment.Currency,
+                Notes = $"Reversal {reversal.ReversalNo} for payment {payment.PaymentNo}",
+                CreatedBy = actor
+            });
+        }
+
+        dbContext.SupplierStatementEntries.AddRange(entries);
+        return entries;
+    }
+
+    public async Task<IReadOnlyList<SupplierStatementEntry>> CreateShortageResolutionReversalEntriesAsync(
+        ShortageResolution resolution,
+        DocumentReversal reversal,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var originalEntries = await LoadOriginalEntriesAsync(
+            resolution.Id,
+            [SupplierStatementSourceDocumentType.ShortageFinancialResolution, SupplierStatementSourceDocumentType.ShortageResolution],
+            SupplierStatementEffectType.ShortageFinancialResolution,
+            cancellationToken);
+
+        if (originalEntries.Count == 0)
+        {
+            return [];
+        }
+
+        var allocationIds = originalEntries
+            .Where(entity => entity.SourceLineId.HasValue)
+            .Select(entity => entity.SourceLineId!.Value)
+            .ToArray();
+        var duplicateExists = await dbContext.SupplierStatementEntries
+            .AnyAsync(
+                entity => entity.SourceDocType == SupplierStatementSourceDocumentType.ShortageResolutionReversal &&
+                          entity.SourceDocId == reversal.Id &&
+                          entity.SourceLineId.HasValue &&
+                          allocationIds.Contains(entity.SourceLineId.Value) &&
+                          entity.EffectType == SupplierStatementEffectType.ShortageResolutionReversal,
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new InvalidOperationException("Supplier statement reversal effects already exist for this shortage resolution.");
+        }
+
+        var runningBalance = await GetLatestRunningBalanceAsync(resolution.SupplierId, cancellationToken);
+        var entries = new List<SupplierStatementEntry>(originalEntries.Count);
+
+        foreach (var originalEntry in originalEntries)
+        {
+            var debit = Round(originalEntry.Credit);
+            var credit = Round(originalEntry.Debit);
+            runningBalance = ApplyRunningBalance(runningBalance, debit, credit);
+
+            entries.Add(new SupplierStatementEntry
+            {
+                SupplierId = resolution.SupplierId,
+                EntryDate = reversal.ReversalDate,
+                SourceDocType = SupplierStatementSourceDocumentType.ShortageResolutionReversal,
+                SourceDocId = reversal.Id,
+                SourceLineId = originalEntry.SourceLineId,
+                EffectType = SupplierStatementEffectType.ShortageResolutionReversal,
+                Debit = debit,
+                Credit = credit,
+                RunningBalance = runningBalance,
+                Currency = originalEntry.Currency ?? resolution.Currency,
+                Notes = $"Reversal {reversal.ReversalNo} for shortage resolution {resolution.ResolutionNo}",
+                CreatedBy = actor
+            });
+        }
+
+        dbContext.SupplierStatementEntries.AddRange(entries);
+        return entries;
+    }
+
+    private async Task<List<SupplierStatementEntry>> LoadOriginalEntriesAsync(
+        Guid sourceDocId,
+        IReadOnlyCollection<SupplierStatementSourceDocumentType> sourceDocTypes,
+        SupplierStatementEffectType effectType,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.SupplierStatementEntries
+            .AsNoTracking()
+            .Where(entity =>
+                entity.SourceDocId == sourceDocId &&
+                sourceDocTypes.Contains(entity.SourceDocType) &&
+                entity.EffectType == effectType)
+            .OrderBy(entity => entity.EntryDate)
+            .ThenBy(entity => entity.CreatedAt)
+            .ThenBy(entity => entity.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static decimal ApplyRunningBalance(decimal currentBalance, decimal debit, decimal credit)
+    {
+        return Round(currentBalance + credit - debit);
     }
 
     private async Task<decimal> GetLatestRunningBalanceAsync(Guid supplierId, CancellationToken cancellationToken)

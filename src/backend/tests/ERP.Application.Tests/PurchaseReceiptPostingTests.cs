@@ -48,7 +48,7 @@ public sealed class PurchaseReceiptPostingTests
         Assert.Equal(Domain.Statements.SupplierStatementEffectType.PurchaseReceipt, statementEntry.EffectType);
         Assert.Equal(Domain.Statements.SupplierStatementSourceDocumentType.PurchaseReceipt, statementEntry.SourceDocType);
         Assert.Equal(0m, statementEntry.Debit);
-        Assert.Equal(0m, statementEntry.Credit);
+        Assert.Equal(500m, statementEntry.Credit);
     }
 
     [Fact]
@@ -341,6 +341,7 @@ public sealed class PurchaseReceiptPostingTests
             SupplierId = references.Supplier.Id,
             WarehouseId = references.Warehouse.Id,
             ReceiptDate = DateTime.UtcNow.Date,
+            SupplierPayableAmount = 500m,
             Status = DocumentStatus.Draft,
             CreatedBy = "seed",
             Lines =

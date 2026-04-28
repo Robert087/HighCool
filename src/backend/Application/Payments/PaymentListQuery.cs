@@ -1,3 +1,4 @@
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Common;
 using ERP.Domain.Payments;
 
@@ -10,4 +11,8 @@ public sealed record PaymentListQuery(
     DocumentStatus? Status,
     PaymentMethod? PaymentMethod,
     DateTime? FromDate,
-    DateTime? ToDate);
+    DateTime? ToDate,
+    int Page = 1,
+    int PageSize = 20,
+    string? SortBy = null,
+    SortDirection SortDirection = SortDirection.Desc);

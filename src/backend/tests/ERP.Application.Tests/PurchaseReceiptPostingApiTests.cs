@@ -133,6 +133,7 @@ public sealed class PurchaseReceiptPostingApiTests : IClassFixture<PurchaseRecei
             supplierId = supplier.Id,
             warehouseId = warehouse.Id,
             receiptDate = DateTime.UtcNow.Date,
+            supplierPayableAmount = 500m,
             notes = "Ready to post",
             lines = new[]
             {

@@ -16,10 +16,12 @@ import {
   Select,
   SkeletonLoader,
   type FilterChip,
+  useI18n,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listStockBalances, type InventoryFilters, type StockBalance } from "../services/inventoryApi";
 import { listItems, listWarehouses, type Item, type Warehouse } from "../services/masterDataApi";
+import { formatDate, formatQuantity } from "../i18n";
 
 const PAGE_SIZE = 12;
 
@@ -34,6 +36,8 @@ const INITIAL_FILTERS: InventoryFilters = {
 
 export function StockBalancePage() {
   const [rows, setRows] = useState<StockBalance[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [filters, setFilters] = useState<InventoryFilters>(INITIAL_FILTERS);
@@ -41,6 +45,7 @@ export function StockBalancePage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -58,7 +63,7 @@ export function StockBalancePage() {
         }
       } catch {
         if (active) {
-          setError("Failed to load stock balance filters.");
+          setError(t("module.stockBalance.filterError"));
         }
       }
     }
@@ -77,14 +82,25 @@ export function StockBalancePage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listStockBalances(filters);
+        const result = await listStockBalances({
+          filters,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy: "itemCode",
+          sortDirection: "Asc",
+        });
 
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof ApiError ? loadError.message : "Failed to load stock balances.");
+          setError(loadError instanceof ApiError ? loadError.message : t("module.stockBalance.error"));
+          setRows([]);
+          setTotalCount(0);
+          setTotalPages(0);
         }
       } finally {
         if (active) {
@@ -98,16 +114,13 @@ export function StockBalancePage() {
     return () => {
       active = false;
     };
-  }, [filters, reloadKey]);
+  }, [filters, page, reloadKey]);
 
   useEffect(() => {
     setPage(1);
   }, [filters]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
   const hasFilters = useMemo(
     () => Object.values(filters).some((value) => value.trim().length > 0),
     [filters],
@@ -120,7 +133,7 @@ export function StockBalancePage() {
     if (filters.search.trim()) {
       chips.push({
         key: "search",
-        label: `Search: ${filters.search.trim()}`,
+        label: t("module.stockBalance.filter.searchChip", { value: filters.search.trim() }),
         onRemove: () => setFilter("search", ""),
       });
     }
@@ -128,7 +141,7 @@ export function StockBalancePage() {
     if (selectedItem) {
       chips.push({
         key: "item",
-        label: `Item: ${selectedItem.code} - ${selectedItem.name}`,
+        label: t("module.stockBalance.filter.itemChip", { value: `${selectedItem.code} - ${selectedItem.name}` }),
         onRemove: () => setFilter("itemId", ""),
       });
     }
@@ -136,7 +149,7 @@ export function StockBalancePage() {
     if (selectedWarehouse) {
       chips.push({
         key: "warehouse",
-        label: `Warehouse: ${selectedWarehouse.code} - ${selectedWarehouse.name}`,
+        label: t("module.stockBalance.filter.warehouseChip", { value: `${selectedWarehouse.code} - ${selectedWarehouse.name}` }),
         onRemove: () => setFilter("warehouseId", ""),
       });
     }
@@ -144,11 +157,11 @@ export function StockBalancePage() {
     if (filters.transactionType) {
       chips.push({
         key: "transactionType",
-        label: `Type: ${filters.transactionType === "PurchaseReceipt"
-          ? "Purchase receipt"
+        label: t("module.stockBalance.filter.typeChip", { value: t(filters.transactionType === "PurchaseReceipt"
+          ? "module.stockBalance.purchaseReceipt"
           : filters.transactionType === "PurchaseReceiptReversal"
-            ? "Purchase receipt reversal"
-            : "Shortage physical resolution"}`,
+            ? "module.stockBalance.purchaseReceiptReversal"
+            : "module.stockBalance.shortagePhysicalResolution") }),
         onRemove: () => setFilter("transactionType", ""),
       });
     }
@@ -156,7 +169,7 @@ export function StockBalancePage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.stockBalance.filter.dateChip", { from: filters.fromDate || t("common.any"), to: filters.toDate || t("common.any") }),
         onRemove: () => {
           setFilter("fromDate", "");
           setFilter("toDate", "");
@@ -166,7 +179,9 @@ export function StockBalancePage() {
 
     return chips;
   }, [filters, items, warehouses]);
-  const resultLabel = rows.length === 1 ? "1 stock balance row" : `${rows.length} stock balance rows`;
+  const resultLabel = totalCount === 1
+    ? t("module.stockBalance.resultLabel.one", { count: totalCount })
+    : t("module.stockBalance.resultLabel.other", { count: totalCount });
 
   function setFilter<K extends keyof InventoryFilters>(key: K, value: InventoryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -175,12 +190,12 @@ export function StockBalancePage() {
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Stock Balance"
-        description="Review warehouse balances that are derived strictly from stock ledger entries."
-        eyebrow="Inventory"
+        title="module.stockBalance"
+        description="module.stockBalance.description"
+        eyebrow="route.section.inventory"
         actions={
           <Link className="hc-button hc-button--secondary hc-button--md" to="/stock-movements">
-            View stock card
+            {t("module.stockBalance.viewStockCard")}
           </Link>
         }
       />
@@ -199,7 +214,7 @@ export function StockBalancePage() {
           <>
             <Field label="Item">
               <Select value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
-                <option value="">All items</option>
+                <option value="">{t("module.stockBalance.allItems")}</option>
                 {items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.code} - {item.name}
@@ -210,7 +225,7 @@ export function StockBalancePage() {
 
             <Field label="Warehouse">
               <Select value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
-                <option value="">All warehouses</option>
+                <option value="">{t("module.stockBalance.allWarehouses")}</option>
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.code} - {warehouse.name}
@@ -221,10 +236,10 @@ export function StockBalancePage() {
 
             <Field label="Transaction type">
               <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
-                <option value="">All transaction types</option>
-                <option value="PurchaseReceipt">Purchase receipt</option>
-                <option value="PurchaseReceiptReversal">Purchase receipt reversal</option>
-                <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
+                <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
+                <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
+                <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+                <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
               </Select>
             </Field>
 
@@ -241,7 +256,7 @@ export function StockBalancePage() {
         primaryFilters={(
           <>
             <FilterDropdown aria-label="Item filter" value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
-              <option value="">Item</option>
+              <option value="">{t("table.item")}</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.code} - {item.name}
@@ -250,7 +265,7 @@ export function StockBalancePage() {
             </FilterDropdown>
 
             <FilterDropdown aria-label="Warehouse filter" value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
-              <option value="">Warehouse</option>
+              <option value="">{t("table.warehouse")}</option>
               {warehouses.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.code} - {warehouse.name}
@@ -263,7 +278,7 @@ export function StockBalancePage() {
         search={(
           <FilterTextInput
             aria-label="Search stock balances"
-            placeholder="Search item code, item name, warehouse"
+            placeholder={t("module.stockBalance.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
           />
@@ -272,10 +287,10 @@ export function StockBalancePage() {
         secondaryFilters={(
           <Field label="Transaction type">
             <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
-              <option value="">All transaction types</option>
-              <option value="PurchaseReceipt">Purchase receipt</option>
-              <option value="PurchaseReceiptReversal">Purchase receipt reversal</option>
-              <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
+              <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
+              <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
+              <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+              <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
             </Select>
           </Field>
         )}
@@ -284,7 +299,7 @@ export function StockBalancePage() {
       {error ? (
         <Card padding="md">
           <EmptyState
-            title="Unable to load stock balances"
+            title="module.stockBalance.error"
             description={error}
             action={
               <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>
@@ -317,7 +332,7 @@ export function StockBalancePage() {
               <th scope="col">Base UOM</th>
             </tr>
           }
-          rows={visibleRows.map((row) => (
+          rows={rows.map((row) => (
             <tr key={`${row.itemId}-${row.warehouseId}`} className="hc-table__row">
               <td>
                 <div className="hc-table__cell-strong hc-table__primary-cell">
@@ -333,9 +348,9 @@ export function StockBalancePage() {
               </td>
               <td>
                 <div className="hc-table__cell-strong">
-                  <span className="hc-table__title">{row.balanceQty.toLocaleString()}</span>
+                  <span className="hc-table__title">{formatQuantity(row.balanceQty)}</span>
                   <span className="hc-table__subtitle">
-                    {row.lastTransactionDate ? `Updated ${new Date(row.lastTransactionDate).toLocaleDateString()}` : "No movement"}
+                    {row.lastTransactionDate ? t("common.updatedOn", { date: formatDate(row.lastTransactionDate) }) : t("common.noMovement")}
                   </span>
                 </div>
               </td>
@@ -347,12 +362,12 @@ export function StockBalancePage() {
               </td>
             </tr>
           ))}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={rows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={Math.max(totalPages, 1)} />}
           emptyState={
             hasFilters ? (
-              <EmptyState title="No stock balances match the current filters" description="Try a broader search or clear one of the filters." />
+              <EmptyState title="module.stockBalance.emptyFiltered" description="module.stockBalance.emptyFilteredDescription" />
             ) : (
-              <EmptyState title="No stock balances yet" description="Balances appear after posted stock-affecting documents write ledger entries." />
+              <EmptyState title="module.stockBalance.empty" description="module.stockBalance.emptyDescription" />
             )
           }
         />

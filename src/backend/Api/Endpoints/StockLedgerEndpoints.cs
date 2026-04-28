@@ -1,4 +1,5 @@
 using ERP.Application.Inventory;
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Inventory;
 
 namespace ERP.Api.Endpoints;
@@ -25,6 +26,10 @@ public static class StockLedgerEndpoints
         StockTransactionType? transactionType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IStockLedgerQueryService service,
         CancellationToken cancellationToken)
     {
@@ -37,7 +42,7 @@ public static class StockLedgerEndpoints
         try
         {
             var result = await service.ListAsync(
-                new StockLedgerQuery(search, itemId, warehouseId, transactionType, fromDate, toDate),
+                new StockLedgerQuery(search, itemId, warehouseId, transactionType, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Desc),
                 cancellationToken);
 
             return Results.Ok(result);
@@ -55,10 +60,14 @@ public static class StockLedgerEndpoints
         StockTransactionType? transactionType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IStockLedgerQueryService service,
         CancellationToken cancellationToken)
     {
-        return ListLedgerAsync(search, itemId, warehouseId, transactionType, fromDate, toDate, service, cancellationToken);
+        return ListLedgerAsync(search, itemId, warehouseId, transactionType, fromDate, toDate, page, pageSize, sortBy, sortDirection, service, cancellationToken);
     }
 
     private static async Task<IResult> ListBalanceAsync(
@@ -68,6 +77,10 @@ public static class StockLedgerEndpoints
         StockTransactionType? transactionType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IStockBalanceService service,
         CancellationToken cancellationToken)
     {
@@ -80,7 +93,7 @@ public static class StockLedgerEndpoints
         try
         {
             var result = await service.ListAsync(
-                new StockBalanceQuery(search, itemId, warehouseId, transactionType, fromDate, toDate),
+                new StockBalanceQuery(search, itemId, warehouseId, transactionType, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Asc),
                 cancellationToken);
 
             return Results.Ok(result);
@@ -98,10 +111,14 @@ public static class StockLedgerEndpoints
         StockTransactionType? transactionType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IStockBalanceService service,
         CancellationToken cancellationToken)
     {
-        return ListBalanceAsync(search, itemId, warehouseId, transactionType, fromDate, toDate, service, cancellationToken);
+        return ListBalanceAsync(search, itemId, warehouseId, transactionType, fromDate, toDate, page, pageSize, sortBy, sortDirection, service, cancellationToken);
     }
 
     private static string? ValidateDateRange(DateTime? fromDate, DateTime? toDate)

@@ -32,7 +32,8 @@ public sealed class PurchaseOrderCancellationService(
         var hasPostedReceipts = await dbContext.PurchaseReceipts
             .AnyAsync(entity =>
                 entity.PurchaseOrderId == id &&
-                entity.Status == DocumentStatus.Posted,
+                entity.Status == DocumentStatus.Posted &&
+                entity.ReversalDocumentId == null,
                 cancellationToken);
 
         if (hasPostedReceipts)

@@ -177,6 +177,19 @@ Requirements:
 * Document any exception before implementation.
 * Use portal-based overlay rendering for all list-row dropdown menus.
 
+## Localization And Direction
+
+All current and future UI must be bilingual-safe and direction-safe.
+
+Rules:
+
+* Arabic and English are both first-class languages.
+* Do not hardcode user-facing strings in components or pages.
+* Shared translation keys must be used for labels, actions, empty states, dialogs, and validation messages.
+* Components must work correctly in both `dir="ltr"` and `dir="rtl"`.
+* Directional icons, spacing, chevrons, alignment, and drawer placement must follow document direction.
+* Numeric, quantity, currency, and balance cells must remain operationally readable in both languages.
+
 ## List View Component Contract
 
 Every reusable list view implementation must satisfy this contract.
@@ -264,6 +277,9 @@ Rules:
 * spacing between sections must be stronger than spacing inside a section
 * panels for selected work and available work must not visually merge together
 * search and filter controls must be attached to the section they control
+* section order must be obvious from top to bottom without relying on color alone
+* use separate panels or cards for summary, selected work, and available work instead of one continuous surface
+* section headings must be stronger than helper text, and helper text must explain what to do next
 
 ### Empty States
 
@@ -274,6 +290,8 @@ Rules:
 * say what is currently empty
 * explain what the user should do next
 * avoid generic messages such as `No data`
+* keep empty states inside the section they belong to so users know where the next action starts
+* use business-friendly wording instead of system language
 
 Preferred examples:
 
@@ -293,3 +311,18 @@ Rules:
 * row hover must clearly signal actionability
 * action buttons such as `Add` must be easy to find at the row edge
 * table headers should be quieter than row content
+* task tables should have clearer row separation than passive report tables
+* actionable tables should make the row action visually obvious at a glance
+* selected-work tables and available-work tables should feel related but still visually distinct
+
+### Summary Bar Pattern
+
+Use a summary bar or panel when a task page needs totals, counts, remaining values, or one high-priority helper action.
+
+Rules:
+
+* summary content must be visually separate from data tables
+* summary metrics must answer the current task state before the user reads row data
+* one primary helper action such as `Auto-fill FIFO` may live in the summary area
+* summary labels should be short and operational, such as `Selected targets`, `Allocated amount`, or `Still to allocate`
+* summary metrics must not be embedded into selected-row tables or mixed into section toolbars

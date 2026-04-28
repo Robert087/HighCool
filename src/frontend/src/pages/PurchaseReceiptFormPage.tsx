@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
-import { Badge, Button, EmptyState, Field, Input, Select, SkeletonLoader, Textarea, useConfirmationDialog, useToast } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, ReversalDialog, Select, SkeletonLoader, Textarea, useConfirmationDialog, useToast } from "../components/ui";
+import { useI18n } from "../i18n";
 import { ApiError, type ValidationErrors } from "../services/api";
 import {
   listItems,
@@ -31,6 +32,7 @@ import {
   type PurchaseReceiptLineComponentFormValues,
   type PurchaseReceiptLineFormValues,
 } from "../services/purchaseReceiptsApi";
+import { reversePurchaseReceipt } from "../services/reversalsApi";
 
 const initialValues: PurchaseReceiptFormValues = {
   receiptNo: "",
@@ -40,6 +42,7 @@ const initialValues: PurchaseReceiptFormValues = {
   receiptDate: new Date().toISOString().slice(0, 10),
   supplierPayableAmount: 0,
   notes: "",
+  reversalDocumentId: null,
   lines: [],
 };
 
@@ -143,6 +146,7 @@ function mapReceiptToFormValues(receipt: PurchaseReceipt): PurchaseReceiptFormVa
     receiptDate: receipt.receiptDate.slice(0, 10),
     supplierPayableAmount: receipt.supplierPayableAmount,
     notes: receipt.notes ?? "",
+    reversalDocumentId: receipt.reversalDocumentId,
     lines: receipt.lines.map((line) => ({
       lineNo: line.lineNo,
       purchaseOrderLineId: line.purchaseOrderLineId ?? "",
@@ -206,6 +210,7 @@ function buildMissingConversionHint(
 export function PurchaseReceiptFormPage() {
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmationDialog();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { purchaseReceiptId } = useParams();
   const [searchParams] = useSearchParams();
@@ -223,6 +228,8 @@ export function PurchaseReceiptFormPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [reversing, setReversing] = useState(false);
+  const [showReversalDialog, setShowReversalDialog] = useState(false);
   const [loadingPurchaseOrderLines, setLoadingPurchaseOrderLines] = useState(false);
   const [status, setStatus] = useState<DocumentStatus>("Draft");
   const [reloadKey, setReloadKey] = useState(0);
@@ -239,6 +246,7 @@ export function PurchaseReceiptFormPage() {
   );
   const isPosted = status === "Posted";
   const isEditable = status === "Draft";
+  const isReversed = isPosted && Boolean(values.reversalDocumentId);
   const isPurchaseOrderLinked = Boolean(values.purchaseOrderId);
   const totalComponentRows = values.lines.reduce((sum, line) => sum + line.components.length, 0);
   const formId = "purchase-receipt-form";
@@ -260,7 +268,17 @@ export function PurchaseReceiptFormPage() {
           listItems("", "active"),
           listUoms("", "active"),
           listUomConversions("", "active"),
-          listPurchaseOrders(""),
+          listPurchaseOrders({
+            search: "",
+            status: "",
+            receiptProgress: "",
+            fromDate: "",
+            toDate: "",
+            page: 1,
+            pageSize: 100,
+            sortBy: "orderDate",
+            sortDirection: "Desc",
+          }).then((result) => result.items),
           purchaseReceiptId ? getPurchaseReceiptDraft(purchaseReceiptId) : Promise.resolve(null),
         ]);
 
@@ -581,7 +599,8 @@ export function PurchaseReceiptFormPage() {
   const documentStatus = (
     <>
       <Badge tone={status === "Posted" ? "success" : status === "Canceled" ? "neutral" : "warning"}>{status}</Badge>
-      {selectedPurchaseOrder ? <Badge tone="neutral">{selectedPurchaseOrder.poNo}</Badge> : <Badge tone="neutral">Manual receipt</Badge>}
+      {isReversed ? <Badge tone="neutral">{t("status.reversed")}</Badge> : null}
+      {selectedPurchaseOrder ? <Badge tone="neutral">{selectedPurchaseOrder.poNo}</Badge> : <Badge tone="neutral">{t("Manual receipt")}</Badge>}
     </>
   );
 
@@ -590,9 +609,35 @@ export function PurchaseReceiptFormPage() {
       <>
         <Link className="hc-button hc-button--secondary hc-button--md" to="/purchase-receipts">Close</Link>
         {purchaseReceiptId && status === "Draft" ? <Button type="button" isLoading={posting} onClick={handlePost}>Post receipt</Button> : null}
+        {purchaseReceiptId && status === "Posted" && !isReversed ? <Button type="button" variant="secondary" isLoading={reversing} onClick={() => setShowReversalDialog(true)}>Reverse</Button> : null}
         <Button disabled={!isEditable || posting || loadingPurchaseOrderLines} form={formId} isLoading={saving} type="submit">Save draft</Button>
       </>
     );
+  }
+
+  async function handleReverse(reason: string) {
+    if (!purchaseReceiptId) {
+      return;
+    }
+
+    try {
+      setReversing(true);
+      setFormError("");
+      await reversePurchaseReceipt(purchaseReceiptId, reason);
+      const refreshed = await getPurchaseReceiptDraft(purchaseReceiptId);
+      setValues(mapReceiptToFormValues(refreshed));
+      setStatus(refreshed.status);
+      showToast({
+        tone: "success",
+        title: "Purchase receipt reversed",
+        description: `${refreshed.receiptNo} was reversed successfully.`,
+      });
+      setShowReversalDialog(false);
+    } catch (error) {
+      setFormError(error instanceof ApiError ? error.message : "Failed to reverse purchase receipt.");
+    } finally {
+      setReversing(false);
+    }
   }
 
   return (
@@ -604,6 +649,15 @@ export function PurchaseReceiptFormPage() {
       actions={renderActionBar()}
       footer={renderActionBar()}
     >
+      <ReversalDialog
+        description="This reversal will write opposite stock and supplier statement effects and cancel unresolved shortages for the receipt."
+        impactSummary="Reversal is blocked when active purchase returns, supplier payment allocations, or shortage resolutions already depend on this receipt."
+        isLoading={reversing}
+        onCancel={() => setShowReversalDialog(false)}
+        onConfirm={(reason) => void handleReverse(reason)}
+        open={showReversalDialog}
+        title="Reverse purchase receipt"
+      />
       {loading ? (
         <div className="hc-document-section">
           <div className="hc-skeleton-stack">
@@ -745,9 +799,9 @@ export function PurchaseReceiptFormPage() {
             actions={(
               <div className="hc-document-toolbar">
                 <div className="hc-document-toolbar__meta">
-                  {isPurchaseOrderLinked && selectedPurchaseOrder ? <Badge tone="primary">Linked to {selectedPurchaseOrder.poNo}</Badge> : null}
-                  <Badge tone="neutral">{values.lines.length} {values.lines.length === 1 ? "line" : "lines"}</Badge>
-                  <Badge tone="neutral">{totalComponentRows} {totalComponentRows === 1 ? "component row" : "component rows"}</Badge>
+                  {isPurchaseOrderLinked && selectedPurchaseOrder ? <Badge tone="primary">{t("Linked to {value}", { value: selectedPurchaseOrder.poNo })}</Badge> : null}
+                  <Badge tone="neutral">{values.lines.length === 1 ? t("{count} line", { count: values.lines.length }) : t("{count} lines", { count: values.lines.length })}</Badge>
+                  <Badge tone="neutral">{totalComponentRows === 1 ? t("{count} component row", { count: totalComponentRows }) : t("{count} component rows", { count: totalComponentRows })}</Badge>
                 </div>
                 <Button disabled={!isEditable || isPurchaseOrderLinked} type="button" onClick={addLine}>Add line</Button>
               </div>
@@ -825,8 +879,8 @@ export function PurchaseReceiptFormPage() {
                           <div className="hc-line-components hc-line-components--panel">
                             <div className="hc-line-components__header">
                               <div className="po-form-toolbar">
-                                <Badge tone="neutral">{item?.code ?? "No item selected"}</Badge>
-                                <Badge tone="neutral">{line.components.length} {line.components.length === 1 ? "component" : "components"}</Badge>
+                                <Badge tone="neutral">{item?.code ?? t("No item selected")}</Badge>
+                                <Badge tone="neutral">{line.components.length === 1 ? t("{count} component", { count: line.components.length }) : t("{count} components", { count: line.components.length })}</Badge>
                               </div>
                               <p className="hc-line-components__description">
                                 {item?.components.length

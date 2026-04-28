@@ -91,6 +91,9 @@ public sealed class StockLedgerEntryConfiguration : AuditableEntityConfiguration
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(entity => new { entity.ItemId, entity.WarehouseId, entity.TransactionDate });
+        builder.HasIndex(entity => new { entity.WarehouseId, entity.TransactionDate });
+        builder.HasIndex(entity => new { entity.TransactionType, entity.TransactionDate });
+        builder.HasIndex(entity => new { entity.SourceDocType, entity.SourceDocId });
         builder.HasIndex(entity => new { entity.SourceDocId, entity.SourceLineId, entity.TransactionType })
             .IsUnique();
     }

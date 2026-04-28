@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.Shortages;
 
 public interface IShortageResolutionService
 {
-    Task<IReadOnlyList<ShortageResolutionListItemDto>> ListAsync(ShortageResolutionListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<ShortageResolutionListItemDto>> ListAsync(ShortageResolutionListQuery query, CancellationToken cancellationToken);
 
     Task<ShortageResolutionDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 
@@ -12,7 +14,7 @@ public interface IShortageResolutionService
 
     Task<IReadOnlyList<ShortageResolutionAllocationDto>> GetAllocationsAsync(Guid id, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<OpenShortageDto>> ListOpenShortagesAsync(OpenShortageQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<OpenShortageDto>> ListOpenShortagesAsync(OpenShortageQuery query, CancellationToken cancellationToken);
 
     Task<OpenShortageDto?> GetShortageAsync(Guid id, CancellationToken cancellationToken);
 

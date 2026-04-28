@@ -1,51 +1,53 @@
 import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { Badge, Button, PageContainer, useToast } from "../components/ui";
+import { useI18n } from "../i18n";
 
 const navigationGroups = [
   {
     id: "main",
-    label: "Main",
+    label: "nav.main",
     items: [
-      { label: "Dashboard", to: "/", icon: "dashboard" },
+      { label: "nav.dashboard", to: "/", icon: "dashboard" },
     ],
   },
   {
     id: "purchasing",
-    label: "Purchasing",
+    label: "nav.purchasing",
     items: [
-      { label: "Purchase Orders", to: "/purchase-orders", icon: "document" },
-      { label: "Purchase Receipts", to: "/purchase-receipts", icon: "receipt" },
+      { label: "nav.purchaseOrders", to: "/purchase-orders", icon: "document" },
+      { label: "nav.purchaseReceipts", to: "/purchase-receipts", icon: "receipt" },
+      { label: "nav.purchaseReturns", to: "/purchase-returns", icon: "receipt" },
     ],
   },
   {
     id: "inventory",
-    label: "Inventory",
+    label: "nav.inventory",
     items: [
-      { label: "Open Shortages", to: "/open-shortages", icon: "alert" },
-      { label: "Shortage Resolutions", to: "/shortage-resolutions", icon: "resolve" },
-      { label: "Stock Balance", to: "/stock-balances", icon: "balance" },
-      { label: "Stock Card", to: "/stock-movements", icon: "ledger" },
+      { label: "module.shortages", to: "/open-shortages", icon: "alert" },
+      { label: "nav.shortageResolutions", to: "/shortage-resolutions", icon: "resolve" },
+      { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
+      { label: "nav.stockCard", to: "/stock-movements", icon: "ledger" },
     ],
   },
   {
     id: "statements",
-    label: "Statements",
+    label: "nav.statements",
     items: [
-      { label: "Supplier Statement", to: "/supplier-statements", icon: "statement" },
-      { label: "Supplier Payments", to: "/payments", icon: "payment" },
+      { label: "nav.supplierStatement", to: "/supplier-statements", icon: "statement" },
+      { label: "nav.supplierPayments", to: "/payments", icon: "payment" },
     ],
   },
   {
     id: "master-data",
-    label: "Master Data",
+    label: "nav.masterData",
     items: [
-      { label: "Customers", to: "/customers", icon: "customers" },
-      { label: "Items", to: "/items", icon: "items" },
-      { label: "UOM Conversions", to: "/uom-conversions", icon: "conversion" },
-      { label: "Suppliers", to: "/suppliers", icon: "suppliers" },
-      { label: "Warehouses", to: "/warehouses", icon: "warehouse" },
-      { label: "UOMs", to: "/uoms", icon: "uom" },
+      { label: "nav.customers", to: "/customers", icon: "customers" },
+      { label: "nav.items", to: "/items", icon: "items" },
+      { label: "nav.uomConversions", to: "/uom-conversions", icon: "conversion" },
+      { label: "nav.suppliers", to: "/suppliers", icon: "suppliers" },
+      { label: "nav.warehouses", to: "/warehouses", icon: "warehouse" },
+      { label: "nav.uoms", to: "/uoms", icon: "uom" },
     ],
   },
 ] as const;
@@ -136,7 +138,7 @@ function readStoredBoolean(key: string, fallback: boolean) {
 }
 
 function getGroupForPath(pathname: string) {
-  if (pathname.startsWith("/purchase-orders") || pathname.startsWith("/purchase-receipts")) {
+  if (pathname.startsWith("/purchase-orders") || pathname.startsWith("/purchase-receipts") || pathname.startsWith("/purchase-returns")) {
     return "purchasing";
   }
 
@@ -227,6 +229,15 @@ function getRouteMeta(pathname: string): RouteMeta {
       eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Receipt editor" : "Purchase receipts",
       title: pathname.includes("/new") ? "Create purchase receipt" : pathname.includes("/edit") ? "Edit purchase receipt" : "Purchase receipts",
       subtitle: "Capture actual deliveries, linked purchase order context, and component shortages with full traceability.",
+    };
+  }
+
+  if (pathname.startsWith("/purchase-returns")) {
+    return {
+      section: "Purchasing",
+      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Return editor" : "Purchase returns",
+      title: pathname.includes("/new") ? "Create purchase return" : pathname.includes("/edit") ? "Edit purchase return" : "Purchase returns",
+      subtitle: "Send received stock back through a controlled return flow that preserves stock and supplier audit history.",
     };
   }
 
@@ -341,25 +352,25 @@ function getRouteMeta(pathname: string): RouteMeta {
 
 function greetingForHour(hour: number) {
   if (hour < 12) {
-    return "Good morning";
+    return "app.goodMorning";
   }
 
   if (hour < 18) {
-    return "Good afternoon";
+    return "app.goodAfternoon";
   }
 
-  return "Good evening";
+  return "app.goodEvening";
 }
 
 export function AppShell({ children }: PropsWithChildren) {
   const location = useLocation();
   const { showToast } = useToast();
+  const { direction, locale, setLocale, t, translateText } = useI18n();
   const activeGroupId = getGroupForPath(location.pathname);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredBoolean(SIDEBAR_COLLAPSED_KEY, false));
   const [sidebarGroups, setSidebarGroups] = useState<GroupState>(() => readStoredGroupState(activeGroupId));
-  const routeMeta = getRouteMeta(location.pathname);
   const isDashboard = location.pathname === "/" || location.pathname === "/home";
-  const greeting = `${greetingForHour(new Date().getHours())}, Robert`;
+  const greeting = `${t(greetingForHour(new Date().getHours()))}, Robert`;
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   useEffect(() => {
@@ -394,8 +405,8 @@ export function AppShell({ children }: PropsWithChildren) {
   function handleAiAssist() {
     showToast({
       tone: "info",
-      title: "Ask AI",
-      description: "Use AI for quick help with missing setup, open shortages, and the next operational step.",
+      title: t("app.askAi"),
+      description: translateText("Use AI for quick help with missing setup, open shortages, and the next operational step."),
     });
   }
 
@@ -407,23 +418,23 @@ export function AppShell({ children }: PropsWithChildren) {
   }
 
   const workspaceStatus = useMemo(() => ({
-    connectionLabel: isOnline ? "Connected" : "Offline",
-    draftLabel: "0 drafts pending",
-  }), [isOnline]);
+    connectionLabel: isOnline ? t("app.connected") : t("app.offline"),
+    draftLabel: t("app.draftsPending", { count: 0 }),
+  }), [isOnline, t]);
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`}>
+    <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`} dir={direction}>
       <aside className={`app-sidebar ${sidebarCollapsed ? "app-sidebar--collapsed" : ""}`}>
         <div className="app-sidebar__top">
           <div className="app-sidebar__brand">
             <div className="app-sidebar__brand-mark">HC</div>
             <div className="app-sidebar__brand-copy">
-              <h1 className="app-sidebar__title">HighCool ERP</h1>
+              <h1 className="app-sidebar__title">{t("app.productName")}</h1>
             </div>
           </div>
 
           <Button
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={sidebarCollapsed ? t("app.expandSidebar") : t("app.collapseSidebar")}
             className="app-sidebar__toggle"
             size="sm"
             variant="ghost"
@@ -433,7 +444,7 @@ export function AppShell({ children }: PropsWithChildren) {
           </Button>
         </div>
 
-        <nav aria-label="Primary" className="app-sidebar__nav">
+        <nav aria-label={t("app.primaryNavigation")} className="app-sidebar__nav">
           {navigationGroups.map((group) => (
             <section key={group.label} className="app-sidebar__group">
               {!sidebarCollapsed ? (
@@ -444,7 +455,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                 >
-                  <span className="app-sidebar__group-label">{group.label}</span>
+                  <span className="app-sidebar__group-label">{translateText(group.label)}</span>
                   <ChevronIcon expanded={sidebarGroups[group.id]} />
                 </button>
               ) : (
@@ -459,17 +470,17 @@ export function AppShell({ children }: PropsWithChildren) {
                   {group.items.map((item) => (
                     <li key={item.to}>
                       <NavLink
-                        aria-label={item.label}
+                        aria-label={translateText(item.label)}
                         className={({ isActive }) =>
                           `app-sidebar__nav-item ${isActive ? "app-sidebar__nav-item--active" : ""}`
                         }
-                        title={sidebarCollapsed ? item.label : undefined}
+                        title={sidebarCollapsed ? translateText(item.label) : undefined}
                         to={item.to}
                       >
                         <span className="app-sidebar__nav-icon" aria-hidden="true">
                           <SidebarIcon name={item.icon} />
                         </span>
-                        <span className="app-sidebar__nav-label">{item.label}</span>
+                        <span className="app-sidebar__nav-label">{translateText(item.label)}</span>
                       </NavLink>
                     </li>
                   ))}
@@ -480,10 +491,18 @@ export function AppShell({ children }: PropsWithChildren) {
         </nav>
 
         <div className="app-sidebar__footer">
+          <div className="app-sidebar__locale-switcher" role="group" aria-label={t("app.language")}>
+            <Button size="sm" variant={locale === "en" ? "secondary" : "ghost"} onClick={() => setLocale("en")}>
+              {t("app.language.en")}
+            </Button>
+            <Button size="sm" variant={locale === "ar" ? "secondary" : "ghost"} onClick={() => setLocale("ar")}>
+              {t("app.language.ar")}
+            </Button>
+          </div>
           <div className="app-sidebar__status" title={sidebarCollapsed ? `${workspaceStatus.connectionLabel} · ${workspaceStatus.draftLabel}` : undefined}>
             <div className="app-sidebar__status-header">
               <span className={`status-dot ${isOnline ? "online" : "offline"}`} />
-              <span className="app-sidebar__status-title">Workspace status</span>
+              <span className="app-sidebar__status-title">{t("app.workspaceStatus")}</span>
             </div>
             <div className="app-sidebar__status-copy">
               <span className="app-sidebar__status-line">{workspaceStatus.connectionLabel}</span>
@@ -496,18 +515,18 @@ export function AppShell({ children }: PropsWithChildren) {
       <div className="app-main">
         {isDashboard ? (
           <header className="app-topbar">
-            <PageContainer width="wide" className="app-topbar__container">
+            <div className="app-topbar__container">
               <div className="app-topbar__utility">
-                <div className="app-topbar__breadcrumbs" aria-label="Section context">
-                  <span>HighCool ERP</span>
+                <div className="app-topbar__breadcrumbs" aria-label={t("app.sectionContext")}>
+                  <span>{t("app.productName")}</span>
                   <span className="app-topbar__separator">/</span>
-                  <span>Dashboard</span>
+                  <span>{t("nav.dashboard")}</span>
                 </div>
 
                 <div className="app-topbar__utility-actions">
-                  <Badge tone="primary">Offline drafts only</Badge>
+                  <Badge tone="primary">{t("app.offlineDraftsOnly")}</Badge>
                   <Button size="sm" variant="ghost" onClick={handleAiAssist}>
-                    Ask AI
+                    {t("app.askAi")}
                   </Button>
                 </div>
               </div>
@@ -515,24 +534,24 @@ export function AppShell({ children }: PropsWithChildren) {
               <div className="app-topbar__welcome">
                 <div className="app-topbar__headline">
                   <h2 className="app-topbar__title">{greeting}</h2>
-                  <p className="app-topbar__description">Here&apos;s what needs your attention today.</p>
+                  <p className="app-topbar__description">{t("app.dashboardAttention")}</p>
                 </div>
 
                 <div className="app-topbar__actions app-topbar__actions--compact">
                   <div className="app-topbar__quick-actions app-topbar__quick-actions--compact">
                     <Link className="hc-button hc-button--ghost hc-button--sm" to="/items">
-                      Review items
+                      {t("app.reviewItems")}
                     </Link>
                     <Link className="hc-button hc-button--ghost hc-button--sm" to="/suppliers">
-                      Review suppliers
+                      {t("app.reviewSuppliers")}
                     </Link>
                     <Link className="hc-button hc-button--ghost hc-button--sm" to="/open-shortages">
-                      Open shortages
+                      {t("app.openShortages")}
                     </Link>
                   </div>
                 </div>
               </div>
-            </PageContainer>
+            </div>
           </header>
         ) : null}
 

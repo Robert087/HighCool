@@ -3,6 +3,7 @@ using ERP.Domain.Inventory;
 using ERP.Domain.MasterData;
 using ERP.Domain.Payments;
 using ERP.Domain.Purchasing;
+using ERP.Domain.Reversals;
 using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<PurchaseReceiptLineComponent> PurchaseReceiptLineComponents => Set<PurchaseReceiptLineComponent>();
 
+    public DbSet<PurchaseReturn> PurchaseReturns => Set<PurchaseReturn>();
+
+    public DbSet<PurchaseReturnLine> PurchaseReturnLines => Set<PurchaseReturnLine>();
+
     public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
     public DbSet<ShortageReasonCode> ShortageReasonCodes => Set<ShortageReasonCode>();
@@ -52,6 +57,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Payment> Payments => Set<Payment>();
 
     public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+
+    public DbSet<DocumentReversal> DocumentReversals => Set<DocumentReversal>();
 
     public override int SaveChanges()
     {
@@ -131,5 +138,21 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             throw new InvalidOperationException("Supplier statement entries are append-only and cannot be edited or deleted.");
         }
+
+        var invalidAddedSupplierStatementEntry = ChangeTracker.Entries<SupplierStatementEntry>()
+            .FirstOrDefault(entry =>
+                entry.State == EntityState.Added &&
+                Round(entry.Entity.Debit) == 0m &&
+                Round(entry.Entity.Credit) == 0m);
+
+        if (invalidAddedSupplierStatementEntry is not null)
+        {
+            throw new InvalidOperationException("Supplier statement financial entries must have a non-zero debit or credit amount.");
+        }
+    }
+
+    private static decimal Round(decimal value)
+    {
+        return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
     }
 }
