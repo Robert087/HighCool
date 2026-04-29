@@ -102,6 +102,7 @@ Behavior:
 
 * fully received rows are excluded from this actionable endpoint
 * remaining receivable quantity uses posted, non-reversed receipts only
+* each row includes `unitPrice` from the linked PO line for receipt payable calculation
 
 ### `POST /api/purchase-orders`
 
@@ -121,6 +122,7 @@ Request body:
       "lineNo": 1,
       "itemId": "guid",
       "orderedQty": 10.0,
+      "unitPrice": 125.0,
       "uomId": "guid",
       "notes": "Main ordered item"
     }
@@ -160,7 +162,7 @@ Optional query parameters:
 
 ### `GET /api/purchase-receipts/{id}`
 
-Returns one purchase receipt with nested lines and auto-filled component rows. Each line includes `remainingReturnableQty`. Each component row includes system-derived `expectedQty` plus editable `actualReceivedQty`.
+Returns one purchase receipt with nested lines and auto-filled component rows. Each line includes `remainingReturnableQty`; PO-linked lines also include `unitPrice` and `lineAmount`. Each component row includes system-derived `expectedQty` plus editable `actualReceivedQty`.
 
 Behavior:
 
@@ -227,7 +229,8 @@ Behavior:
 * posting creates stock ledger entries
 * posting creates supplier statement rows from the current receipt financial basis only when that basis is positive
 * posting creates shortage ledger entries when actual components are below expected BOM quantities
-* `supplierPayableAmount` is the current explicit receipt financial basis until receipt line pricing exists
+* PO-linked `supplierPayableAmount` is server-calculated from `receivedQty x purchaseOrderLine.unitPrice`
+* manual `supplierPayableAmount` remains the explicit receipt financial basis until manual receipt line pricing exists
 * if `supplierPayableAmount <= 0`, posting still succeeds but no zero-value supplier statement row is created
 
 ## Shortage Reason Codes

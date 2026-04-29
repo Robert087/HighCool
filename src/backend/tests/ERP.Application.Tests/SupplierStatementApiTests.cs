@@ -142,6 +142,7 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
                 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }
 
@@ -166,6 +167,7 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await dbContext.Database.EnsureDeletedAsync();
             await dbContext.Database.EnsureCreatedAsync();
+            await AuthenticatedApiTestSupport.SeedAuthenticatedContextAsync(scope.ServiceProvider, dbContext);
         }
     }
 

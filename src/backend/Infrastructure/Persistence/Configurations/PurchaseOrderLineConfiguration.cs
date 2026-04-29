@@ -28,6 +28,11 @@ public sealed class PurchaseOrderLineConfiguration : AuditableEntityConfiguratio
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 
+        builder.Property(entity => entity.UnitPrice)
+            .HasColumnName("unit_price")
+            .HasColumnType("decimal(18,6)")
+            .IsRequired();
+
         builder.Property(entity => entity.UomId)
             .HasColumnName("uom_id")
             .IsRequired();

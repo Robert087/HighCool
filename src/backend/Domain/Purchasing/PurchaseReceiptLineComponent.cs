@@ -4,7 +4,7 @@ using ERP.Domain.Shortages;
 
 namespace ERP.Domain.Purchasing;
 
-public sealed class PurchaseReceiptLineComponent : AuditableEntity
+public sealed class PurchaseReceiptLineComponent : OrganizationScopedAuditableEntity
 {
     public Guid PurchaseReceiptLineId { get; set; }
 

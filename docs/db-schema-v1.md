@@ -66,6 +66,7 @@ Columns:
 * `line_no`
 * `item_id`
 * `ordered_qty`
+* `unit_price`
 * `uom_id`
 * `notes`
 * audit fields
@@ -421,7 +422,8 @@ Behavior rules:
 * this table is append-only
 * no direct supplier balance edit table exists or is allowed
 * `running_balance` is stored as `previous + credit - debit`
-* purchase receipt statement rows currently use `purchase_receipts.supplier_payable_amount` until receipt line pricing is implemented
+* purchase receipt statement rows use `purchase_receipts.supplier_payable_amount`
+* PO-linked receipt payable amount is calculated from received quantities and linked PO line `unit_price`
 * payment statement rows use `source_line_id = payment_allocations.id` for allocation traceability
 * purchase return statement rows use `source_line_id = purchase_returns.reference_receipt_id` when linked so supplier target state can reduce the correct receipt
 

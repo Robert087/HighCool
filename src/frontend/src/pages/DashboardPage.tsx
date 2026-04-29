@@ -1,135 +1,351 @@
-import { DashboardLayout, type DashboardActionItem, type DashboardAttentionItem, type DashboardKpiItem, type DashboardWorkSection } from "../components/patterns";
+import { useEffect, useMemo, useState } from "react";
+import {
+  type DashboardActivityItem,
+  DashboardLayout,
+  type DashboardAlertItem,
+  type DashboardFinanceMetric,
+  type DashboardKpiItem,
+  type DashboardQueueItem,
+} from "../components/patterns";
+import { Button, EmptyState, SkeletonLoader } from "../components/ui";
+import { useI18n } from "../i18n";
+import { ApiError } from "../services/api";
+import { loadDashboardSnapshot, type DashboardSnapshot } from "../services/dashboardApi";
 
-const attentionItems: DashboardAttentionItem[] = [
-  {
-    id: "shortages",
-    icon: "alert",
-    title: "Review open shortages",
-    description: "Resolve unresolved component shortages.",
-    count: 12,
-    ctaLabel: "Review",
-    to: "/open-shortages",
-    tone: "urgent",
-  },
-  {
-    id: "receipts",
-    icon: "receipt",
-    title: "Check pending purchase receipts",
-    description: "Capture receipts waiting on warehouse action.",
-    count: 8,
-    ctaLabel: "Open",
-    to: "/purchase-receipts",
-    tone: "pending",
-  },
-  {
-    id: "suppliers",
-    icon: "statement",
-    title: "Validate supplier master data",
-    description: "Fix supplier records before statement activity grows.",
-    count: 3,
-    ctaLabel: "Review",
-    to: "/suppliers",
-    tone: "normal",
-  },
-  {
-    id: "items",
-    icon: "inventory",
-    title: "Audit item setup",
-    description: "Check item setup before posting volume grows.",
-    count: 5,
-    ctaLabel: "Open",
-    to: "/items",
-    tone: "normal",
-  },
-];
+function formatQueueAge(date: string | null, formatDate: ReturnType<typeof useI18n>["formatDate"], t: ReturnType<typeof useI18n>["t"]) {
+  if (!date) {
+    return t("dashboard.queue.noOldest");
+  }
 
-const quickActions: DashboardActionItem[] = [
-  {
-    id: "purchase-orders",
-    icon: "document",
-    label: "Purchase Orders",
-    meta: "Create and post supplier demand",
-    to: "/purchase-orders",
-  },
-  {
-    id: "purchase-receipts",
-    icon: "receipt",
-    label: "Purchase Receipts",
-    meta: "Capture deliveries and shortages",
-    to: "/purchase-receipts",
-  },
-  {
-    id: "stock-balance",
-    icon: "inventory",
-    label: "Stock Balance",
-    meta: "Check on-hand quantities by warehouse",
-    to: "/stock-balances",
-  },
-  {
-    id: "supplier-statement",
-    icon: "statement",
-    label: "Supplier Statement",
-    meta: "Review supplier balance position",
-    to: "/supplier-statements",
-  },
-];
+  return t("dashboard.queue.oldest", {
+    date: formatDate(date, { day: "numeric", month: "short" }),
+  });
+}
 
-const kpis: DashboardKpiItem[] = [
-  {
-    id: "purchasing",
-    label: "Purchasing",
-    value: "2",
-    description: "Core purchasing workflows live",
-  },
-  {
-    id: "inventory",
-    label: "Inventory",
-    value: "4",
-    description: "Inventory views ready for daily review",
-  },
-  {
-    id: "workspace",
-    label: "Workspace",
-    value: "0",
-    description: "Drafts pending in this workspace",
-  },
-];
-
-const workSections: DashboardWorkSection[] = [
-  {
-    id: "recent",
-    title: "Recent work",
-    description: "Open the latest work items without scanning full modules.",
-    items: [
-      { id: "recent-1", icon: "document", title: "Purchase order drafts", meta: "Continue supplier demand planning", to: "/purchase-orders" },
-      { id: "recent-2", icon: "receipt", title: "Latest purchase receipts", meta: "Review recently captured warehouse receipts", to: "/purchase-receipts" },
-      { id: "recent-3", icon: "statement", title: "Supplier statement review", meta: "Check recent supplier movement", to: "/supplier-statements" },
-    ],
-  },
-  {
-    id: "pending",
-    title: "Pending work",
-    description: "System-driven tasks that still need user action.",
-    items: [
-      { id: "pending-1", icon: "clock", title: "Posted orders waiting for receipt capture", meta: "Move from purchasing into warehouse receiving", to: "/purchase-receipts" },
-      { id: "pending-2", icon: "alert", title: "Shortages requiring resolution", meta: "Resolve physical or financial shortages", to: "/shortage-resolutions" },
-      { id: "pending-3", icon: "check", title: "Supplier balances requiring settlement review", meta: "Verify open supplier payment targets", to: "/payments" },
-    ],
-  },
-];
+function DashboardSkeleton() {
+  return (
+    <section className="hc-erp-dashboard">
+      <SkeletonLoader variant="rect" height="17rem" />
+      <SkeletonLoader variant="rect" height="11rem" />
+      <SkeletonLoader variant="rect" height="10rem" />
+      <SkeletonLoader variant="rect" height="5.5rem" />
+    </section>
+  );
+}
 
 export function DashboardPage() {
+  const { formatCurrency, formatDate, formatNumber, t } = useI18n();
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
+        const nextSnapshot = await loadDashboardSnapshot();
+        if (active) {
+          setSnapshot(nextSnapshot);
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof ApiError ? loadError.message : t("dashboard.loadError"));
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [reloadKey, t]);
+
+  const dashboardModel = useMemo(() => {
+    if (!snapshot) {
+      return null;
+    }
+
+    const alerts: Array<DashboardAlertItem & { rawCount: number }> = [
+      {
+        id: "open-shortages",
+        icon: "alert" as const,
+        title: "dashboard.alerts.shortages.title",
+        description: t("dashboard.alerts.shortages.summary", {
+          qty: formatNumber(snapshot.openShortageQty),
+        }),
+        count: formatNumber(snapshot.openShortageCount),
+        actionLabel: "dashboard.actions.reviewShortages",
+        to: "/open-shortages",
+        tone: "danger" as const,
+        rawCount: snapshot.openShortageCount,
+      },
+      {
+        id: "pending-receipts",
+        icon: "receipt" as const,
+        title: "dashboard.alerts.receipts.title",
+        description: t("dashboard.alerts.receipts.summary", {
+          count: formatNumber(snapshot.pendingReceiptCount),
+        }),
+        count: formatNumber(snapshot.pendingReceiptCount),
+        actionLabel: "dashboard.actions.reviewReceipts",
+        to: "/purchase-receipts",
+        tone: "warning" as const,
+        rawCount: snapshot.pendingReceiptCount,
+      },
+      {
+        id: "negative-stock",
+        icon: "inventory" as const,
+        title: "dashboard.alerts.negativeStock.title",
+        description: t("dashboard.alerts.negativeStock.summary", {
+          count: formatNumber(snapshot.negativeStockCount),
+        }),
+        count: formatNumber(snapshot.negativeStockCount),
+        actionLabel: "dashboard.actions.viewStockCard",
+        to: "/stock-balances",
+        tone: "danger" as const,
+        rawCount: snapshot.negativeStockCount,
+      },
+      {
+        id: "unposted-transactions",
+        icon: "document" as const,
+        title: "dashboard.alerts.unposted.title",
+        description: t("dashboard.alerts.unposted.summary", {
+          count: formatNumber(snapshot.unpostedTransactionCount),
+        }),
+        count: formatNumber(snapshot.unpostedTransactionCount),
+        actionLabel: "dashboard.actions.reviewTransactions",
+        to: "/purchase-orders",
+        tone: "warning" as const,
+        rawCount: snapshot.unpostedTransactionCount,
+      },
+    ].filter((alert) => alert.rawCount > 0);
+
+    const kpis: Array<DashboardKpiItem & { rawCount: number }> = [
+      {
+        id: "overview-approvals",
+        icon: "document" as const,
+        moduleLabel: "dashboard.modules.purchasing",
+        title: "dashboard.overview.pendingApprovals.title",
+        value: formatNumber(snapshot.approvalsQueueCount),
+        description: t("dashboard.overview.pendingApprovals.description", {
+          count: formatNumber(snapshot.approvalsQueueCount),
+        }),
+        actionLabel: "dashboard.actions.reviewApprovals",
+        to: "/purchase-orders",
+        tone: "warning" as const,
+        rawCount: snapshot.approvalsQueueCount,
+      },
+      {
+        id: "overview-receipts",
+        icon: "receipt" as const,
+        moduleLabel: "dashboard.modules.inventory",
+        title: "dashboard.overview.receiptsWaitingPosting.title",
+        value: formatNumber(snapshot.pendingReceiptCount),
+        description: t("dashboard.overview.receiptsWaitingPosting.description", {
+          count: formatNumber(snapshot.pendingReceiptCount),
+        }),
+        to: "/purchase-receipts",
+        actionLabel: "dashboard.actions.openReceipts",
+        tone: "warning" as const,
+        rawCount: snapshot.pendingReceiptCount,
+      },
+      {
+        id: "overview-unposted",
+        icon: "document" as const,
+        moduleLabel: "dashboard.modules.purchasing",
+        title: "dashboard.overview.unpostedTransactions.title",
+        value: formatNumber(snapshot.unpostedTransactionCount),
+        description: t("dashboard.overview.unpostedTransactions.description", {
+          count: formatNumber(snapshot.unpostedTransactionCount),
+        }),
+        actionLabel: "dashboard.actions.reviewTransactions",
+        to: "/purchase-orders",
+        tone: "warning" as const,
+        rawCount: snapshot.unpostedTransactionCount,
+      },
+      {
+        id: "overview-payments",
+        icon: "statement" as const,
+        moduleLabel: "dashboard.modules.finance",
+        title: "dashboard.overview.draftPayments.title",
+        value: formatNumber(snapshot.financeDraftCount),
+        description: t("dashboard.overview.draftPayments.description", {
+          count: formatNumber(snapshot.financeDraftCount),
+        }),
+        actionLabel: "dashboard.actions.openPayments",
+        to: "/payments",
+        tone: "primary" as const,
+        rawCount: snapshot.financeDraftCount,
+      },
+    ];
+
+    const queues: Array<DashboardQueueItem & { rawCount: number }> = [
+      {
+        id: "approvals",
+        title: "dashboard.queues.approvals.title",
+        count: formatNumber(snapshot.approvalsQueueCount),
+        owner: t("dashboard.queues.approvals.owner"),
+        eta: formatQueueAge(snapshot.oldestApprovalDate, formatDate, t),
+        to: "/purchase-orders",
+        tone: "warning" as const,
+        rawCount: snapshot.approvalsQueueCount,
+      },
+      {
+        id: "warehouse",
+        title: "dashboard.queues.warehouse.title",
+        count: formatNumber(snapshot.warehouseQueueCount),
+        owner: t("dashboard.queues.warehouse.owner"),
+        eta: formatQueueAge(snapshot.oldestWarehouseDate, formatDate, t),
+        to: "/purchase-receipts",
+        tone: "primary" as const,
+        rawCount: snapshot.warehouseQueueCount,
+      },
+      {
+        id: "supplier-validation",
+        title: "dashboard.queues.validation.title",
+        count: formatNumber(snapshot.supplierIssueCount),
+        owner: t("dashboard.queues.validation.owner"),
+        eta: snapshot.supplierIssueCount > 0
+          ? t("dashboard.queues.validation.meta", {
+            suppliers: snapshot.supplierIssueNames.join(", "),
+          })
+          : formatQueueAge(snapshot.oldestSupplierIssueDate, formatDate, t),
+        to: "/suppliers",
+        tone: "danger" as const,
+        rawCount: snapshot.supplierIssueCount,
+      },
+    ].filter((queue) => queue.rawCount > 0);
+
+    const financialMetrics: DashboardFinanceMetric[] = [];
+
+    if (snapshot.statementDebitsToday > 0) {
+      financialMetrics.push({
+        id: "supplier-debits",
+        title: "dashboard.finance.debitsToday.title",
+        value: formatCurrency(snapshot.statementDebitsToday, { currency: "EGP" }),
+        to: "/supplier-statements",
+        tone: "warning",
+      });
+    }
+
+    if (snapshot.statementCreditsToday > 0) {
+      financialMetrics.push({
+        id: "supplier-credits",
+        title: "dashboard.finance.creditsToday.title",
+        value: formatCurrency(snapshot.statementCreditsToday, { currency: "EGP" }),
+        to: "/supplier-statements",
+        tone: "success",
+      });
+    }
+
+    if (snapshot.financeDraftCount > 0) {
+      financialMetrics.push({
+        id: "draft-payments",
+        title: "dashboard.finance.draftPayments.title",
+        value: formatNumber(snapshot.financeDraftCount),
+        to: "/payments",
+        tone: "primary",
+      });
+    }
+
+    const activityChart: DashboardActivityItem[] = [
+      {
+        id: "activity-orders",
+        label: "dashboard.activity.orders",
+        tone: "primary" as const,
+        to: "/purchase-orders",
+        value: snapshot.ordersTodayCount,
+        valueLabel: formatNumber(snapshot.ordersTodayCount),
+        context: t("dashboard.activity.orders.context"),
+      },
+      {
+        id: "activity-receipts",
+        label: "dashboard.activity.receipts",
+        tone: "success" as const,
+        to: "/purchase-receipts",
+        value: snapshot.postedReceiptsTodayCount,
+        valueLabel: formatNumber(snapshot.postedReceiptsTodayCount),
+        context: snapshot.pendingReceiptCount > 0
+          ? t("dashboard.activity.receipts.context.pending", {
+            count: formatNumber(snapshot.pendingReceiptCount),
+          })
+          : t("dashboard.activity.receipts.context.clear"),
+      },
+      {
+        id: "activity-returns",
+        label: "dashboard.activity.returns",
+        tone: "warning" as const,
+        to: "/purchase-returns",
+        value: snapshot.postedReturnsTodayCount,
+        valueLabel: formatNumber(snapshot.postedReturnsTodayCount),
+        context: t("dashboard.activity.returns.context"),
+      },
+      {
+        id: "activity-statements",
+        label: "dashboard.activity.statements",
+        tone: "neutral" as const,
+        to: "/supplier-statements",
+        value: snapshot.statementEntriesTodayCount,
+        valueLabel: formatNumber(snapshot.statementEntriesTodayCount),
+        context: t("dashboard.activity.statements.context", {
+          debit: formatCurrency(snapshot.statementDebitsToday, { currency: "EGP" }),
+          credit: formatCurrency(snapshot.statementCreditsToday, { currency: "EGP" }),
+        }),
+      },
+    ].filter((item) => item.value > 0);
+
+    return {
+      activityChart,
+      activitySummary: activityChart.length === 0 ? t("dashboard.summary.noOperationalActivity") : null,
+      alerts,
+      alertsSummary: alerts.length === 0 ? t("dashboard.summary.noExceptions") : null,
+      financialMetrics,
+      financialSummary: financialMetrics.length === 0 ? t("dashboard.summary.noFinanceActivity") : null,
+      kpis,
+      queues,
+      queuesSummary: queues.length === 0 ? t("dashboard.summary.noQueues") : null,
+    };
+  }, [formatCurrency, formatDate, formatNumber, snapshot, t]);
+
+  if (loading && !snapshot) {
+    return <DashboardSkeleton />;
+  }
+
+  if (error && !dashboardModel) {
+    return (
+      <EmptyState
+        centered
+        action={<Button variant="secondary" onClick={() => setReloadKey((value) => value + 1)}>{t("common.retry")}</Button>}
+        description={error}
+        title="dashboard.loadError"
+      />
+    );
+  }
+
+  if (!dashboardModel) {
+    return null;
+  }
+
   return (
     <DashboardLayout
-      attentionDescription="Start with the highest-priority operational blockers."
-      attentionItems={attentionItems}
-      attentionTitle="Needs attention"
-      kpis={kpis}
-      kpiTitle="KPI overview"
-      quickActionDescription="Jump into the modules used most often."
-      quickActionTitle="Quick actions"
-      quickActions={quickActions}
-      workSections={workSections}
+      activityChart={dashboardModel.activityChart}
+      activitySummary={dashboardModel.activitySummary}
+      alerts={dashboardModel.alerts}
+      alertsSummary={dashboardModel.alertsSummary}
+      financialMetrics={dashboardModel.financialMetrics}
+      financialSummary={dashboardModel.financialSummary}
+      kpis={dashboardModel.kpis}
+      queues={dashboardModel.queues}
+      queuesSummary={dashboardModel.queuesSummary}
     />
   );
 }

@@ -5,9 +5,9 @@ import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Button, Checkbox, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
 import {
   createItem,
+  getActiveItemsCached,
+  getActiveUomsCached,
   getItem,
-  listItems,
-  listUoms,
   updateItem,
   type Item,
   type ItemComponentFormValues,
@@ -47,8 +47,8 @@ export function ItemFormPage() {
       try {
         setLoading(true);
         const [uomList, itemList, item] = await Promise.all([
-          listUoms("", "active"),
-          listItems("", "active"),
+          getActiveUomsCached(),
+          getActiveItemsCached(),
           itemId ? getItem(itemId) : Promise.resolve(null),
         ]);
 

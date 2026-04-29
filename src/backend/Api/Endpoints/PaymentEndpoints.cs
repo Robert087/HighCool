@@ -1,6 +1,7 @@
 using ERP.Application.Common.Exceptions;
 using ERP.Application.Common.Pagination;
 using ERP.Application.Payments;
+using ERP.Application.Security;
 using ERP.Domain.Common;
 using ERP.Domain.Payments;
 using FluentValidation;
@@ -12,15 +13,18 @@ public static class PaymentEndpoints
 {
     public static IEndpointRouteBuilder MapPaymentEndpoints(this IEndpointRouteBuilder app)
     {
-        var payments = app.MapGroup("/api/payments");
-        payments.MapGet("/", ListAsync);
-        payments.MapGet("/{id:guid}", GetAsync);
-        payments.MapGet("/{id:guid}/allocations", GetAllocationsAsync);
-        payments.MapPost("/", CreateDraftAsync);
-        payments.MapPut("/{id:guid}", UpdateDraftAsync);
-        payments.MapPost("/{id:guid}/post", PostAsync);
+        var payments = app.MapGroup("/api/payments").RequireAuthorization();
+        payments.MapGet("/", ListAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        payments.MapGet("/{id:guid}", GetAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        payments.MapGet("/{id:guid}/allocations", GetAllocationsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        payments.MapPost("/", CreateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPaymentsCreate));
+        payments.MapPut("/{id:guid}", UpdateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPaymentsCreate));
+        payments.MapPost("/{id:guid}/post", PostAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPaymentsPost));
 
-        app.MapGet("/api/suppliers/{supplierId:guid}/open-balances", ListSupplierOpenBalancesAsync);
+        app.MapGet("/api/suppliers/{supplierId:guid}/open-balances", ListSupplierOpenBalancesAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
 
         return app;
     }

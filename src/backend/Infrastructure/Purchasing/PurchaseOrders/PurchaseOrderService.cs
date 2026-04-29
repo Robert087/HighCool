@@ -233,6 +233,7 @@ public sealed class PurchaseOrderService(AppDbContext dbContext) : IPurchaseOrde
                     line.Item?.Code ?? string.Empty,
                     line.Item?.Name ?? string.Empty,
                     line.OrderedQty,
+                    line.UnitPrice,
                     receivedQty,
                     remainingQty,
                     line.UomId,
@@ -297,6 +298,7 @@ public sealed class PurchaseOrderService(AppDbContext dbContext) : IPurchaseOrde
                 LineNo = line.LineNo,
                 ItemId = line.ItemId,
                 OrderedQty = line.OrderedQty,
+                UnitPrice = RoundAmount(line.UnitPrice),
                 UomId = line.UomId,
                 Notes = NormalizeOptionalText(line.Notes),
                 CreatedBy = actor
@@ -328,6 +330,11 @@ public sealed class PurchaseOrderService(AppDbContext dbContext) : IPurchaseOrde
     private static string? NormalizeOptionalText(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static decimal RoundAmount(decimal value)
+    {
+        return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
     }
 
     private static void EnsureDraftIsEditable(PurchaseOrder purchaseOrder)
@@ -552,6 +559,7 @@ public sealed class PurchaseOrderService(AppDbContext dbContext) : IPurchaseOrde
                     line.Item?.Code ?? string.Empty,
                     line.Item?.Name ?? string.Empty,
                     line.OrderedQty,
+                    line.UnitPrice,
                     line.UomId,
                     line.Uom?.Code ?? string.Empty,
                     line.Uom?.Name ?? string.Empty,

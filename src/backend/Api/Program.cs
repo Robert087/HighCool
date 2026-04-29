@@ -12,10 +12,24 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendDev", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+app.UseCors("FrontendDev");
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -32,6 +46,8 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
+app.MapIdentityEndpoints();
+app.MapOrganizationSecurityEndpoints();
 app.MapMasterDataEndpoints();
 app.MapItemMasterDataEndpoints();
 app.MapPurchaseOrderEndpoints();

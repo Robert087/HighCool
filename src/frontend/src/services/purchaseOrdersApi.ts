@@ -25,6 +25,7 @@ export interface PurchaseOrderLine {
   itemCode: string;
   itemName: string;
   orderedQty: number;
+  unitPrice: number | null;
   uomId: string;
   uomCode: string;
   uomName: string;
@@ -58,6 +59,7 @@ export interface PurchaseOrderAvailableLine {
   itemCode: string;
   itemName: string;
   orderedQty: number;
+  unitPrice: number | null;
   receivedQty: number;
   remainingQty: number;
   uomId: string;
@@ -70,7 +72,10 @@ export interface PurchaseOrderLineFormValues {
   lineNo: number;
   itemId: string;
   orderedQty: number | "";
+  unitPrice: number | "";
   uomId: string;
+  uomCode?: string | null;
+  uomName?: string | null;
   notes: string;
 }
 
@@ -135,6 +140,7 @@ function normalizePayload(values: PurchaseOrderFormValues) {
       lineNo: Number(line.lineNo),
       itemId: line.itemId,
       orderedQty: Number(line.orderedQty),
+      unitPrice: line.unitPrice === "" ? 0 : Number(line.unitPrice),
       uomId: line.uomId,
       notes: line.notes.trim() || null,
     })),

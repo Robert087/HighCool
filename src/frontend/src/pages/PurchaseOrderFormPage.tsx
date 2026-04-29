@@ -2,8 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Badge, Button, EmptyState, Field, Input, Select, SkeletonLoader, Textarea, useConfirmationDialog, useToast } from "../components/ui";
+import { formatCurrency, formatQuantity, useI18n } from "../i18n";
+import { getFirstValidationMessage } from "../lib/validationErrors";
 import { ApiError, type ValidationErrors } from "../services/api";
-import { listItems, listSuppliers, listUoms, type Item, type Supplier, type Uom } from "../services/masterDataApi";
+import {
+  getActiveItemsCached,
+  getActiveSuppliersCached,
+  getActiveUomsCached,
+  type Item,
+  type Supplier,
+  type Uom,
+} from "../services/masterDataApi";
 import {
   cancelPurchaseOrder,
   createPurchaseOrder,
@@ -27,13 +36,41 @@ const initialLine = (lineNo: number): PurchaseOrderLineFormValues => ({
   lineNo,
   itemId: "",
   orderedQty: "",
+  unitPrice: "",
   uomId: "",
+  uomCode: null,
+  uomName: null,
   notes: "",
 });
+
+function toNumber(value: number | "" | null | undefined) {
+  if (value === "" || value === null || value === undefined || Number.isNaN(Number(value))) {
+    return 0;
+  }
+
+  return Number(value);
+}
+
+function toFormNumber(value: number | null | undefined): number | "" {
+  return typeof value === "number" && Number.isFinite(value) ? value : "";
+}
+
+function roundAmount(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function resolveLineUomName(line: PurchaseOrderLineFormValues, uomLookup: Map<string, Uom>): string {
+  return uomLookup.get(line.uomId)?.name ?? line.uomName ?? "";
+}
+
+function resolveLineUomCode(line: PurchaseOrderLineFormValues, uomLookup: Map<string, Uom>): string {
+  return uomLookup.get(line.uomId)?.code ?? line.uomCode ?? "";
+}
 
 export function PurchaseOrderFormPage() {
   const { showToast } = useToast();
   const { confirm, dialog } = useConfirmationDialog();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { purchaseOrderId } = useParams();
   const isEdit = Boolean(purchaseOrderId);
@@ -58,9 +95,9 @@ export function PurchaseOrderFormPage() {
       try {
         setLoading(true);
         const [supplierRows, itemRows, uomRows, purchaseOrder] = await Promise.all([
-          listSuppliers("", "active"),
-          listItems("", "active"),
-          listUoms("", "active"),
+          getActiveSuppliersCached(),
+          getActiveItemsCached(),
+          getActiveUomsCached(),
           purchaseOrderId ? getPurchaseOrder(purchaseOrderId) : Promise.resolve(null),
         ]);
 
@@ -85,7 +122,10 @@ export function PurchaseOrderFormPage() {
               lineNo: line.lineNo,
               itemId: line.itemId,
               orderedQty: line.orderedQty,
+              unitPrice: toFormNumber(line.unitPrice),
               uomId: line.uomId,
+              uomCode: line.uomCode,
+              uomName: line.uomName,
               notes: line.notes ?? "",
             })),
           });
@@ -117,8 +157,10 @@ export function PurchaseOrderFormPage() {
 
   const isEditable = status === "Draft";
   const supplierLookup = useMemo(() => new Map(suppliers.map((supplier) => [supplier.id, supplier])), [suppliers]);
+  const uomLookup = useMemo(() => new Map(uoms.map((uom) => [uom.id, uom])), [uoms]);
   const selectedSupplier = values.supplierId ? supplierLookup.get(values.supplierId) : null;
-  const totalOrderedQty = values.lines.reduce((sum, line) => sum + (line.orderedQty === "" ? 0 : Number(line.orderedQty)), 0);
+  const totalOrderedQty = values.lines.reduce((sum, line) => sum + toNumber(line.orderedQty), 0);
+  const totalOrderAmount = roundAmount(values.lines.reduce((sum, line) => sum + (toNumber(line.orderedQty) * toNumber(line.unitPrice)), 0));
   const formId = "purchase-order-form";
 
   function validate(currentValues: PurchaseOrderFormValues): ValidationErrors {
@@ -150,6 +192,12 @@ export function PurchaseOrderFormPage() {
         nextErrors[`lines.${index}.orderedQty`] = ["Ordered quantity must be greater than zero."];
       }
 
+      if (line.unitPrice === "") {
+        nextErrors[`lines.${index}.unitPrice`] = ["Unit price is required."];
+      } else if (Number(line.unitPrice) < 0) {
+        nextErrors[`lines.${index}.unitPrice`] = ["Unit price cannot be negative."];
+      }
+
       if (!line.uomId) {
         nextErrors[`lines.${index}.uomId`] = ["UOM is required."];
       }
@@ -166,6 +214,12 @@ export function PurchaseOrderFormPage() {
     setFormError("");
 
     if (Object.keys(nextErrors).length > 0 || !isEditable) {
+      const firstMessage = getFirstValidationMessage(nextErrors);
+      showToast({
+        tone: "danger",
+        title: t("Validation error"),
+        description: firstMessage ?? t("Resolve the purchase order validation errors before saving."),
+      });
       return;
     }
 
@@ -188,6 +242,13 @@ export function PurchaseOrderFormPage() {
       if (submitError instanceof ApiError) {
         setErrors(submitError.validationErrors ?? {});
         setFormError(submitError.message);
+        if (submitError.validationErrors) {
+          showToast({
+            tone: "danger",
+            title: t("Validation error"),
+            description: getFirstValidationMessage(submitError.validationErrors) ?? submitError.message,
+          });
+        }
       } else {
         setFormError("Failed to save purchase order.");
       }
@@ -263,7 +324,20 @@ export function PurchaseOrderFormPage() {
   function setLineValue<Key extends keyof PurchaseOrderLineFormValues>(index: number, key: Key, value: PurchaseOrderLineFormValues[Key]) {
     setValues((current) => ({
       ...current,
-      lines: current.lines.map((line, lineIndex) => (lineIndex === index ? { ...line, [key]: value } : line)),
+      lines: current.lines.map((line, lineIndex) => {
+        if (lineIndex !== index) {
+          return line;
+        }
+
+        const nextLine = { ...line, [key]: value };
+        if (key === "uomId") {
+          const uom = uomLookup.get(String(value));
+          nextLine.uomCode = uom?.code ?? null;
+          nextLine.uomName = uom?.name ?? null;
+        }
+
+        return nextLine;
+      }),
     }));
   }
 
@@ -374,7 +448,8 @@ export function PurchaseOrderFormPage() {
               <div className="hc-document-toolbar">
                 <div className="hc-document-toolbar__meta">
                   <Badge tone="neutral">{values.lines.length} {values.lines.length === 1 ? "line" : "lines"}</Badge>
-                  <Badge tone="neutral">Ordered qty {totalOrderedQty.toLocaleString()}</Badge>
+                  <Badge tone="neutral">{t("Ordered qty {value}", { value: formatQuantity(totalOrderedQty) })}</Badge>
+                  <Badge tone="neutral">{t("Order amount {value}", { value: formatCurrency(totalOrderAmount) })}</Badge>
                 </div>
                 <Button disabled={!isEditable} type="button" onClick={addLine}>Add line</Button>
               </div>
@@ -388,13 +463,19 @@ export function PurchaseOrderFormPage() {
                     <th>Line</th>
                     <th>Item</th>
                     <th>Ordered Qty</th>
+                    <th className="hc-table__numeric">{t("Unit price")}</th>
+                    <th className="hc-table__numeric">{t("Line amount")}</th>
                     <th>UOM</th>
                     <th>Notes</th>
                     <th className="hc-table__head-actions" />
                   </tr>
                 </thead>
                 <tbody>
-                  {values.lines.map((line, index) => (
+                  {values.lines.map((line, index) => {
+                    const uomName = resolveLineUomName(line, uomLookup);
+                    const uomCode = resolveLineUomCode(line, uomLookup);
+
+                    return (
                     <tr key={`${line.lineNo}-${index}`}>
                       <td>{line.lineNo}</td>
                       <td>
@@ -410,13 +491,20 @@ export function PurchaseOrderFormPage() {
                         <Input disabled={!isEditable} type="number" min={0.000001} step="0.000001" value={line.orderedQty} onChange={(event) => setLineValue(index, "orderedQty", event.target.value === "" ? "" : Number(event.target.value))} />
                         {errors[`lines.${index}.orderedQty`] ? <small className="hc-field-error">{errors[`lines.${index}.orderedQty`][0]}</small> : null}
                       </td>
+                      <td className="hc-table__numeric">
+                        <Input disabled={!isEditable} type="number" min={0} step="0.000001" value={line.unitPrice} onChange={(event) => setLineValue(index, "unitPrice", event.target.value === "" ? "" : Number(event.target.value))} />
+                        {errors[`lines.${index}.unitPrice`] ? <small className="hc-field-error">{errors[`lines.${index}.unitPrice`][0]}</small> : null}
+                      </td>
+                      <td className="hc-table__numeric">{formatCurrency(roundAmount(toNumber(line.orderedQty) * toNumber(line.unitPrice)))}</td>
                       <td>
                         <Select disabled={!isEditable} value={line.uomId} onChange={(event) => setLineValue(index, "uomId", event.target.value)}>
                           <option value="">Select UOM</option>
                           {uoms.map((uom) => (
-                            <option key={uom.id} value={uom.id}>{uom.code}</option>
+                            <option key={uom.id} value={uom.id}>{uom.name}</option>
                           ))}
                         </Select>
+                        {uomName ? <span className="hc-table__title">{uomName}</span> : null}
+                        {uomCode ? <span className="hc-table__subtitle">{uomCode}</span> : null}
                         {errors[`lines.${index}.uomId`] ? <small className="hc-field-error">{errors[`lines.${index}.uomId`][0]}</small> : null}
                       </td>
                       <td>
@@ -426,8 +514,28 @@ export function PurchaseOrderFormPage() {
                         <Button disabled={!isEditable} type="button" variant="ghost" onClick={() => removeLine(index)}>Remove</Button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <th scope="row" colSpan={2} className="hc-table__total-label">{t("Purchase order totals")}</th>
+                    <td className="hc-table__numeric">
+                      <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                        <span className="hc-table__subtitle">{t("Ordered qty")}</span>
+                        <span className="hc-table__title">{formatQuantity(totalOrderedQty)}</span>
+                      </div>
+                    </td>
+                    <td className="hc-table__total-empty" />
+                    <td className="hc-table__numeric">
+                      <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                        <span className="hc-table__subtitle">{t("Order amount")}</span>
+                        <span className="hc-table__title">{formatCurrency(totalOrderAmount)}</span>
+                      </div>
+                    </td>
+                    <td colSpan={3} className="hc-table__total-empty" />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </DocumentSection>

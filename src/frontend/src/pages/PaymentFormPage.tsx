@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
-import { Badge, Button, Card, EmptyState, Field, Input, ReversalDialog, Select, SkeletonLoader, Textarea, useToast } from "../components/ui";
+import { Badge, Button, EmptyState, Field, Input, ReversalDialog, Select, SkeletonLoader, Textarea, useToast } from "../components/ui";
+import { useI18n } from "../i18n";
+import { getFirstValidationMessage } from "../lib/validationErrors";
 import { ApiError, type ValidationErrors } from "../services/api";
-import { listSuppliers, type Supplier } from "../services/masterDataApi";
+import { getActiveSuppliersCached, type Supplier } from "../services/masterDataApi";
 import {
   createPayment,
   getPayment,
@@ -108,6 +110,7 @@ function statusTone(status: DocumentStatus) {
 
 export function PaymentFormPage() {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { paymentId } = useParams();
   const isEdit = Boolean(paymentId);
@@ -172,7 +175,7 @@ export function PaymentFormPage() {
         setFormError("");
 
         const [supplierRows, existingPayment] = await Promise.all([
-          listSuppliers("", "active"),
+          getActiveSuppliersCached(),
           paymentId ? getPayment(paymentId) : Promise.resolve(null),
         ]);
 
@@ -422,6 +425,11 @@ export function PaymentFormPage() {
 
     if (Object.keys(validationErrors).length > 0) {
       setFormError(requirePosting ? "Resolve the payment validation errors before posting." : "Resolve the payment validation errors before saving.");
+      showToast({
+        tone: "danger",
+        title: t("Validation error"),
+        description: getFirstValidationMessage(validationErrors) ?? t(requirePosting ? "Resolve the payment validation errors before posting." : "Resolve the payment validation errors before saving."),
+      });
       return;
     }
 
@@ -462,6 +470,13 @@ export function PaymentFormPage() {
       if (submitError instanceof ApiError) {
         setErrors(submitError.validationErrors ?? {});
         setFormError(submitError.message);
+        if (submitError.validationErrors) {
+          showToast({
+            tone: "danger",
+            title: t("Validation error"),
+            description: getFirstValidationMessage(submitError.validationErrors) ?? submitError.message,
+          });
+        }
       } else {
         setFormError(requirePosting ? "Failed to post supplier payment." : "Failed to save supplier payment.");
       }
@@ -601,54 +616,17 @@ export function PaymentFormPage() {
         </div>
       </DocumentSection>
 
-      <Card className="hc-task-summary-panel hc-payment-allocation-summary" padding="md">
-        <div className="hc-task-summary-panel__header">
-          <div>
-            <h2 className="hc-task-summary-panel__title">Allocation Summary</h2>
-            <p className="hc-task-summary-panel__description">
-              Review the totals here first, then fill the selected targets section, then add more documents from the available targets section.
-            </p>
-          </div>
-          {isEditable ? (
-            <div className="hc-task-summary-panel__actions">
-              <Button disabled={paymentAmount <= 0 || availableTargets.length === 0} variant="secondary" onClick={autoAllocateFifo} type="button">
-                Auto-fill FIFO
-              </Button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="hc-task-summary-grid">
-          <div className="hc-task-summary-metric">
-            <span className="hc-task-summary-metric__label">Selected targets</span>
-            <strong className="hc-task-summary-metric__value">
-              {values.allocations.length} {values.allocations.length === 1 ? "document" : "documents"}
-            </strong>
-            <span className="hc-task-summary-metric__caption">Documents already added to this payment.</span>
-          </div>
-          <div className="hc-task-summary-metric">
-            <span className="hc-task-summary-metric__label">Allocated amount</span>
-            <strong className="hc-task-summary-metric__value">{formatAmount(totalAllocated, values.currency || null)}</strong>
-            <span className="hc-task-summary-metric__caption">Amount currently assigned to selected targets.</span>
-          </div>
-          <div className="hc-task-summary-metric">
-            <span className="hc-task-summary-metric__label">Still to allocate</span>
-            <strong className="hc-task-summary-metric__value">{formatAmount(unallocatedAmount, values.currency || null)}</strong>
-            <span className="hc-task-summary-metric__caption">
-              {unallocatedAmount === 0
-                ? "This payment is fully allocated."
-                : "Add more documents below or adjust the selected rows."}
-            </span>
-          </div>
-        </div>
-      </Card>
-
       <DocumentSection
         className="hc-task-stage hc-task-stage--selected"
         title="Selected Targets"
         description={isEditable
           ? "Step 1: review the documents already chosen for this payment and enter the amount to apply to each one."
           : "These are the documents that were settled by this posted payment."}
+        actions={isEditable ? (
+          <Button disabled={paymentAmount <= 0 || availableTargets.length === 0} variant="secondary" onClick={autoAllocateFifo} type="button">
+            Auto-fill FIFO
+          </Button>
+        ) : null}
       >
         {errors.allocations ? <div className="hc-inline-error">{errors.allocations[0]}</div> : null}
         {values.allocations.length === 0 ? (

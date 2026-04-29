@@ -3,8 +3,23 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Badge, Button, EmptyState, Field, Input, Select, SkeletonLoader, Textarea, useToast } from "../components/ui";
 import { ApiError, type ValidationErrors } from "../services/api";
-import { listItems, listSuppliers, listUoms, listWarehouses, type Item, type Supplier, type Uom, type Warehouse } from "../services/masterDataApi";
-import { getPurchaseReceiptDraft, listPurchaseReceiptDrafts, type PurchaseReceipt, type PurchaseReceiptLine } from "../services/purchaseReceiptsApi";
+import {
+  getActiveItemsCached,
+  getActiveSuppliersCached,
+  getActiveUomsCached,
+  getActiveWarehousesCached,
+  type Item,
+  type Supplier,
+  type Uom,
+  type Warehouse,
+} from "../services/masterDataApi";
+import {
+  getPurchaseReceiptDraft,
+  listPurchaseReceiptDrafts,
+  type PurchaseReceipt,
+  type PurchaseReceiptLine,
+  type PurchaseReceiptListItem,
+} from "../services/purchaseReceiptsApi";
 import {
   buildReceiptLineLookup,
   createPurchaseReturn,
@@ -62,7 +77,7 @@ export function PurchaseReturnFormPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
-  const [receipts, setReceipts] = useState<PurchaseReceipt[]>([]);
+  const [receipts, setReceipts] = useState<PurchaseReceiptListItem[]>([]);
   const [referenceReceipt, setReferenceReceipt] = useState<PurchaseReceipt | null>(null);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [formError, setFormError] = useState("");
@@ -83,10 +98,10 @@ export function PurchaseReturnFormPage() {
         setFormError("");
 
         const [supplierRows, itemRows, warehouseRows, uomRows, receiptRows, existingReturn] = await Promise.all([
-          listSuppliers("", "active"),
-          listItems("", "active"),
-          listWarehouses("", "active"),
-          listUoms("", "active"),
+          getActiveSuppliersCached(),
+          getActiveItemsCached(),
+          getActiveWarehousesCached(),
+          getActiveUomsCached(),
           listPurchaseReceiptDrafts({
             search: "",
             status: "Posted",
@@ -109,24 +124,13 @@ export function PurchaseReturnFormPage() {
         setItems(itemRows);
         setWarehouses(warehouseRows);
         setUoms(uomRows);
-
-        const postedReceiptDocs = await Promise.all(
-          receiptRows
-            .filter((row) => row.status === "Posted")
-            .map((row) => getPurchaseReceiptDraft(row.id)),
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setReceipts(postedReceiptDocs.filter((receipt) => receipt.lines.some((line) => normalizeQty(line.remainingReturnableQty) > 0)));
+        setReceipts(receiptRows.filter((row) => row.status === "Posted"));
 
         if (existingReturn) {
           setValues(mapPurchaseReturnToFormValues(existingReturn));
           setStatus(existingReturn.status);
           if (existingReturn.referenceReceiptId) {
-            const matchedReceipt = postedReceiptDocs.find((row) => row.id === existingReturn.referenceReceiptId) ?? await getPurchaseReceiptDraft(existingReturn.referenceReceiptId);
+            const matchedReceipt = await getPurchaseReceiptDraft(existingReturn.referenceReceiptId);
             if (active) {
               setReferenceReceipt(matchedReceipt);
             }
@@ -165,7 +169,7 @@ export function PurchaseReturnFormPage() {
     }
 
     try {
-      const receipt = receipts.find((row) => row.id === receiptId) ?? await getPurchaseReceiptDraft(receiptId);
+      const receipt = referenceReceipt?.id === receiptId ? referenceReceipt : await getPurchaseReceiptDraft(receiptId);
       setReferenceReceipt(receipt);
       setValues((current) => ({
         ...current,
@@ -398,13 +402,13 @@ export function PurchaseReturnFormPage() {
             </Select>
             {errors.supplierId ? <small className="hc-field-error">{errors.supplierId[0]}</small> : null}
           </Field>
-          <Field label="Reference receipt">
-            <Select disabled={!isEditable} value={values.referenceReceiptId} onChange={(event) => void handleReferenceReceiptChange(event.target.value)}>
-              <option value="">Manual return</option>
-              {receipts.map((receipt) => (
-                <option key={receipt.id} value={receipt.id}>{receipt.receiptNo} - {receipt.supplierCode}</option>
-              ))}
-            </Select>
+              <Field label="Reference receipt">
+                <Select disabled={!isEditable} value={values.referenceReceiptId} onChange={(event) => void handleReferenceReceiptChange(event.target.value)}>
+                  <option value="">Manual return</option>
+                  {receipts.map((receipt) => (
+                    <option key={receipt.id} value={receipt.id}>{receipt.receiptNo} - {receipt.supplierCode}</option>
+                  ))}
+                </Select>
           </Field>
           <Field label="Return date" required>
             <Input disabled={!isEditable} type="date" value={values.returnDate} onChange={(event) => setValue("returnDate", event.target.value)} />

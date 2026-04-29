@@ -1,5 +1,6 @@
 using ERP.Application.Common.Exceptions;
 using ERP.Application.Common.Pagination;
+using ERP.Application.Security;
 using ERP.Application.Shortages;
 using ERP.Domain.Common;
 using ERP.Domain.Shortages;
@@ -12,18 +13,18 @@ public static class ShortageResolutionEndpoints
 {
     public static IEndpointRouteBuilder MapShortageResolutionEndpoints(this IEndpointRouteBuilder app)
     {
-        var shortages = app.MapGroup("/api/shortages");
-        shortages.MapGet("/open", ListOpenShortagesAsync);
-        shortages.MapGet("/{id:guid}", GetShortageAsync);
+        var shortages = app.MapGroup("/api/shortages").RequireAuthorization();
+        shortages.MapGet("/open", ListOpenShortagesAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageView));
+        shortages.MapGet("/{id:guid}", GetShortageAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageView));
 
-        var resolutions = app.MapGroup("/api/shortage-resolutions");
-        resolutions.MapGet("/", ListResolutionsAsync);
-        resolutions.MapGet("/{id:guid}", GetResolutionAsync);
-        resolutions.MapGet("/{id:guid}/allocations", GetAllocationsAsync);
-        resolutions.MapPost("/", CreateDraftAsync);
-        resolutions.MapPut("/{id:guid}", UpdateDraftAsync);
-        resolutions.MapPost("/{id:guid}/post", PostAsync);
-        resolutions.MapPost("/suggest-allocations", SuggestAllocationsAsync);
+        var resolutions = app.MapGroup("/api/shortage-resolutions").RequireAuthorization();
+        resolutions.MapGet("/", ListResolutionsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageView));
+        resolutions.MapGet("/{id:guid}", GetResolutionAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageView));
+        resolutions.MapGet("/{id:guid}/allocations", GetAllocationsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageView));
+        resolutions.MapPost("/", CreateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageResolutionCreate));
+        resolutions.MapPut("/{id:guid}", UpdateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageResolutionCreate));
+        resolutions.MapPost("/{id:guid}/post", PostAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageResolutionPost));
+        resolutions.MapPost("/suggest-allocations", SuggestAllocationsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.ShortageManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ShortageResolutionCreate));
 
         return app;
     }

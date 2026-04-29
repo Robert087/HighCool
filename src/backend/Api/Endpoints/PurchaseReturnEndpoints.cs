@@ -1,6 +1,7 @@
 using ERP.Application.Common.Exceptions;
 using ERP.Application.Common.Pagination;
 using ERP.Application.Purchasing.PurchaseReturns;
+using ERP.Application.Security;
 using ERP.Domain.Common;
 using FluentValidation;
 using FluentValidation.Results;
@@ -11,12 +12,12 @@ public static class PurchaseReturnEndpoints
 {
     public static IEndpointRouteBuilder MapPurchaseReturnEndpoints(this IEndpointRouteBuilder app)
     {
-        var returns = app.MapGroup("/api/purchase-returns");
-        returns.MapGet("/", ListAsync);
-        returns.MapGet("/{id:guid}", GetAsync);
-        returns.MapPost("/", CreateDraftAsync);
-        returns.MapPut("/{id:guid}", UpdateDraftAsync);
-        returns.MapPost("/{id:guid}/post", PostAsync);
+        var returns = app.MapGroup("/api/purchase-returns").RequireAuthorization();
+        returns.MapGet("/", ListAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReturnView));
+        returns.MapGet("/{id:guid}", GetAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReturnView));
+        returns.MapPost("/", CreateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReturnCreate));
+        returns.MapPut("/{id:guid}", UpdateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReturnEdit));
+        returns.MapPost("/{id:guid}/post", PostAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReturnPost));
 
         return app;
     }

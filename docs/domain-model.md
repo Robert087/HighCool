@@ -62,6 +62,7 @@ Fields:
 * `line_no`
 * `item_id`
 * `ordered_qty`
+* `unit_price`
 * `uom_id`
 * `notes`
 * audit fields
@@ -69,6 +70,7 @@ Fields:
 Rules:
 
 * `ordered_qty > 0`
+* `unit_price >= 0`
 * line numbers are unique inside the PO
 
 ## Purchase Receipt
@@ -93,8 +95,9 @@ Rules:
 * only `Draft` receipts can be posted
 * posting is idempotent
 * posted receipts are immutable
-* posted receipts generate supplier statement rows from the explicit receipt header payable amount
-* until receipt line pricing exists, `supplier_payable_amount` is the temporary procurement financial basis used for supplier statement and payment allocation
+* posted receipts generate supplier statement rows from the receipt header payable amount
+* for PO-linked receipts, `supplier_payable_amount` is calculated from received quantities and linked PO line unit prices
+* for manual receipts, `supplier_payable_amount` is the explicit procurement financial basis used for supplier statement and payment allocation until manual receipt line pricing exists
 
 ## Purchase Receipt Line
 
@@ -107,6 +110,8 @@ Fields:
 * `item_id`
 * `ordered_qty_snapshot`
 * `received_qty`
+* `unit_price` from the linked PO line in read DTOs
+* `line_amount = received_qty x unit_price` for PO-linked receipt read DTOs
 * `uom_id`
 * `notes`
 * audit fields

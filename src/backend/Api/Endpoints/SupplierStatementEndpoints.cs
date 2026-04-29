@@ -1,5 +1,6 @@
 using ERP.Application.Statements;
 using ERP.Application.Common.Pagination;
+using ERP.Application.Security;
 using ERP.Domain.Statements;
 
 namespace ERP.Api.Endpoints;
@@ -8,9 +9,18 @@ public static class SupplierStatementEndpoints
 {
     public static IEndpointRouteBuilder MapSupplierStatementEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/supplier-statements", ListAsync);
-        app.MapGet("/api/suppliers/{supplierId:guid}/statement", ListForSupplierAsync);
-        app.MapGet("/api/suppliers/{supplierId:guid}/statement/summary", GetSummaryAsync);
+        app.MapGet("/api/supplier-statements", ListAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        app.MapGet("/api/suppliers/{supplierId:guid}/statement", ListForSupplierAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        app.MapGet("/api/suppliers/{supplierId:guid}/statement/summary", GetSummaryAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
 
         return app;
     }

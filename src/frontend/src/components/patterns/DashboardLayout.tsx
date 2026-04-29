@@ -1,13 +1,20 @@
-import { Link, useNavigate } from "react-router-dom";
-import { Badge, Button, Card, useI18n } from "../ui";
+import { Link } from "react-router-dom";
+import { Badge, useI18n } from "../ui";
 
-type DashboardTone = "urgent" | "pending" | "normal";
-type DashboardIcon = "alert" | "receipt" | "document" | "statement" | "inventory" | "check" | "clock";
+type DashboardTone = "neutral" | "primary" | "success" | "warning" | "danger";
+type DashboardIcon =
+  | "alert"
+  | "receipt"
+  | "document"
+  | "statement"
+  | "inventory"
+  | "supplier"
+  | "trend";
 
-export interface DashboardAttentionItem {
-  count: number;
-  ctaLabel: string;
-  description?: string;
+export interface DashboardAlertItem {
+  actionLabel: string;
+  count: string;
+  description: string;
   icon: DashboardIcon;
   id: string;
   title: string;
@@ -15,52 +22,62 @@ export interface DashboardAttentionItem {
   tone: DashboardTone;
 }
 
-export interface DashboardActionItem {
+export interface DashboardKpiItem {
+  actionLabel: string;
+  description: string;
   icon: DashboardIcon;
   id: string;
-  label: string;
-  meta?: string;
+  moduleLabel: string;
   to: string;
-}
-
-export interface DashboardKpiItem {
-  description?: string;
-  id: string;
-  label: string;
+  title: string;
+  tone: DashboardTone;
   value: string;
 }
 
-export interface DashboardWorkItem {
-  icon: DashboardIcon;
+export interface DashboardActivityItem {
+  context: string;
   id: string;
-  meta?: string;
-  title: string;
+  label: string;
   to: string;
+  tone: DashboardTone;
+  value: number;
+  valueLabel: string;
 }
 
-export interface DashboardWorkSection {
-  description?: string;
+export interface DashboardQueueItem {
+  count: string;
+  eta: string;
   id: string;
-  items: DashboardWorkItem[];
+  owner: string;
   title: string;
+  to: string;
+  tone: DashboardTone;
+}
+
+export interface DashboardFinanceMetric {
+  id: string;
+  title: string;
+  to: string;
+  tone: DashboardTone;
+  value: string;
 }
 
 interface DashboardLayoutProps {
-  attentionDescription?: string;
-  attentionItems: DashboardAttentionItem[];
-  attentionTitle: string;
+  activityChart: DashboardActivityItem[];
+  activitySummary?: string | null;
+  alerts: DashboardAlertItem[];
+  alertsSummary?: string | null;
+  financialMetrics: DashboardFinanceMetric[];
+  financialSummary?: string | null;
   kpis: DashboardKpiItem[];
-  kpiTitle: string;
-  quickActionDescription?: string;
-  quickActionTitle: string;
-  quickActions: DashboardActionItem[];
-  workSections: DashboardWorkSection[];
+  queues: DashboardQueueItem[];
+  queuesSummary?: string | null;
 }
 
 function DashboardGlyph({ icon }: { icon: DashboardIcon }) {
   const commonProps = {
     "aria-hidden": true,
-    className: "hc-dashboard-icon__svg",
+    className: "hc-erp-dashboard-icon__svg",
     fill: "none",
     stroke: "currentColor",
     strokeLinecap: "round" as const,
@@ -80,154 +97,183 @@ function DashboardGlyph({ icon }: { icon: DashboardIcon }) {
       return <svg {...commonProps}><path d="M7 4h10v16H7z" /><path d="M9.5 8h5M9.5 12h5M9.5 16h5" /></svg>;
     case "inventory":
       return <svg {...commonProps}><path d="M5 6h14M7 6v12M17 6v12M5 18h14" /><path d="M9.5 11.5h5M9.5 14.5h5" /></svg>;
-    case "check":
-      return <svg {...commonProps}><path d="m5 12 4 4L19 6" /></svg>;
-    case "clock":
-      return <svg {...commonProps}><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></svg>;
+    case "supplier":
+      return <svg {...commonProps}><path d="M4 20h16" /><path d="M6 20V8l6-4 6 4v12" /><path d="M9 12h.01M15 12h.01M9 16h.01M15 16h.01" /></svg>;
+    case "trend":
+      return <svg {...commonProps}><path d="M4 16 9 11l4 3 7-8" /><path d="M20 6v5h-5" /></svg>;
     default:
       return null;
   }
 }
 
-function attentionToneClass(tone: DashboardTone) {
-  if (tone === "urgent") return "hc-dashboard-attention-item--urgent";
-  if (tone === "pending") return "hc-dashboard-attention-item--pending";
-  return "hc-dashboard-attention-item--normal";
-}
-
-function attentionBadgeTone(tone: DashboardTone) {
-  if (tone === "urgent") return "danger" as const;
-  if (tone === "pending") return "warning" as const;
-  return "primary" as const;
+function badgeToneFor(tone: DashboardTone) {
+  if (tone === "danger") return "danger" as const;
+  if (tone === "warning") return "warning" as const;
+  if (tone === "success") return "success" as const;
+  if (tone === "primary") return "primary" as const;
+  return "neutral" as const;
 }
 
 export function DashboardLayout({
-  attentionDescription,
-  attentionItems,
-  attentionTitle,
+  activityChart,
+  activitySummary,
+  alerts,
+  alertsSummary,
+  financialMetrics,
+  financialSummary,
   kpis,
-  kpiTitle,
-  quickActionDescription,
-  quickActionTitle,
-  quickActions,
-  workSections,
+  queues,
+  queuesSummary,
 }: DashboardLayoutProps) {
-  const { translateText } = useI18n();
-  const navigate = useNavigate();
+  const { t, translateText } = useI18n();
+  const maxActivityValue = activityChart.reduce((max, item) => Math.max(max, item.value), 0);
 
   return (
-    <section className="hc-dashboard">
-      <Card className="hc-dashboard__section hc-dashboard__section--attention" padding="md">
-        <div className="hc-dashboard__section-header">
-          <div className="hc-dashboard__section-copy">
-            <h2 className="hc-dashboard__section-title">{translateText(attentionTitle)}</h2>
-            {attentionDescription ? <p className="hc-dashboard__section-description">{translateText(attentionDescription)}</p> : null}
-          </div>
-        </div>
-
-        <div className="hc-dashboard-attention-list">
-          {attentionItems.slice(0, 5).map((item, index) => (
-            <div
-              key={item.id}
-              className={`hc-dashboard-attention-item ${attentionToneClass(item.tone)} ${index === 0 ? "hc-dashboard-attention-item--top" : ""}`}
-              onClick={() => navigate(item.to)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  navigate(item.to);
-                }
-              }}
-              role="link"
-              tabIndex={0}
-              aria-label={translateText(item.title)}
-            >
-              <div className="hc-dashboard-attention-item__main">
-                <span className="hc-dashboard-icon hc-dashboard-icon--attention">
-                  <DashboardGlyph icon={item.icon} />
-                </span>
-                <div className="hc-dashboard-attention-item__copy">
-                  <p className="hc-dashboard-attention-item__title">{translateText(item.title)}</p>
-                  {item.description ? <p className="hc-dashboard-attention-item__description">{translateText(item.description)}</p> : null}
+    <section className="hc-erp-dashboard">
+      {kpis.length > 0 ? (
+        <section className="hc-erp-dashboard__overview-grid">
+          {kpis.map((kpi) => (
+            <Link key={kpi.id} className={`hc-erp-overview-card hc-erp-overview-card--${kpi.tone}`} to={kpi.to}>
+              <div className="hc-erp-overview-card__topline">
+                <div className="hc-erp-overview-card__lead">
+                  <span className="hc-erp-overview-card__icon">
+                    <DashboardGlyph icon={kpi.icon} />
+                  </span>
+                  <span className="hc-erp-overview-card__module">{translateText(kpi.moduleLabel)}</span>
                 </div>
+                <strong className="hc-erp-overview-card__value">{kpi.value}</strong>
               </div>
-
-              <div className="hc-dashboard-attention-item__meta">
-                <Badge className="hc-dashboard-attention-item__badge" tone={attentionBadgeTone(item.tone)}>
-                  {item.count}
-                </Badge>
-                <Link className="hc-dashboard-attention-item__cta" to={item.to}>
-                  <Button size="sm" variant={index === 0 ? "primary" : "secondary"}>{translateText(item.ctaLabel)}</Button>
-                </Link>
+              <div className="hc-erp-overview-card__copy">
+                <p className="hc-erp-overview-card__title">{translateText(kpi.title)}</p>
               </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="hc-dashboard__section" padding="md">
-        <div className="hc-dashboard__section-header">
-          <div className="hc-dashboard__section-copy">
-            <h2 className="hc-dashboard__section-title">{translateText(quickActionTitle)}</h2>
-            {quickActionDescription ? <p className="hc-dashboard__section-description">{translateText(quickActionDescription)}</p> : null}
-          </div>
-        </div>
-
-        <div className="hc-dashboard-actions-grid">
-          {quickActions.slice(0, 8).map((action) => (
-            <Link key={action.id} className="hc-dashboard-action" to={action.to}>
-              <span className="hc-dashboard-icon hc-dashboard-icon--action">
-                <DashboardGlyph icon={action.icon} />
-              </span>
-              <span className="hc-dashboard-action__copy">
-                <span className="hc-dashboard-action__label">{translateText(action.label)}</span>
-                {action.meta ? <span className="hc-dashboard-action__meta">{translateText(action.meta)}</span> : null}
-              </span>
+              <span className="hc-erp-overview-card__action">{translateText(kpi.actionLabel)}</span>
             </Link>
           ))}
-        </div>
-      </Card>
+        </section>
+      ) : null}
 
-      <div className="hc-dashboard-kpi-block">
-        <div className="hc-dashboard__section-copy">
-          <h2 className="hc-dashboard__section-title">{translateText(kpiTitle)}</h2>
-        </div>
+      <div className="hc-erp-dashboard__grid hc-erp-dashboard__grid--primary">
+        <section className="hc-erp-dashboard-panel hc-erp-dashboard-panel--critical">
+          <div className="hc-erp-dashboard__section-header">
+            <p className="hc-erp-dashboard__section-eyebrow">{t("dashboard.sections.alerts.eyebrow")}</p>
+            <h2 className="hc-erp-dashboard__section-title">{t("dashboard.sections.alerts.title")}</h2>
+            <p className="hc-erp-dashboard__section-description">{t("dashboard.sections.alerts.description")}</p>
+          </div>
 
-        <div className="hc-dashboard-kpi-grid">
-          {kpis.slice(0, 4).map((kpi) => (
-            <Card key={kpi.id} className="hc-dashboard-kpi" padding="md">
-              <p className="hc-dashboard-kpi__label">{translateText(kpi.label)}</p>
-              <p className="hc-dashboard-kpi__value">{kpi.value}</p>
-              {kpi.description ? <p className="hc-dashboard-kpi__description">{translateText(kpi.description)}</p> : null}
-            </Card>
-          ))}
-        </div>
-      </div>
-
-      <div className="hc-dashboard-work-grid">
-        {workSections.slice(0, 2).map((section) => (
-          <Card key={section.id} className="hc-dashboard__section hc-dashboard__section--work" padding="md">
-            <div className="hc-dashboard__section-header">
-              <div className="hc-dashboard__section-copy">
-                <h2 className="hc-dashboard__section-title">{translateText(section.title)}</h2>
-                {section.description ? <p className="hc-dashboard__section-description">{translateText(section.description)}</p> : null}
-              </div>
-            </div>
-
-            <div className="hc-dashboard-work-list">
-              {section.items.slice(0, 5).map((item) => (
-                <Link key={item.id} className="hc-dashboard-work-item" to={item.to}>
-                  <span className="hc-dashboard-icon hc-dashboard-icon--work">
-                    <DashboardGlyph icon={item.icon} />
-                  </span>
-                  <span className="hc-dashboard-work-item__copy">
-                    <span className="hc-dashboard-work-item__title">{translateText(item.title)}</span>
-                    {item.meta ? <span className="hc-dashboard-work-item__meta">{translateText(item.meta)}</span> : null}
-                  </span>
+          {alerts.length > 0 ? (
+            <div className="hc-erp-dashboard__alert-list">
+              {alerts.map((alert) => (
+                <Link
+                  key={alert.id}
+                  aria-label={translateText(alert.title)}
+                  className={`hc-erp-alert-card hc-erp-alert-card--${alert.tone}`}
+                  to={alert.to}
+                >
+                  <div className="hc-erp-alert-card__main">
+                    <span className="hc-erp-alert-card__icon">
+                      <DashboardGlyph icon={alert.icon} />
+                    </span>
+                    <div className="hc-erp-alert-card__copy">
+                      <div className="hc-erp-alert-card__title-row">
+                        <p className="hc-erp-alert-card__title">{translateText(alert.title)}</p>
+                        <Badge tone={badgeToneFor(alert.tone)}>{alert.count}</Badge>
+                      </div>
+                      <p className="hc-erp-alert-card__description">{alert.description}</p>
+                    </div>
+                  </div>
+                  <span className="hc-erp-alert-card__action">{translateText(alert.actionLabel)}</span>
                 </Link>
               ))}
             </div>
-          </Card>
-        ))}
+          ) : alertsSummary ? (
+            <p className="hc-erp-dashboard__summary">{alertsSummary}</p>
+          ) : null}
+        </section>
+
+        <section className="hc-erp-dashboard-panel">
+          <div className="hc-erp-dashboard__section-header">
+            <p className="hc-erp-dashboard__section-eyebrow">{t("dashboard.sections.activity.eyebrow")}</p>
+            <h2 className="hc-erp-dashboard__section-title">{t("dashboard.sections.activity.title")}</h2>
+            <p className="hc-erp-dashboard__section-description">{t("dashboard.sections.activity.description")}</p>
+          </div>
+
+          {activityChart.length > 0 ? (
+            <div className="hc-erp-activity-chart">
+              {activityChart.map((item) => {
+                const width = maxActivityValue > 0 ? `${Math.max((item.value / maxActivityValue) * 100, 8)}%` : "0%";
+
+                return (
+                  <Link key={item.id} className="hc-erp-activity-chart__row" to={item.to}>
+                    <div className="hc-erp-activity-chart__copy">
+                      <div className="hc-erp-activity-chart__headline">
+                        <span className="hc-erp-activity-chart__label">{translateText(item.label)}</span>
+                        <strong className="hc-erp-activity-chart__value">{item.valueLabel}</strong>
+                      </div>
+                      <div className="hc-erp-activity-chart__bar">
+                        <span className={`hc-erp-activity-chart__bar-fill hc-erp-activity-chart__bar-fill--${item.tone}`} style={{ width }} />
+                      </div>
+                      <span className="hc-erp-activity-chart__context">{item.context}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : activitySummary ? (
+            <p className="hc-erp-dashboard__summary">{activitySummary}</p>
+          ) : null}
+        </section>
+      </div>
+
+      <div className="hc-erp-dashboard__grid hc-erp-dashboard__grid--secondary">
+        <section className="hc-erp-dashboard-panel">
+          <div className="hc-erp-dashboard__section-header">
+            <p className="hc-erp-dashboard__section-eyebrow">{t("dashboard.sections.queues.eyebrow")}</p>
+            <h2 className="hc-erp-dashboard__section-title">{t("dashboard.sections.queues.title")}</h2>
+            <p className="hc-erp-dashboard__section-description">{t("dashboard.sections.queues.description")}</p>
+          </div>
+
+          {queues.length > 0 ? (
+            <div className="hc-erp-dashboard__queue-list">
+              {queues.map((queue) => (
+                <Link key={queue.id} className={`hc-erp-queue-card hc-erp-queue-card--${queue.tone}`} to={queue.to}>
+                  <div className="hc-erp-queue-card__copy">
+                    <div className="hc-erp-queue-card__headline">
+                      <p className="hc-erp-queue-card__title">{translateText(queue.title)}</p>
+                      <Badge tone={badgeToneFor(queue.tone)}>{queue.count}</Badge>
+                    </div>
+                    <div className="hc-erp-queue-card__meta">
+                      <span>{queue.owner}</span>
+                      <span>{queue.eta}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : queuesSummary ? (
+            <p className="hc-erp-dashboard__summary">{queuesSummary}</p>
+          ) : null}
+        </section>
+
+        <section className="hc-erp-dashboard-panel hc-erp-dashboard-panel--secondary">
+          <div className="hc-erp-dashboard__section-header">
+            <p className="hc-erp-dashboard__section-eyebrow">{t("dashboard.sections.finance.eyebrow")}</p>
+            <h2 className="hc-erp-dashboard__section-title">{t("dashboard.sections.finance.title")}</h2>
+            <p className="hc-erp-dashboard__section-description">{t("dashboard.sections.finance.description")}</p>
+          </div>
+
+          {financialMetrics.length > 0 ? (
+            <div className="hc-erp-finance-grid">
+              {financialMetrics.map((metric) => (
+                <Link key={metric.id} className={`hc-erp-finance-card hc-erp-finance-card--${metric.tone}`} to={metric.to}>
+                  <span className="hc-erp-finance-card__label">{translateText(metric.title)}</span>
+                  <strong className="hc-erp-finance-card__value">{metric.value}</strong>
+                </Link>
+              ))}
+            </div>
+          ) : financialSummary ? (
+            <p className="hc-erp-dashboard__summary hc-erp-dashboard__summary--secondary">{financialSummary}</p>
+          ) : null}
+        </section>
       </div>
     </section>
   );

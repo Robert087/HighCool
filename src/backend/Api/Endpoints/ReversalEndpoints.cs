@@ -1,4 +1,5 @@
 using ERP.Application.Reversals;
+using ERP.Application.Security;
 using ERP.Domain.Common;
 using FluentValidation;
 using FluentValidation.Results;
@@ -10,13 +11,22 @@ public static class ReversalEndpoints
     public static IEndpointRouteBuilder MapReversalEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/purchase-receipts/{id:guid}/reverse", (Guid id, ReverseDocumentRequest request, IValidator<ReverseDocumentRequest> validator, IReversalService service, HttpContext context, CancellationToken cancellationToken) =>
-            ReverseAsync(BusinessDocumentType.PurchaseReceipt, id, request, validator, service, context, cancellationToken));
+            ReverseAsync(BusinessDocumentType.PurchaseReceipt, id, request, validator, service, context, cancellationToken))
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Reversals))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseReceiptCancel));
 
         app.MapPost("/api/payments/{id:guid}/reverse", (Guid id, ReverseDocumentRequest request, IValidator<ReverseDocumentRequest> validator, IReversalService service, HttpContext context, CancellationToken cancellationToken) =>
-            ReverseAsync(BusinessDocumentType.Payment, id, request, validator, service, context, cancellationToken));
+            ReverseAsync(BusinessDocumentType.Payment, id, request, validator, service, context, cancellationToken))
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Reversals, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsReversalsCreate));
 
         app.MapPost("/api/shortage-resolutions/{id:guid}/reverse", (Guid id, ReverseDocumentRequest request, IValidator<ReverseDocumentRequest> validator, IReversalService service, HttpContext context, CancellationToken cancellationToken) =>
-            ReverseAsync(BusinessDocumentType.ShortageResolution, id, request, validator, service, context, cancellationToken));
+            ReverseAsync(BusinessDocumentType.ShortageResolution, id, request, validator, service, context, cancellationToken))
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Reversals, OrganizationFeatureKeys.ShortageManagement))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsReversalsCreate));
 
         return app;
     }

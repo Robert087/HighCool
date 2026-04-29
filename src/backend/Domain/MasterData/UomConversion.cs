@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.MasterData;
 
-public sealed class UomConversion : AuditableEntity
+public sealed class UomConversion : OrganizationScopedAuditableEntity
 {
     public Guid FromUomId { get; set; }
 

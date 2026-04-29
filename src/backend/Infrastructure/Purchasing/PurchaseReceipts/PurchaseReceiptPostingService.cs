@@ -1,4 +1,5 @@
 using ERP.Application.Purchasing.PurchaseReceipts;
+using ERP.Application.Security;
 using ERP.Application.Statements;
 using ERP.Domain.Common;
 using ERP.Domain.Purchasing;
@@ -9,12 +10,15 @@ namespace ERP.Infrastructure.Purchasing.PurchaseReceipts;
 
 public sealed class PurchaseReceiptPostingService(
     AppDbContext dbContext,
+    IRequestExecutionContext executionContext,
     IPurchaseReceiptService purchaseReceiptService,
     IStockLedgerService stockLedgerService,
     IShortageDetectionService shortageDetectionService,
     IQuantityConversionService quantityConversionService,
     ISupplierStatementPostingService supplierStatementPostingService) : IPurchaseReceiptPostingService
 {
+    private readonly IRequestExecutionContext _executionContext = executionContext;
+
     public async Task<PurchaseReceiptDto?> PostAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -74,9 +78,26 @@ public sealed class PurchaseReceiptPostingService(
         }
 
         await ValidateReceiptAsync(receipt, cancellationToken);
+        if (receipt.PurchaseOrderId.HasValue)
+        {
+            receipt.SupplierPayableAmount = CalculateLinkedSupplierPayableAmount(receipt);
+        }
+
+        var organization = await dbContext.Organizations
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(entity => entity.Id == _executionContext.OrganizationId, cancellationToken);
         var stockEntries = await stockLedgerService.CreateEntriesAsync(receipt, actor, cancellationToken);
-        await supplierStatementPostingService.CreatePurchaseReceiptEntriesAsync(receipt, stockEntries, actor, cancellationToken);
-        await shortageDetectionService.CreateEntriesAsync(receipt, actor, cancellationToken);
+
+        if (organization.EnableSupplierFinancials)
+        {
+            await supplierStatementPostingService.CreatePurchaseReceiptEntriesAsync(receipt, stockEntries, actor, cancellationToken);
+        }
+
+        if (organization.EnableShortageManagement)
+        {
+            await shortageDetectionService.CreateEntriesAsync(receipt, actor, cancellationToken);
+        }
 
         receipt.Status = DocumentStatus.Posted;
         receipt.UpdatedBy = actor;
@@ -104,7 +125,7 @@ public sealed class PurchaseReceiptPostingService(
             throw new InvalidOperationException("At least one purchase receipt line is required before posting.");
         }
 
-        if (receipt.SupplierPayableAmount < 0m)
+        if (!receipt.PurchaseOrderId.HasValue && receipt.SupplierPayableAmount < 0m)
         {
             throw new InvalidOperationException("Supplier payable amount cannot be negative.");
         }
@@ -267,6 +288,11 @@ public sealed class PurchaseReceiptPostingService(
     private static decimal Round(decimal value)
     {
         return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal CalculateLinkedSupplierPayableAmount(PurchaseReceipt receipt)
+    {
+        return Round(receipt.Lines.Sum(line => line.ReceivedQty * (line.PurchaseOrderLine?.UnitPrice ?? 0m)));
     }
 
     private async Task<decimal> ConvertReceiptLineToBaseAsync(

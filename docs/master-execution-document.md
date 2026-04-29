@@ -26,10 +26,12 @@ These decisions are mandatory for ongoing purchasing work:
 ### Purchase Order and Purchase Receipt
 
 * purchase order is the source of ordered quantities
+* purchase order lines carry `unit_price` for PO-linked receipt payable calculation
 * purchase receipt is the source of actual delivered quantities
 * PO-linked receipt lines must store PO traceability and ordered quantity snapshot
 * over-receipt is blocked in the current implementation
-* until receipt line pricing exists, purchase receipt supplier payable value is captured explicitly on the receipt header and drives supplier statement and payment allocation
+* PO-linked purchase receipt supplier payable value is calculated from received quantities and linked PO line prices
+* manual purchase receipt supplier payable value is captured explicitly on the receipt header and drives supplier statement and payment allocation until manual line pricing exists
 * `po remaining receivable qty` is derived from posted, non-reversed receipts only
 * `receipt remaining returnable qty` is derived from posted, non-reversed receipts minus posted, non-reversed returns
 * fully received PO rows and fully returned receipt rows must disappear from actionable candidate lists
@@ -82,6 +84,10 @@ Mandatory performance rules for current and future ERP modules:
 * dashboards and header summaries must use dedicated summary queries
 * database indexing must be reviewed whenever new document tables, ledger tables, or allocation tables are introduced
 * no browser screen may load full operational datasets by default
+* new forms must load shared active selector data through reusable cached option loaders with explicit invalidation after master-data writes
+* new forms must fetch only the data needed for initial interaction and first paint
+* selectable document dropdowns must use lightweight list rows and must not preload every candidate document detail
+* linked-document detail must be fetched lazily for the selected record or the one persisted linked record being edited
 
 ## Localization Addendum
 

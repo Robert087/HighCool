@@ -43,6 +43,20 @@ function readStoredLocale(): SupportedLocale {
   return value === "ar" ? "ar" : "en";
 }
 
+function humanizeMissingKey(key: string) {
+  const lastToken = key.split(".").pop() ?? key;
+  const words = lastToken
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+
+  if (!words) {
+    return key;
+  }
+
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function I18nProvider({ children }: PropsWithChildren) {
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
 
@@ -60,7 +74,7 @@ export function I18nProvider({ children }: PropsWithChildren) {
     const direction = getDirection(locale);
 
     const t = (key: string, values?: Record<string, string | number | null | undefined>) => {
-      const template = dictionary[key] ?? messagesByLocale.en[key] ?? key;
+      const template = dictionary[key] ?? messagesByLocale.en[key] ?? humanizeMissingKey(key);
       return interpolate(template, values);
     };
 

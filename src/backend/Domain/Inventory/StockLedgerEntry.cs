@@ -3,7 +3,7 @@ using ERP.Domain.MasterData;
 
 namespace ERP.Domain.Inventory;
 
-public sealed class StockLedgerEntry : AuditableEntity
+public sealed class StockLedgerEntry : OrganizationScopedAuditableEntity
 {
     public Guid ItemId { get; set; }
 

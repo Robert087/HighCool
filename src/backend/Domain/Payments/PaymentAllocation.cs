@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.Payments;
 
-public sealed class PaymentAllocation : AuditableEntity
+public sealed class PaymentAllocation : OrganizationScopedAuditableEntity
 {
     public Guid PaymentId { get; set; }
 

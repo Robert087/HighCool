@@ -12,9 +12,10 @@ Actions:
 Effects:
 
 * persists PO header and lines
+* line pricing is captured as `unit_price`
 * no stock effect
 * no shortage effect
-* no financial effect
+* no financial statement effect
 * status remains `Draft`
 
 ### Post
@@ -56,6 +57,7 @@ Effects:
 
 * persists receipt header, lines, and auto-filled component rows
 * stores PO linkage and ordered snapshot when linked
+* calculates PO-linked `supplier_payable_amount` from received quantities and linked PO line unit prices
 * recalculates `expected_qty` for each component row from `received_qty x item BOM quantity`
 * defaults `actual_received_qty` to `expected_qty` when a component row has not been edited yet
 * no stock ledger effect
@@ -94,10 +96,11 @@ Posting effects:
 * actual components are compared against expected quantities
 * shortage ledger rows are written only for positive shortages
 
-Current receipt financial assumption:
+Receipt financial basis:
 
 * receipt statement amount uses `supplier_payable_amount` from the posted receipt header
-* because receipt pricing is not yet implemented per line, `supplier_payable_amount` is the temporary explicit procurement financial basis for supplier statement and payment allocation
+* for PO-linked receipts, `supplier_payable_amount` is server-calculated from `received_qty x purchase_order_line.unit_price`
+* for manual receipts, `supplier_payable_amount` remains the explicit procurement financial basis until manual line pricing is implemented
 * if `supplier_payable_amount <= 0`, posting is still allowed but no financial supplier statement row is written
 
 Idempotency:

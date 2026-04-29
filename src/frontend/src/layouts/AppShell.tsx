@@ -1,64 +1,183 @@
-import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Badge, Button, PageContainer, useToast } from "../components/ui";
+import { useAuth } from "../features/auth/AuthProvider";
+import { useFeatureConfiguration } from "../features/auth/FeatureConfigurationProvider";
 import { useI18n } from "../i18n";
+import { Permissions } from "../services/permissions";
+import { DISABLE_FEATURE_GATING } from "../config/temporaryFlags";
 
 const navigationGroups = [
   {
-    id: "main",
-    label: "nav.main",
+    id: "workspace",
+    label: "nav.workspace",
     items: [
-      { label: "nav.dashboard", to: "/", icon: "dashboard" },
+      { label: "nav.dashboard", to: "/workspace", icon: "dashboard" },
     ],
   },
   {
-    id: "purchasing",
-    label: "nav.purchasing",
+    id: "procurement",
+    label: "nav.procurement",
     items: [
-      { label: "nav.purchaseOrders", to: "/purchase-orders", icon: "document" },
-      { label: "nav.purchaseReceipts", to: "/purchase-receipts", icon: "receipt" },
-      { label: "nav.purchaseReturns", to: "/purchase-returns", icon: "receipt" },
+      { label: "nav.purchaseOrders", to: "/procurement/purchase-orders", icon: "document" },
+      { label: "nav.purchaseReceipts", to: "/procurement/purchase-receipts", icon: "receipt" },
+      { label: "nav.purchaseReturns", to: "/procurement/purchase-returns", icon: "document" },
     ],
   },
   {
     id: "inventory",
     label: "nav.inventory",
     items: [
-      { label: "module.shortages", to: "/open-shortages", icon: "alert" },
-      { label: "nav.shortageResolutions", to: "/shortage-resolutions", icon: "resolve" },
+      { label: "nav.stockCard", to: "/inventory/stock-ledger", icon: "ledger" },
       { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
-      { label: "nav.stockCard", to: "/stock-movements", icon: "ledger" },
-    ],
-  },
-  {
-    id: "statements",
-    label: "nav.statements",
-    items: [
-      { label: "nav.supplierStatement", to: "/supplier-statements", icon: "statement" },
-      { label: "nav.supplierPayments", to: "/payments", icon: "payment" },
-    ],
-  },
-  {
-    id: "master-data",
-    label: "nav.masterData",
-    items: [
-      { label: "nav.customers", to: "/customers", icon: "customers" },
       { label: "nav.items", to: "/items", icon: "items" },
-      { label: "nav.uomConversions", to: "/uom-conversions", icon: "conversion" },
-      { label: "nav.suppliers", to: "/suppliers", icon: "suppliers" },
-      { label: "nav.warehouses", to: "/warehouses", icon: "warehouse" },
+      { label: "nav.warehouses", to: "/inventory/warehouses", icon: "warehouse" },
       { label: "nav.uoms", to: "/uoms", icon: "uom" },
+      { label: "nav.uomConversions", to: "/uom-conversions", icon: "conversion" },
+    ],
+  },
+  {
+    id: "shortages",
+    label: "nav.shortageResolutions",
+    items: [
+      { label: "app.openShortages", to: "/open-shortages", icon: "alert" },
+      { label: "nav.shortageResolutions", to: "/shortage-resolutions", icon: "resolve" },
+    ],
+  },
+  {
+    id: "suppliers",
+    label: "nav.suppliersModule",
+    items: [
+      { label: "nav.suppliers", to: "/suppliers", icon: "suppliers" },
+      { label: "nav.customers", to: "/customers", icon: "customers" },
+    ],
+  },
+  {
+    id: "supplier-financials",
+    label: "nav.supplierFinancials",
+    items: [
+      { label: "nav.supplierStatement", to: "/supplier-financials", icon: "statement", exact: true },
+      { label: "nav.supplierPayments", to: "/supplier-financials/payments", icon: "payment" },
+    ],
+  },
+  {
+    id: "settings",
+    label: "nav.settings",
+    items: [
+      { label: "settings.nav.users", to: "/settings/users", icon: "settings" },
+      { label: "settings.nav.roles", to: "/settings/roles", icon: "settings" },
     ],
   },
 ] as const;
 
 const SIDEBAR_COLLAPSED_KEY = "hc-sidebar-collapsed";
 const SIDEBAR_GROUPS_KEY = "hc-sidebar-groups";
+const THEME_STORAGE_KEY = "hc-theme";
 
 type NavigationGroup = (typeof navigationGroups)[number];
 type NavigationItem = NavigationGroup["items"][number];
 type GroupState = Record<string, boolean>;
-type IconName = NavigationItem["icon"];
+type IconName = "dashboard" | "document" | "receipt" | "alert" | "resolve" | "balance" | "ledger" | "statement" | "payment" | "customers" | "items" | "conversion" | "suppliers" | "warehouse" | "uom" | "settings";
+type MenuState = "notifications" | "user" | null;
+type SearchResult = {
+  id: string;
+  categoryKey: string;
+  labelKey: string;
+  keywords: string[];
+  to: string;
+};
+type NotificationItem = {
+  id: string;
+  detailKey: string;
+  titleKey: string;
+  tone: "danger" | "warning" | "primary";
+  to: string;
+};
+
+const searchIndex: SearchResult[] = [
+  ...navigationGroups.flatMap((group) =>
+    group.items.map((item) => ({
+      id: item.to,
+      categoryKey: group.label,
+      labelKey: item.label,
+      keywords: [item.to, item.icon, group.id],
+      to: item.to,
+    })),
+  ),
+  {
+    id: "global-search-po",
+    categoryKey: "appBar.search.category.documents",
+    labelKey: "appBar.search.result.purchaseOrders",
+    keywords: ["po", "purchase order", "orders", "transactions", "documents"],
+    to: "/purchase-orders",
+  },
+  {
+    id: "global-search-grn",
+    categoryKey: "appBar.search.category.documents",
+    labelKey: "appBar.search.result.goodsReceipts",
+    keywords: ["grn", "goods receipt", "receipts", "documents", "warehouse"],
+    to: "/purchase-receipts",
+  },
+  {
+    id: "global-search-items",
+    categoryKey: "appBar.search.category.records",
+    labelKey: "appBar.search.result.items",
+    keywords: ["items", "catalog", "sku", "inventory"],
+    to: "/items",
+  },
+  {
+    id: "global-search-suppliers",
+    categoryKey: "appBar.search.category.records",
+    labelKey: "appBar.search.result.suppliers",
+    keywords: ["suppliers", "vendors", "contacts", "partners"],
+    to: "/suppliers",
+  },
+  {
+    id: "global-search-customers",
+    categoryKey: "appBar.search.category.records",
+    labelKey: "appBar.search.result.customers",
+    keywords: ["customers", "accounts", "contacts"],
+    to: "/customers",
+  },
+  {
+    id: "global-search-stock",
+    categoryKey: "appBar.search.category.reports",
+    labelKey: "appBar.search.result.stockBalance",
+    keywords: ["reports", "balances", "stock", "inventory", "summary"],
+    to: "/stock-balances",
+  },
+  {
+    id: "global-search-statements",
+    categoryKey: "appBar.search.category.reports",
+    labelKey: "appBar.search.result.supplierStatement",
+    keywords: ["reports", "statement", "supplier", "finance"],
+    to: "/supplier-statements",
+  },
+];
+
+const enterpriseNotifications: NotificationItem[] = [
+  {
+    id: "approvals",
+    titleKey: "appBar.notifications.approvals.title",
+    detailKey: "appBar.notifications.approvals.detail",
+    tone: "primary",
+    to: "/purchase-orders",
+  },
+  {
+    id: "posting-errors",
+    titleKey: "appBar.notifications.errors.title",
+    detailKey: "appBar.notifications.errors.detail",
+    tone: "danger",
+    to: "/purchase-receipts",
+  },
+  {
+    id: "shortages",
+    titleKey: "appBar.notifications.shortages.title",
+    detailKey: "appBar.notifications.shortages.detail",
+    tone: "warning",
+    to: "/open-shortages",
+  },
+];
 
 function SidebarIcon({ name }: { name: IconName }) {
   const commonProps = {
@@ -103,6 +222,48 @@ function SidebarIcon({ name }: { name: IconName }) {
       return <svg {...commonProps}><path d="M3 10 12 4l9 6v10H3z" /><path d="M8 14h8M8 18h8" /></svg>;
     case "uom":
       return <svg {...commonProps}><path d="M6 7h12M6 12h8M6 17h12" /><path d="M18 5v14" /></svg>;
+    case "settings":
+      return <svg {...commonProps}><path d="m12 3 1.6 2.6 3 .5-2.1 2.1.5 3-3-1.6-3 1.6.5-3-2.1-2.1 3-.5L12 3z" /><circle cx="12" cy="12" r="3.1" /></svg>;
+    default:
+      return null;
+  }
+}
+
+function AppBarIcon({ name }: { name: "search" | "spark" | "bell" | "globe" | "sun" | "moon" | "chevron" | "profile" | "building" | "settings" | "logout" }) {
+  const commonProps = {
+    "aria-hidden": true,
+    className: "app-globalbar__icon-svg",
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.8,
+    viewBox: "0 0 24 24",
+  };
+
+  switch (name) {
+    case "search":
+      return <svg {...commonProps}><path d="m21 21-4.35-4.35" /><circle cx="11" cy="11" r="6.5" /></svg>;
+    case "spark":
+      return <svg {...commonProps}><path d="m12 3 1.3 3.7L17 8l-3.7 1.3L12 13l-1.3-3.7L7 8l3.7-1.3L12 3z" /><path d="m18.5 14.5.7 2 .8.3-.8.3-.7 2-.7-2-.8-.3.8-.3.7-2zM6 15l.9 2.5L9.5 18l-2.6.5L6 21l-.9-2.5L2.5 18l2.6-.5L6 15z" /></svg>;
+    case "bell":
+      return <svg {...commonProps}><path d="M15 17H5.8A1.8 1.8 0 0 1 4 15.2c0-.4.1-.8.3-1.1L6 11.3V9a6 6 0 1 1 12 0v2.3l1.7 2.8c.2.3.3.7.3 1.1a1.8 1.8 0 0 1-1.8 1.8H15" /><path d="M9.5 17a2.5 2.5 0 0 0 5 0" /></svg>;
+    case "globe":
+      return <svg {...commonProps}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14.6 14.6 0 0 1 0 18M12 3a14.6 14.6 0 0 0 0 18" /></svg>;
+    case "sun":
+      return <svg {...commonProps}><circle cx="12" cy="12" r="3.5" /><path d="M12 2.5v2.2M12 19.3v2.2M4.7 4.7l1.6 1.6M17.7 17.7l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.7 19.3l1.6-1.6M17.7 6.3l1.6-1.6" /></svg>;
+    case "moon":
+      return <svg {...commonProps}><path d="M20 14.2A7.8 7.8 0 1 1 9.8 4 6.3 6.3 0 0 0 20 14.2z" /></svg>;
+    case "chevron":
+      return <svg {...commonProps}><path d="m9 6 6 6-6 6" /></svg>;
+    case "profile":
+      return <svg {...commonProps}><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /><path d="M4 20a8 8 0 0 1 16 0" /></svg>;
+    case "building":
+      return <svg {...commonProps}><path d="M4 20h16" /><path d="M6 20V6h12v14" /><path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01" /></svg>;
+    case "settings":
+      return <svg {...commonProps}><path d="m12 3 1.2 2.4 2.7.4-2 1.9.5 2.7-2.4-1.3-2.4 1.3.5-2.7-2-1.9 2.7-.4L12 3z" /><circle cx="12" cy="12" r="3.4" /><path d="m4.5 14.5 2.2.3M17.3 14.8l2.2-.3M6.8 9.2 5.2 7.6M18.8 7.6l-1.6 1.6M12 18.8V21" /></svg>;
+    case "logout":
+      return <svg {...commonProps}><path d="M10 17 15 12 10 7" /><path d="M15 12H4" /><path d="M13 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /></svg>;
     default:
       return null;
   }
@@ -137,33 +298,58 @@ function readStoredBoolean(key: string, fallback: boolean) {
   return value === "true";
 }
 
-function getGroupForPath(pathname: string) {
-  if (pathname.startsWith("/purchase-orders") || pathname.startsWith("/purchase-receipts") || pathname.startsWith("/purchase-returns")) {
-    return "purchasing";
+function readStoredTheme() {
+  if (typeof window === "undefined") {
+    return "light" as const;
   }
 
-  if (pathname.startsWith("/open-shortages") || pathname.startsWith("/shortage-resolutions") || pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements")) {
+  const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return value === "dark" ? "dark" as const : "light" as const;
+}
+
+function getGroupForPath(pathname: string) {
+  if (pathname.startsWith("/workspace") || pathname.startsWith("/dashboard") || pathname === "/" || pathname === "/home") {
+    return "workspace";
+  }
+
+  if (pathname.startsWith("/purchase-orders") || pathname.startsWith("/purchase-receipts") || pathname.startsWith("/purchase-returns")) {
+    return "procurement";
+  }
+  if (pathname.startsWith("/procurement/")) {
+    return "procurement";
+  }
+
+  if (pathname.startsWith("/open-shortages") || pathname.startsWith("/shortage-resolutions")) {
+    return "shortages";
+  }
+  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/items") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
+    return "inventory";
+  }
+  if (pathname.startsWith("/inventory/")) {
     return "inventory";
   }
 
-  if (pathname.startsWith("/supplier-statements")) {
-    return "statements";
+  if (pathname.startsWith("/suppliers") || pathname.startsWith("/customers")) {
+    return "suppliers";
   }
 
-  if (pathname.startsWith("/payments")) {
-    return "statements";
+  if (pathname.startsWith("/supplier-statements") || pathname.startsWith("/payments")) {
+    return "supplier-financials";
+  }
+  if (pathname.startsWith("/supplier-financials")) {
+    return "supplier-financials";
   }
 
-  if (pathname.startsWith("/customers") || pathname.startsWith("/items") || pathname.startsWith("/uom-conversions") || pathname.startsWith("/suppliers") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms")) {
-    return "master-data";
+  if (pathname.startsWith("/settings")) {
+    return "settings";
   }
 
-  return "main";
+  return "workspace";
 }
 
 function getDefaultGroupState(activeGroupId: string): GroupState {
   return Object.fromEntries(
-    navigationGroups.map((group) => [group.id, group.id === "main" || group.id === activeGroupId]),
+    navigationGroups.map((group) => [group.id, group.id === "workspace" || group.id === activeGroupId]),
   );
 }
 
@@ -180,7 +366,7 @@ function readStoredGroupState(activeGroupId: string): GroupState {
   try {
     const parsed = JSON.parse(rawValue) as Record<string, boolean>;
     return navigationGroups.reduce<GroupState>((state, group) => {
-      state[group.id] = parsed[group.id] ?? (group.id === "main" || group.id === activeGroupId);
+      state[group.id] = parsed[group.id] ?? (group.id === "workspace" || group.id === activeGroupId);
       return state;
     }, {} as GroupState);
   } catch {
@@ -188,166 +374,13 @@ function readStoredGroupState(activeGroupId: string): GroupState {
   }
 }
 
-type RouteMeta = {
-  section: string;
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-};
-
-function getRouteMeta(pathname: string): RouteMeta {
-  if (pathname.startsWith("/items")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Item editor" : "Catalog",
-      title: pathname.includes("/new") ? "Create item" : pathname.includes("/edit") ? "Edit item" : "Items",
-      subtitle: "Search, review, and maintain core item records.",
-    };
-  }
-
-  if (pathname.startsWith("/customers")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Customer editor" : "Directory",
-      title: pathname.includes("/new") ? "Create customer" : pathname.includes("/edit") ? "Edit customer" : "Customers",
-      subtitle: "Keep customer identities, contact details, and commercial terms organized.",
-    };
-  }
-
-  if (pathname.startsWith("/purchase-orders")) {
-    return {
-      section: "Purchasing",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Order editor" : "Purchase orders",
-      title: pathname.includes("/new") ? "Create purchase order" : pathname.includes("/edit") ? "Edit purchase order" : "Purchase orders",
-      subtitle: "Define expected supplier quantities before receipt posting and shortage capture.",
-    };
-  }
-
-  if (pathname.startsWith("/purchase-receipts")) {
-    return {
-      section: "Purchasing",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Receipt editor" : "Purchase receipts",
-      title: pathname.includes("/new") ? "Create purchase receipt" : pathname.includes("/edit") ? "Edit purchase receipt" : "Purchase receipts",
-      subtitle: "Capture actual deliveries, linked purchase order context, and component shortages with full traceability.",
-    };
-  }
-
-  if (pathname.startsWith("/purchase-returns")) {
-    return {
-      section: "Purchasing",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Return editor" : "Purchase returns",
-      title: pathname.includes("/new") ? "Create purchase return" : pathname.includes("/edit") ? "Edit purchase return" : "Purchase returns",
-      subtitle: "Send received stock back through a controlled return flow that preserves stock and supplier audit history.",
-    };
-  }
-
-  if (pathname.startsWith("/stock-balances")) {
-    return {
-      section: "Inventory",
-      eyebrow: "Stock balance",
-      title: "Stock balance",
-      subtitle: "View warehouse balances derived from append-only stock ledger entries only.",
-    };
-  }
-
-  if (pathname.startsWith("/open-shortages")) {
-    return {
-      section: "Inventory",
-      eyebrow: "Shortage control",
-      title: "Open shortages",
-      subtitle: "Track unresolved receipt shortages, supplier accountability, and the remaining quantity or value still open.",
-    };
-  }
-
-  if (pathname.startsWith("/shortage-resolutions")) {
-    return {
-      section: "Inventory",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Resolution editor" : "Shortage resolutions",
-      title: pathname.includes("/new") ? "Create shortage resolution" : pathname.includes("/edit") ? "Edit shortage resolution" : "Shortage resolutions",
-      subtitle: "Resolve shortage rows physically or financially with full allocation traceability back to the original receipt shortage.",
-    };
-  }
-
-  if (pathname.startsWith("/stock-movements")) {
-    return {
-      section: "Inventory",
-      eyebrow: "Stock card",
-      title: "Stock card",
-      subtitle: "Trace transaction history, source document references, and running balances per item and warehouse.",
-    };
-  }
-
-  if (pathname.startsWith("/uom-conversions")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Conversion editor" : "Measurement rules",
-      title: pathname.includes("/new") ? "Create conversion" : pathname.includes("/edit") ? "Edit conversion" : "UOM conversions",
-      subtitle: "Keep global conversion logic clear and traceable.",
-    };
-  }
-
-  if (pathname.startsWith("/suppliers")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Supplier editor" : "Directory",
-      title: pathname.includes("/new") ? "Create supplier" : pathname.includes("/edit") ? "Edit supplier" : "Suppliers",
-      subtitle: "Keep supplier identities and contacts organized.",
-    };
-  }
-
-  if (pathname.startsWith("/supplier-statements")) {
-    return {
-      section: "Statements",
-      eyebrow: "Supplier statement",
-      title: "Supplier statement",
-      subtitle: "Review supplier balances that are derived only from posted procurement and shortage-financial-resolution documents.",
-    };
-  }
-
-  if (pathname.startsWith("/payments")) {
-    const isEditorRoute = pathname.endsWith("/new") || pathname.endsWith("/edit") || /^\/payments\/[^/]+$/.test(pathname);
-
-    return {
-      section: "Statements",
-      eyebrow: isEditorRoute ? "Payment editor" : "Supplier payments",
-      title: pathname.endsWith("/new") ? "Create supplier payment" : isEditorRoute ? "Supplier payment" : "Supplier payments",
-      subtitle: "Settle supplier-side open balances through mandatory, traceable payment allocations.",
-    };
-  }
-
-  if (pathname.startsWith("/warehouses")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "Warehouse editor" : "Locations",
-      title: pathname.includes("/new") ? "Create warehouse" : pathname.includes("/edit") ? "Edit warehouse" : "Warehouses",
-      subtitle: "Manage warehouse records and location references.",
-    };
-  }
-
-  if (pathname.startsWith("/uoms")) {
-    return {
-      section: "Master Data",
-      eyebrow: pathname.includes("/new") || pathname.includes("/edit") ? "UOM editor" : "Measurement",
-      title: pathname.includes("/new") ? "Create UOM" : pathname.includes("/edit") ? "Edit UOM" : "Units of measure",
-      subtitle: "Maintain the shared measurement catalog.",
-    };
-  }
-
-  if (pathname === "/" || pathname === "/home") {
-    return {
-      section: "Workspace",
-      eyebrow: "Today",
-      title: "Dashboard",
-      subtitle: "A cleaner workspace for setup, review, and next actions.",
-    };
-  }
-
-  return {
-    section: "Workspace",
-    eyebrow: "Workspace",
-    title: "HighCool ERP",
-    subtitle: "Move through the workspace with fewer clicks and less noise.",
-  };
+function getInitials(value: string) {
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 function greetingForHour(hour: number) {
@@ -364,14 +397,57 @@ function greetingForHour(hour: number) {
 
 export function AppShell({ children }: PropsWithChildren) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { showToast } = useToast();
-  const { direction, locale, setLocale, t, translateText } = useI18n();
+  const { direction, locale, setLocale, t } = useI18n();
+  const { hasPermission, isAuthenticated, logout, switchOrganization, workspace } = useAuth();
+  const { features } = useFeatureConfiguration();
+  const isSetupRoute = location.pathname.startsWith("/setup/organization");
   const activeGroupId = getGroupForPath(location.pathname);
+  const filteredGroups = useMemo(() => navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        // TEMPORARILY_DISABLED: Feature gating bypassed until all module keys/routes are aligned.
+        // Restore legacy behavior by showing all operational modules in sidebar.
+        if (DISABLE_FEATURE_GATING) {
+          return true;
+        }
+
+        const permission = navigationPermissions[item.to];
+        return !permission || hasPermission(permission);
+      }),
+    }))
+    .filter((group) => {
+      if (group.items.length === 0) {
+        return false;
+      }
+
+      if (DISABLE_FEATURE_GATING) {
+        return true;
+      }
+
+      if (!workspace?.setupCompleted || !features) {
+        return group.id === "workspace";
+      }
+
+      return featureGroupVisibility[group.id as keyof typeof featureGroupVisibility](features);
+    }), [features, hasPermission, workspace?.setupCompleted]);
+  const activeGroup = filteredGroups.find((group) => group.id === activeGroupId) ?? filteredGroups[0];
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredBoolean(SIDEBAR_COLLAPSED_KEY, false));
   const [sidebarGroups, setSidebarGroups] = useState<GroupState>(() => readStoredGroupState(activeGroupId));
-  const isDashboard = location.pathname === "/" || location.pathname === "/home";
-  const greeting = `${t(greetingForHour(new Date().getHours()))}, Robert`;
+  const [theme, setTheme] = useState<"light" | "dark">(() => readStoredTheme());
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<MenuState>(null);
+  const appBarRef = useRef<HTMLElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const userName = workspace?.fullName ?? "Workspace";
+  const notificationCount = enterpriseNotifications.length;
+  const isDraftMode = /\/new$|\/edit$/.test(location.pathname);
+  const isDashboard = location.pathname === "/workspace" || location.pathname === "/dashboard" || location.pathname === "/" || location.pathname === "/home";
+  const aiActive = isOnline;
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed));
@@ -382,9 +458,20 @@ export function AppShell({ children }: PropsWithChildren) {
   }, [sidebarGroups]);
 
   useEffect(() => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    document.documentElement.dataset.theme = theme;
+    document.body.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    if (DISABLE_FEATURE_GATING) {
+      setSidebarGroups(Object.fromEntries(navigationGroups.map((group) => [group.id, true])) as GroupState);
+      return;
+    }
+
     setSidebarGroups((current) => ({
       ...current,
-      main: true,
+      workspace: true,
       [activeGroupId]: true,
     }));
   }, [activeGroupId]);
@@ -402,12 +489,38 @@ export function AppShell({ children }: PropsWithChildren) {
     };
   }, []);
 
-  function handleAiAssist() {
-    showToast({
-      tone: "info",
-      title: t("app.askAi"),
-      description: translateText("Use AI for quick help with missing setup, open shortages, and the next operational step."),
-    });
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (appBarRef.current && !appBarRef.current.contains(event.target as Node)) {
+        setOpenMenu(null);
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    setOpenMenu(null);
+    setIsSearchOpen(false);
+  }, [location.pathname]);
+
+  function toggleTheme() {
+    setTheme((current) => (current === "light" ? "dark" : "light"));
   }
 
   function toggleGroup(groupId: string) {
@@ -417,10 +530,47 @@ export function AppShell({ children }: PropsWithChildren) {
     }));
   }
 
+  function handleDeferredAction(messageKey: string) {
+    showToast({
+      tone: "info",
+      title: t("appBar.comingSoon.title"),
+      description: t(messageKey),
+    });
+    setOpenMenu(null);
+  }
+
+  const searchResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const results = normalizedQuery.length === 0
+      ? searchIndex.slice(0, 6)
+      : searchIndex.filter((entry) =>
+        [entry.id, ...entry.keywords, t(entry.labelKey), t(entry.categoryKey)].join(" ").toLowerCase().includes(normalizedQuery),
+      );
+
+    return results.slice(0, 7);
+  }, [searchQuery, t]);
+
   const workspaceStatus = useMemo(() => ({
     connectionLabel: isOnline ? t("app.connected") : t("app.offline"),
     draftLabel: t("app.draftsPending", { count: 0 }),
   }), [isOnline, t]);
+  const greeting = `${t(greetingForHour(new Date().getHours()))}, ${userName}`;
+
+  if (!isAuthenticated) {
+    return <>{children}</>;
+  }
+
+  if (isSetupRoute) {
+    return (
+      <div className="app-shell app-shell--setup" dir={direction}>
+        <main className="app-main__content">
+          <PageContainer width="wide" className="app-main__page app-main__page--setup">
+            {children}
+          </PageContainer>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--collapsed" : ""}`} dir={direction}>
@@ -445,8 +595,8 @@ export function AppShell({ children }: PropsWithChildren) {
         </div>
 
         <nav aria-label={t("app.primaryNavigation")} className="app-sidebar__nav">
-          {navigationGroups.map((group) => (
-            <section key={group.label} className="app-sidebar__group">
+          {filteredGroups.map((group) => (
+            <section key={group.id} className="app-sidebar__group">
               {!sidebarCollapsed ? (
                 <button
                   aria-controls={`sidebar-group-${group.id}`}
@@ -455,7 +605,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   type="button"
                   onClick={() => toggleGroup(group.id)}
                 >
-                  <span className="app-sidebar__group-label">{translateText(group.label)}</span>
+                  <span className="app-sidebar__group-label">{t(group.label)}</span>
                   <ChevronIcon expanded={sidebarGroups[group.id]} />
                 </button>
               ) : (
@@ -470,17 +620,18 @@ export function AppShell({ children }: PropsWithChildren) {
                   {group.items.map((item) => (
                     <li key={item.to}>
                       <NavLink
-                        aria-label={translateText(item.label)}
+                        end={Boolean((item as { exact?: boolean }).exact)}
+                        aria-label={t(item.label)}
                         className={({ isActive }) =>
                           `app-sidebar__nav-item ${isActive ? "app-sidebar__nav-item--active" : ""}`
                         }
-                        title={sidebarCollapsed ? translateText(item.label) : undefined}
+                        title={sidebarCollapsed ? t(item.label) : undefined}
                         to={item.to}
                       >
                         <span className="app-sidebar__nav-icon" aria-hidden="true">
                           <SidebarIcon name={item.icon} />
                         </span>
-                        <span className="app-sidebar__nav-label">{translateText(item.label)}</span>
+                        <span className="app-sidebar__nav-label">{t(item.label)}</span>
                       </NavLink>
                     </li>
                   ))}
@@ -491,12 +642,24 @@ export function AppShell({ children }: PropsWithChildren) {
         </nav>
 
         <div className="app-sidebar__footer">
-          <div className="app-sidebar__locale-switcher" role="group" aria-label={t("app.language")}>
-            <Button size="sm" variant={locale === "en" ? "secondary" : "ghost"} onClick={() => setLocale("en")}>
-              {t("app.language.en")}
+          <div className="app-sidebar__theme-switcher" role="group" aria-label={t("dashboard.theme.label")}>
+            <Button
+              size="sm"
+              title={theme === "light" ? t("dashboard.theme.dark") : t("dashboard.theme.light")}
+              variant="secondary"
+              onClick={toggleTheme}
+            >
+              {sidebarCollapsed ? (theme === "light" ? "Dark" : "Light") : (theme === "light" ? t("dashboard.theme.dark") : t("dashboard.theme.light"))}
             </Button>
-            <Button size="sm" variant={locale === "ar" ? "secondary" : "ghost"} onClick={() => setLocale("ar")}>
-              {t("app.language.ar")}
+          </div>
+          <div className="app-sidebar__locale-switcher" role="group" aria-label={t("app.language")}>
+            <Button
+              size="sm"
+              title={locale === "en" ? t("app.language.ar") : t("app.language.en")}
+              variant="secondary"
+              onClick={() => setLocale(locale === "en" ? "ar" : "en")}
+            >
+              {sidebarCollapsed ? (locale === "en" ? "AR" : "EN") : (locale === "en" ? t("app.language.ar") : t("app.language.en"))}
             </Button>
           </div>
           <div className="app-sidebar__status" title={sidebarCollapsed ? `${workspaceStatus.connectionLabel} · ${workspaceStatus.draftLabel}` : undefined}>
@@ -513,46 +676,218 @@ export function AppShell({ children }: PropsWithChildren) {
       </aside>
 
       <div className="app-main">
-        {isDashboard ? (
-          <header className="app-topbar">
-            <div className="app-topbar__container">
-              <div className="app-topbar__utility">
-                <div className="app-topbar__breadcrumbs" aria-label={t("app.sectionContext")}>
-                  <span>{t("app.productName")}</span>
-                  <span className="app-topbar__separator">/</span>
-                  <span>{t("nav.dashboard")}</span>
-                </div>
+        <header ref={appBarRef} className="app-globalbar">
+          <div className="app-globalbar__center">
+            <div className={`app-globalbar__search ${isSearchOpen ? "app-globalbar__search--open" : ""}`}>
+              <AppBarIcon name="search" />
+              <input
+                ref={searchInputRef}
+                aria-label={t("appBar.search.label")}
+                className="app-globalbar__search-input"
+                placeholder={t("appBar.search.placeholder")}
+                type="search"
+                value={searchQuery}
+                onBlur={() => {
+                  window.setTimeout(() => setIsSearchOpen(false), 120);
+                }}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onFocus={() => {
+                  setIsSearchOpen(true);
+                  setOpenMenu(null);
+                }}
+              />
+              <span className="app-globalbar__search-shortcut">{t("appBar.search.shortcut")}</span>
 
-                <div className="app-topbar__utility-actions">
-                  <Badge tone="primary">{t("app.offlineDraftsOnly")}</Badge>
-                  <Button size="sm" variant="ghost" onClick={handleAiAssist}>
-                    {t("app.askAi")}
-                  </Button>
+              {isSearchOpen ? (
+                <div className="app-globalbar__search-panel">
+                  <div className="app-globalbar__search-panel-header">
+                    <span>{t("appBar.search.instantResults")}</span>
+                    <span>{t("appBar.search.coverage")}</span>
+                  </div>
+
+                  {searchResults.length > 0 ? (
+                    <ul className="app-globalbar__search-results">
+                      {searchResults.map((result) => (
+                        <li key={result.id}>
+                          <Link className="app-globalbar__search-result" to={result.to}>
+                            <span className="app-globalbar__search-result-copy">
+                              <span className="app-globalbar__search-result-title">{t(result.labelKey)}</span>
+                              <span className="app-globalbar__search-result-meta">{t(result.categoryKey)}</span>
+                            </span>
+                            <AppBarIcon name="chevron" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="app-globalbar__search-empty">
+                      <span>{t("appBar.search.noResults")}</span>
+                      <span>{t("appBar.search.noResultsHint")}</span>
+                    </div>
+                  )}
                 </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="app-globalbar__right">
+            <div className="app-globalbar__status-group">
+              <Badge className="app-globalbar__status-badge app-globalbar__status-badge--mode" tone={isDraftMode ? "warning" : "success"}>
+                {t("appBar.modeLabel")}: {isDraftMode ? t("appBar.mode.draft") : t("appBar.mode.live")}
+              </Badge>
+              <Badge className="app-globalbar__status-badge app-globalbar__status-badge--ai" tone={aiActive ? "primary" : "neutral"}>
+                {t("appBar.aiLabel")}: {aiActive ? t("appBar.ai.active") : t("appBar.ai.idle")}
+              </Badge>
+            </div>
+
+            <div className="app-globalbar__actions">
+              <div className={`app-globalbar__menu app-globalbar__menu--notifications ${openMenu === "notifications" ? "app-globalbar__menu--open" : ""}`}>
+                <button
+                  aria-expanded={openMenu === "notifications"}
+                  aria-label={t("appBar.notifications.label")}
+                  className="app-globalbar__icon-button"
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu((current) => current === "notifications" ? null : "notifications");
+                    setIsSearchOpen(false);
+                  }}
+                >
+                  <AppBarIcon name="bell" />
+                  <span className="app-globalbar__badge-count">{notificationCount}</span>
+                </button>
+
+                {openMenu === "notifications" ? (
+                  <div className="app-globalbar__dropdown app-globalbar__dropdown--notifications">
+                    <div className="app-globalbar__dropdown-header">
+                      <div>
+                        <p className="app-globalbar__dropdown-eyebrow">{t("appBar.notifications.eyebrow")}</p>
+                        <h2 className="app-globalbar__dropdown-title">{t("appBar.notifications.title")}</h2>
+                      </div>
+                      <Badge tone="primary">{notificationCount}</Badge>
+                    </div>
+
+                    <ul className="app-globalbar__notification-list">
+                      {enterpriseNotifications.map((notification) => (
+                        <li key={notification.id}>
+                          <Link className="app-globalbar__notification-item" to={notification.to}>
+                            <Badge tone={notification.tone}>{t(notification.titleKey)}</Badge>
+                            <span className="app-globalbar__notification-copy">
+                              <span className="app-globalbar__notification-title">{t(notification.titleKey)}</span>
+                              <span className="app-globalbar__notification-detail">{t(notification.detailKey)}</span>
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="app-topbar__welcome">
-                <div className="app-topbar__headline">
-                  <h2 className="app-topbar__title">{greeting}</h2>
-                  <p className="app-topbar__description">{t("app.dashboardAttention")}</p>
-                </div>
+              <button
+                aria-label={t("appBar.languageSwitch")}
+                className="app-globalbar__icon-button app-globalbar__icon-button--text"
+                type="button"
+                onClick={() => setLocale(locale === "en" ? "ar" : "en")}
+              >
+                <AppBarIcon name="globe" />
+                <span>{locale === "en" ? "AR" : "EN"}</span>
+              </button>
 
-                <div className="app-topbar__actions app-topbar__actions--compact">
-                  <div className="app-topbar__quick-actions app-topbar__quick-actions--compact">
-                    <Link className="hc-button hc-button--ghost hc-button--sm" to="/items">
-                      {t("app.reviewItems")}
-                    </Link>
-                    <Link className="hc-button hc-button--ghost hc-button--sm" to="/suppliers">
-                      {t("app.reviewSuppliers")}
-                    </Link>
-                    <Link className="hc-button hc-button--ghost hc-button--sm" to="/open-shortages">
-                      {t("app.openShortages")}
-                    </Link>
+              <button
+                aria-label={theme === "light" ? t("dashboard.theme.dark") : t("dashboard.theme.light")}
+                className="app-globalbar__icon-button"
+                type="button"
+                onClick={toggleTheme}
+              >
+                <AppBarIcon name={theme === "light" ? "moon" : "sun"} />
+              </button>
+
+              <div className={`app-globalbar__menu ${openMenu === "user" ? "app-globalbar__menu--open" : ""}`}>
+                <button
+                  aria-expanded={openMenu === "user"}
+                  aria-label={t("appBar.userMenu.label")}
+                  className="app-globalbar__profile-button"
+                  type="button"
+                  onClick={() => {
+                    setOpenMenu((current) => current === "user" ? null : "user");
+                    setIsSearchOpen(false);
+                  }}
+                >
+                  <span className="app-globalbar__avatar" aria-hidden="true">{getInitials(userName)}</span>
+                  <span className="app-globalbar__profile-copy">
+                    <span className="app-globalbar__profile-name">{userName}</span>
+                    <span className="app-globalbar__profile-role">{workspace?.roles[0]?.name ?? t("appBar.userMenu.roleValue")}</span>
+                  </span>
+                  <AppBarIcon name="chevron" />
+                </button>
+
+                {openMenu === "user" ? (
+                  <div className="app-globalbar__dropdown app-globalbar__dropdown--user">
+                    <div className="app-globalbar__dropdown-header app-globalbar__dropdown-header--user">
+                      <span className="app-globalbar__avatar app-globalbar__avatar--lg" aria-hidden="true">{getInitials(userName)}</span>
+                      <div>
+                        <h2 className="app-globalbar__dropdown-title">{userName}</h2>
+                        <p className="app-globalbar__dropdown-detail">{workspace?.roles[0]?.name ?? t("appBar.userMenu.roleValue")} · {workspace?.organizationName ?? t("appBar.companyName")}</p>
+                      </div>
+                    </div>
+
+                    <div className="app-globalbar__menu-list">
+                      <button className="app-globalbar__menu-item" type="button" onClick={() => setOpenMenu(null)}>
+                        <AppBarIcon name="spark" />
+                        <span>{t("appBar.userMenu.role")}: {workspace?.roles[0]?.name ?? t("appBar.userMenu.roleValue")}</span>
+                      </button>
+                      {workspace?.organizations.map((organization) => (
+                        <button
+                          key={organization.organizationId}
+                          className="app-globalbar__menu-item"
+                          type="button"
+                          onClick={async () => {
+                            setOpenMenu(null);
+                            if (organization.organizationId !== workspace.organizationId) {
+                              await switchOrganization(organization.organizationId);
+                            }
+                          }}
+                        >
+                          <AppBarIcon name="building" />
+                          <span>{organization.name}</span>
+                        </button>
+                      ))}
+                      <button className="app-globalbar__menu-item app-globalbar__menu-item--danger" type="button" onClick={async () => {
+                        setOpenMenu(null);
+                        await logout(false);
+                        navigate("/login");
+                      }}>
+                        <AppBarIcon name="logout" />
+                        <span>{t("appBar.userMenu.logout")}</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             </div>
-          </header>
+          </div>
+        </header>
+
+        {isDashboard ? (
+          <section className="app-dashboard-hero">
+            <div className="app-dashboard-hero__copy">
+              <p className="app-dashboard-hero__eyebrow">{t("app.workspace")}</p>
+              <h2 className="app-dashboard-hero__title">{greeting}</h2>
+              <p className="app-dashboard-hero__description">{t("dashboard.topbar.description")}</p>
+            </div>
+
+            <div className="app-dashboard-hero__actions">
+              <Link className="app-dashboard-hero__action app-dashboard-hero__action--primary" to="/purchase-orders/new">
+                {t("dashboard.quickActions.createPo.label")}
+              </Link>
+              <Link className="app-dashboard-hero__action" to="/purchase-receipts/new">
+                {t("dashboard.quickActions.postReceipt.label")}
+              </Link>
+              <Link className="app-dashboard-hero__action" to="/stock-movements">
+                {t("dashboard.quickActions.viewStockCard.label")}
+              </Link>
+            </div>
+          </section>
         ) : null}
 
         <main className="app-main__content">
@@ -564,3 +899,41 @@ export function AppShell({ children }: PropsWithChildren) {
     </div>
   );
 }
+
+const navigationPermissions: Record<string, string | undefined> = {
+  "/workspace": undefined,
+  "/procurement/purchase-orders": Permissions.ProcurementPurchaseOrderView,
+  "/procurement/purchase-receipts": Permissions.ProcurementPurchaseReceiptView,
+  "/procurement/purchase-returns": Permissions.ProcurementPurchaseReturnView,
+  "/inventory/stock-ledger": Permissions.InventoryStockLedgerView,
+  "/inventory/warehouses": Permissions.InventoryWarehouseManage,
+  "/supplier-financials": Permissions.SupplierFinancialsPayablesView,
+  "/supplier-financials/payments": Permissions.SupplierFinancialsPayablesView,
+  "/customers": Permissions.CustomersView,
+  "/purchase-orders": Permissions.ProcurementPurchaseOrderView,
+  "/purchase-receipts": Permissions.ProcurementPurchaseReceiptView,
+  "/purchase-returns": Permissions.ProcurementPurchaseReturnView,
+  "/open-shortages": Permissions.ShortageView,
+  "/shortage-resolutions": Permissions.ShortageView,
+  "/stock-balances": Permissions.InventoryStockLedgerView,
+  "/stock-movements": Permissions.InventoryStockLedgerView,
+  "/supplier-statements": Permissions.SupplierFinancialsPayablesView,
+  "/payments": Permissions.SupplierFinancialsPayablesView,
+  "/items": Permissions.ItemsView,
+  "/uom-conversions": Permissions.UomsManage,
+  "/suppliers": Permissions.SuppliersView,
+  "/warehouses": Permissions.InventoryWarehouseManage,
+  "/uoms": Permissions.UomsManage,
+  "/settings/users": Permissions.SettingsUsersManage,
+  "/settings/roles": Permissions.SettingsRolesManage,
+};
+
+const featureGroupVisibility = {
+  workspace: () => true,
+  procurement: (features: { procurementEnabled: boolean }) => features.procurementEnabled,
+  inventory: (features: { inventoryEnabled: boolean }) => features.inventoryEnabled,
+  shortages: (features: { inventoryEnabled: boolean }) => features.inventoryEnabled,
+  suppliers: (features: { suppliersEnabled: boolean }) => features.suppliersEnabled,
+  "supplier-financials": (features: { supplierFinancialsEnabled: boolean }) => features.supplierFinancialsEnabled,
+  settings: (features: { settingsEnabled?: boolean }) => features.settingsEnabled !== false,
+} as const;

@@ -1,5 +1,6 @@
 using ERP.Application.Inventory;
 using ERP.Application.Common.Pagination;
+using ERP.Application.Security;
 using ERP.Domain.Inventory;
 
 namespace ERP.Api.Endpoints;
@@ -8,13 +9,13 @@ public static class StockLedgerEndpoints
 {
     public static IEndpointRouteBuilder MapStockLedgerEndpoints(this IEndpointRouteBuilder app)
     {
-        var ledger = app.MapGroup("/api/stock-ledger");
-        ledger.MapGet("/", ListLedgerAsync);
-        ledger.MapGet("/item/{itemId:guid}", ListLedgerByItemAsync);
+        var ledger = app.MapGroup("/api/stock-ledger").RequireAuthorization();
+        ledger.MapGet("/", ListLedgerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryStockLedgerView));
+        ledger.MapGet("/item/{itemId:guid}", ListLedgerByItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryStockLedgerView));
 
-        var balance = app.MapGroup("/api/stock-balance");
-        balance.MapGet("/", ListBalanceAsync);
-        balance.MapGet("/item/{itemId:guid}", ListBalanceByItemAsync);
+        var balance = app.MapGroup("/api/stock-balance").RequireAuthorization();
+        balance.MapGet("/", ListBalanceAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryStockLedgerView));
+        balance.MapGet("/item/{itemId:guid}", ListBalanceByItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryStockLedgerView));
 
         return app;
     }

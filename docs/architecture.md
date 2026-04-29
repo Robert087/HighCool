@@ -78,6 +78,7 @@ Current implementation uses:
 * draft create, update, get, list
 * validates PO linkage when supplied
 * enforces `ordered_qty_snapshot` from PO line
+* calculates PO-linked supplier payable amount from linked PO line pricing
 * blocks linked receipt quantities beyond remaining posted PO quantity
 
 ### PurchaseReceiptPostingService
@@ -184,6 +185,20 @@ Required rules:
 * summary cards and header metrics must use summary queries instead of full list downloads
 * schema work must define indexes for foreign keys, high-frequency filters, and traceability joins during design
 * frontend grids must request only the current page and must not paginate large datasets in the browser
+
+## Frontend Form Performance Standards
+
+Form screens are operational entry points and must be optimized for fast first paint and fast repeat-open behavior.
+
+Required rules:
+
+* shared active reference datasets such as suppliers, customers, items, warehouses, UOMs, and global UOM conversions must load through shared cached option loaders rather than refetching identical lists on every form open
+* cached option loaders must support mutation invalidation so create, update, activate, and deactivate actions do not leave forms with stale selectors
+* form initialization must load only the minimum reference data required for initial interaction
+* forms must not eagerly hydrate full document details for every selectable record in a dropdown
+* reference document detail must be fetched on demand when the user selects a record or when edit mode requires one specific linked document
+* independent form queries should run in parallel, but each query must stay bounded and aligned to the first-screen need
+* form selectors must prefer lightweight list DTOs for candidate records and reserve detail DTOs for the active record being edited or linked
 
 ## Localization Standards
 

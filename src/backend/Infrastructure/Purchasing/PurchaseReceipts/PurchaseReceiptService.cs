@@ -1,6 +1,7 @@
 using ERP.Application.Common.Exceptions;
 using ERP.Application.Common.Pagination;
 using ERP.Application.Purchasing.PurchaseReceipts;
+using ERP.Application.Security;
 using ERP.Domain.Common;
 using ERP.Domain.MasterData;
 using ERP.Domain.Purchasing;
@@ -11,9 +12,11 @@ namespace ERP.Infrastructure.Purchasing.PurchaseReceipts;
 
 public sealed class PurchaseReceiptService(
     AppDbContext dbContext,
+    IRequestExecutionContext executionContext,
     IQuantityConversionService quantityConversionService) : IPurchaseReceiptService
 {
     private const int QuantityScale = 6;
+    private readonly IRequestExecutionContext _executionContext = executionContext;
 
     public async Task<PagedResult<PurchaseReceiptListItemDto>> ListAsync(PurchaseReceiptListQuery query, CancellationToken cancellationToken)
     {
@@ -121,7 +124,7 @@ public sealed class PurchaseReceiptService(
     public async Task<PurchaseReceiptDto> CreateDraftAsync(UpsertPurchaseReceiptDraftRequest request, string actor, CancellationToken cancellationToken)
     {
         var receiptNo = await ResolveReceiptNoAsync(request.ReceiptNo, null, cancellationToken);
-        var itemDefinitions = await ValidateDraftRequestAsync(request, cancellationToken);
+        var validationState = await ValidateDraftRequestAsync(request, cancellationToken);
 
         var receipt = new PurchaseReceipt
         {
@@ -130,14 +133,14 @@ public sealed class PurchaseReceiptService(
             WarehouseId = request.WarehouseId,
             PurchaseOrderId = request.PurchaseOrderId,
             ReceiptDate = request.ReceiptDate!.Value,
-            SupplierPayableAmount = Round(request.SupplierPayableAmount),
+            SupplierPayableAmount = validationState.SupplierPayableAmount,
             Notes = NormalizeOptionalText(request.Notes),
             Status = DocumentStatus.Draft,
             CreatedBy = actor
         };
 
         dbContext.PurchaseReceipts.Add(receipt);
-        await AddLinesAsync(receipt, request.Lines, itemDefinitions, actor, cancellationToken);
+        await AddLinesAsync(receipt, request.Lines, validationState.ItemDefinitions, actor, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return await GetRequiredAsync(receipt.Id, cancellationToken);
@@ -158,19 +161,19 @@ public sealed class PurchaseReceiptService(
         EnsureDraftIsEditable(receipt);
 
         receipt.ReceiptNo = await ResolveReceiptNoAsync(request.ReceiptNo, id, cancellationToken);
-        var itemDefinitions = await ValidateDraftRequestAsync(request, cancellationToken);
+        var validationState = await ValidateDraftRequestAsync(request, cancellationToken);
 
         receipt.SupplierId = request.SupplierId;
         receipt.WarehouseId = request.WarehouseId;
         receipt.PurchaseOrderId = request.PurchaseOrderId;
         receipt.ReceiptDate = request.ReceiptDate!.Value;
-        receipt.SupplierPayableAmount = Round(request.SupplierPayableAmount);
+        receipt.SupplierPayableAmount = validationState.SupplierPayableAmount;
         receipt.Notes = NormalizeOptionalText(request.Notes);
         receipt.UpdatedBy = actor;
 
         dbContext.PurchaseReceiptLineComponents.RemoveRange(receipt.Lines.SelectMany(line => line.Components));
         dbContext.PurchaseReceiptLines.RemoveRange(receipt.Lines);
-        await AddLinesAsync(receipt, request.Lines, itemDefinitions, actor, cancellationToken);
+        await AddLinesAsync(receipt, request.Lines, validationState.ItemDefinitions, actor, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return await GetRequiredAsync(receipt.Id, cancellationToken);
@@ -201,10 +204,15 @@ public sealed class PurchaseReceiptService(
                     .ThenInclude(entity => entity.ShortageReasonCode);
     }
 
-    private async Task<Dictionary<Guid, Item>> ValidateDraftRequestAsync(
+    private async Task<PurchaseReceiptDraftValidationState> ValidateDraftRequestAsync(
         UpsertPurchaseReceiptDraftRequest request,
         CancellationToken cancellationToken)
     {
+        var organization = await dbContext.Organizations
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .SingleAsync(entity => entity.Id == _executionContext.OrganizationId, cancellationToken);
+
         var supplierExists = await dbContext.Suppliers.AnyAsync(entity => entity.Id == request.SupplierId && entity.IsActive, cancellationToken);
         if (!supplierExists)
         {
@@ -223,6 +231,16 @@ public sealed class PurchaseReceiptService(
                 .Include(entity => entity.Lines)
                 .SingleOrDefaultAsync(entity => entity.Id == request.PurchaseOrderId.Value, cancellationToken)
             : null;
+
+        if (organization.RequirePoBeforeReceipt && !request.PurchaseOrderId.HasValue)
+        {
+            throw new InvalidOperationException("A purchase order is required before creating a purchase receipt.");
+        }
+
+        if (!organization.AllowDirectPurchaseReceipt && !request.PurchaseOrderId.HasValue)
+        {
+            throw new InvalidOperationException("Direct purchase receipts are disabled for this organization.");
+        }
 
         if (request.PurchaseOrderId.HasValue)
         {
@@ -380,7 +398,7 @@ public sealed class PurchaseReceiptService(
                 throw new InvalidOperationException("Purchase order line links require a purchase order header link.");
             }
 
-            return itemDefinitions;
+            return new PurchaseReceiptDraftValidationState(itemDefinitions, Round(request.SupplierPayableAmount));
         }
 
         var postedReceiptLines = await dbContext.PurchaseReceiptLines
@@ -437,13 +455,49 @@ public sealed class PurchaseReceiptService(
 
             var alreadyReceived = postedReceiptTotals.TryGetValue(purchaseOrderLine.Id, out var total) ? total : 0m;
             var remainingQty = purchaseOrderLine.OrderedQty - alreadyReceived;
-            if (line.ReceivedQty > remainingQty)
+            if (!organization.AllowPartialReceipt && line.ReceivedQty < remainingQty)
+            {
+                throw new InvalidOperationException("Partial receipt is disabled for this organization.");
+            }
+
+            if (!organization.AllowOverReceipt && line.ReceivedQty > remainingQty)
             {
                 throw new InvalidOperationException("Received quantity cannot exceed the remaining purchase order quantity.");
             }
+
+            if (organization.AllowOverReceipt)
+            {
+                var maxQty = remainingQty + ((purchaseOrderLine.OrderedQty * organization.OverReceiptTolerancePercent) / 100m);
+                if (line.ReceivedQty > maxQty)
+                {
+                    throw new InvalidOperationException("Received quantity exceeds the allowed over receipt tolerance.");
+                }
+            }
         }
 
-        return itemDefinitions;
+        return new PurchaseReceiptDraftValidationState(
+            itemDefinitions,
+            CalculateLinkedSupplierPayableAmount(request.Lines, purchaseOrderLines));
+    }
+
+    private static decimal CalculateLinkedSupplierPayableAmount(
+        IReadOnlyList<UpsertPurchaseReceiptLineRequest> lines,
+        IReadOnlyDictionary<Guid, PurchaseOrderLine> purchaseOrderLines)
+    {
+        var total = 0m;
+
+        foreach (var line in lines)
+        {
+            if (!line.PurchaseOrderLineId.HasValue ||
+                !purchaseOrderLines.TryGetValue(line.PurchaseOrderLineId.Value, out var purchaseOrderLine))
+            {
+                continue;
+            }
+
+            total += line.ReceivedQty * purchaseOrderLine.UnitPrice;
+        }
+
+        return Round(total);
     }
 
     private async Task AddLinesAsync(
@@ -713,6 +767,8 @@ public sealed class PurchaseReceiptService(
                     line.Item?.Name ?? string.Empty,
                     line.OrderedQtySnapshot,
                     line.ReceivedQty,
+                    line.PurchaseOrderLine?.UnitPrice,
+                    line.PurchaseOrderLine is null ? null : Round(line.ReceivedQty * line.PurchaseOrderLine.UnitPrice),
                     returnStateByLineId.TryGetValue(line.Id, out var returnState) ? returnState.ReturnedQty : 0m,
                     returnStateByLineId.TryGetValue(line.Id, out returnState) ? returnState.RemainingReturnableQty : 0m,
                     line.UomId,
@@ -751,4 +807,8 @@ public sealed class PurchaseReceiptService(
     }
 
     private sealed record ReceiptLineReturnState(decimal ReturnedQty, decimal RemainingReturnableQty);
+
+    private sealed record PurchaseReceiptDraftValidationState(
+        IReadOnlyDictionary<Guid, Item> ItemDefinitions,
+        decimal SupplierPayableAmount);
 }

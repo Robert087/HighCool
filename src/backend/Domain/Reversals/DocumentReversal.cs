@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.Reversals;
 
-public sealed class DocumentReversal : AuditableEntity
+public sealed class DocumentReversal : OrganizationScopedAuditableEntity
 {
     public string ReversalNo { get; set; } = string.Empty;
 

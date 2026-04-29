@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Badge, Button, EmptyState, Field, Input, ReversalDialog, Select, SkeletonLoader, Textarea, useConfirmationDialog, useToast } from "../components/ui";
-import { useI18n } from "../i18n";
+import { formatCurrency, formatQuantity, useI18n } from "../i18n";
+import { getFirstValidationMessage } from "../lib/validationErrors";
 import { ApiError, type ValidationErrors } from "../services/api";
 import {
-  listItems,
-  listSuppliers,
-  listUomConversions,
-  listUoms,
-  listWarehouses,
+  getActiveItemsCached,
+  getActiveSuppliersCached,
+  getActiveUomConversionsCached,
+  getActiveUomsCached,
+  getActiveWarehousesCached,
   type Item,
   type Supplier,
   type Uom,
@@ -52,7 +53,10 @@ const initialLine = (lineNo: number): PurchaseReceiptLineFormValues => ({
   itemId: "",
   orderedQtySnapshot: "",
   receivedQty: "",
+  unitPrice: null,
   uomId: "",
+  uomCode: null,
+  uomName: null,
   notes: "",
   components: [],
 });
@@ -67,6 +71,37 @@ function toNumber(value: number | "" | null | undefined): number {
   }
 
   return Number(value);
+}
+
+function toOptionalNumber(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function calculateReceiptLineAmount(line: PurchaseReceiptLineFormValues): number {
+  return roundQuantity(toNumber(line.receivedQty) * toNumber(line.unitPrice));
+}
+
+function calculateLinkedSupplierPayableAmount(lines: PurchaseReceiptLineFormValues[]): number {
+  return roundQuantity(lines.reduce((sum, line) => sum + calculateReceiptLineAmount(line), 0));
+}
+
+function resolveLineUomName(line: PurchaseReceiptLineFormValues, uomLookup: Map<string, Uom>): string {
+  return uomLookup.get(line.uomId)?.name ?? line.uomName ?? "";
+}
+
+function resolveLineUomCode(line: PurchaseReceiptLineFormValues, uomLookup: Map<string, Uom>): string {
+  return uomLookup.get(line.uomId)?.code ?? line.uomCode ?? "";
+}
+
+function withCalculatedSupplierPayableAmount(values: PurchaseReceiptFormValues): PurchaseReceiptFormValues {
+  if (!values.purchaseOrderId) {
+    return values;
+  }
+
+  return {
+    ...values,
+    supplierPayableAmount: calculateLinkedSupplierPayableAmount(values.lines),
+  };
 }
 
 function nearlyEqual(left: number, right: number): boolean {
@@ -138,7 +173,7 @@ function syncLineComponents(
 }
 
 function mapReceiptToFormValues(receipt: PurchaseReceipt): PurchaseReceiptFormValues {
-  return {
+  return withCalculatedSupplierPayableAmount({
     receiptNo: receipt.receiptNo,
     supplierId: receipt.supplierId,
     warehouseId: receipt.warehouseId,
@@ -153,7 +188,10 @@ function mapReceiptToFormValues(receipt: PurchaseReceipt): PurchaseReceiptFormVa
       itemId: line.itemId,
       orderedQtySnapshot: line.orderedQtySnapshot ?? "",
       receivedQty: line.receivedQty,
+      unitPrice: toOptionalNumber(line.unitPrice),
       uomId: line.uomId,
+      uomCode: line.uomCode,
+      uomName: line.uomName,
       notes: line.notes ?? "",
       components: line.components.map((component) => ({
         componentItemId: component.componentItemId,
@@ -164,7 +202,7 @@ function mapReceiptToFormValues(receipt: PurchaseReceipt): PurchaseReceiptFormVa
         notes: component.notes ?? "",
       })),
     })),
-  };
+  });
 }
 
 function buildMissingConversionHint(
@@ -263,11 +301,11 @@ export function PurchaseReceiptFormPage() {
         setLoading(true);
         setFormError("");
         const [supplierRows, warehouseRows, itemRows, uomRows, conversionRows, purchaseOrderRows, receipt] = await Promise.all([
-          listSuppliers("", "active"),
-          listWarehouses("", "active"),
-          listItems("", "active"),
-          listUoms("", "active"),
-          listUomConversions("", "active"),
+          getActiveSuppliersCached(),
+          getActiveWarehousesCached(),
+          getActiveItemsCached(),
+          getActiveUomsCached(),
+          getActiveUomConversionsCached(),
           listPurchaseOrders({
             search: "",
             status: "",
@@ -302,7 +340,7 @@ export function PurchaseReceiptFormPage() {
             ...current,
             supplierId: current.supplierId || supplierRows[0]?.id || "",
             warehouseId: current.warehouseId || warehouseRows[0]?.id || "",
-            purchaseOrderId: requestedPurchaseOrderId || current.purchaseOrderId,
+            purchaseOrderId: current.purchaseOrderId,
             lines: current.lines.length > 0 ? current.lines : [initialLine(1)],
           }));
         }
@@ -408,6 +446,12 @@ export function PurchaseReceiptFormPage() {
     setFormError("");
 
     if (Object.keys(nextErrors).length > 0 || !isEditable) {
+      const firstMessage = getFirstValidationMessage(nextErrors);
+      showToast({
+        tone: "danger",
+        title: t("Validation error"),
+        description: firstMessage ?? t("Resolve the purchase receipt validation errors before saving."),
+      });
       return;
     }
 
@@ -431,6 +475,13 @@ export function PurchaseReceiptFormPage() {
       if (submitError instanceof ApiError) {
         setErrors(submitError.validationErrors ?? {});
         setFormError(submitError.message);
+        if (submitError.validationErrors) {
+          showToast({
+            tone: "danger",
+            title: t("Validation error"),
+            description: getFirstValidationMessage(submitError.validationErrors) ?? submitError.message,
+          });
+        }
       } else {
         setFormError("Failed to save purchase receipt.");
       }
@@ -463,7 +514,13 @@ export function PurchaseReceiptFormPage() {
       setStatus(posted.status);
       showToast({ tone: "success", title: "Purchase receipt posted", description: `${posted.receiptNo} was posted successfully.` });
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : "Failed to post purchase receipt.");
+      const message = error instanceof ApiError ? error.message : "Failed to post purchase receipt.";
+      setFormError(message);
+      showToast({
+        tone: "danger",
+        title: t("Validation error"),
+        description: message,
+      });
     } finally {
       setPosting(false);
     }
@@ -482,6 +539,7 @@ export function PurchaseReceiptFormPage() {
         setValues((current) => ({
           ...current,
           purchaseOrderId: "",
+          supplierPayableAmount: current.purchaseOrderId ? 0 : current.supplierPayableAmount,
           lines: current.lines.length > 0
             ? current.lines.map((line, index) => {
                 const nextLine: PurchaseReceiptLineFormValues = {
@@ -489,6 +547,9 @@ export function PurchaseReceiptFormPage() {
                   lineNo: index + 1,
                   purchaseOrderLineId: "",
                   orderedQtySnapshot: "",
+                  unitPrice: null,
+                  uomCode: null,
+                  uomName: null,
                 };
                 return syncLineComponents(nextLine, itemLookup, conversionMap);
               })
@@ -500,27 +561,30 @@ export function PurchaseReceiptFormPage() {
       const availableLines = await listAvailablePurchaseOrderLines(purchaseOrderId);
       const purchaseOrder = purchaseOrders.find((row) => row.id === purchaseOrderId);
 
-      setValues((current) => ({
-        ...current,
-        purchaseOrderId,
-        supplierId: purchaseOrder?.supplierId ?? current.supplierId,
-        lines: availableLines.length > 0
-          ? availableLines.map((line, index) =>
-              syncLineComponents(
-                {
-                  lineNo: index + 1,
-                  purchaseOrderLineId: line.purchaseOrderLineId,
-                  itemId: line.itemId,
-                  orderedQtySnapshot: line.orderedQty,
-                  receivedQty: line.remainingQty,
-                  uomId: line.uomId,
-                  notes: line.notes ?? "",
-                  components: [],
-                },
-                itemLookup,
-                conversionMap))
-          : [initialLine(1)],
-      }));
+      setValues((current) => withCalculatedSupplierPayableAmount({
+          ...current,
+          purchaseOrderId,
+          supplierId: purchaseOrder?.supplierId ?? current.supplierId,
+          lines: availableLines.length > 0
+            ? availableLines.map((line, index) =>
+                syncLineComponents(
+                  {
+                    lineNo: index + 1,
+                    purchaseOrderLineId: line.purchaseOrderLineId,
+                    itemId: line.itemId,
+                    orderedQtySnapshot: line.orderedQty,
+                    receivedQty: line.remainingQty,
+                    unitPrice: toOptionalNumber(line.unitPrice),
+                    uomId: line.uomId,
+                    uomCode: line.uomCode,
+                    uomName: line.uomName,
+                    notes: line.notes ?? "",
+                    components: [],
+                  },
+                  itemLookup,
+                  conversionMap))
+            : [initialLine(1)],
+        }));
 
       if (availableLines.length === 0) {
         setFormError("The selected purchase order has no remaining lines available for receipt.");
@@ -537,16 +601,16 @@ export function PurchaseReceiptFormPage() {
   }
 
   function updateLine(index: number, recipe: (line: PurchaseReceiptLineFormValues) => PurchaseReceiptLineFormValues) {
-    setValues((current) => ({
-      ...current,
-      lines: current.lines.map((line, lineIndex) => {
-        if (lineIndex !== index) {
-          return line;
-        }
+    setValues((current) => withCalculatedSupplierPayableAmount({
+        ...current,
+        lines: current.lines.map((line, lineIndex) => {
+          if (lineIndex !== index) {
+            return line;
+          }
 
-        return recipe(line);
-      }),
-    }));
+          return recipe(line);
+        }),
+      }));
   }
 
   function setLineValue<Key extends keyof PurchaseReceiptLineFormValues>(index: number, key: Key, value: PurchaseReceiptLineFormValues[Key]) {
@@ -557,7 +621,15 @@ export function PurchaseReceiptFormPage() {
         const item = itemLookup.get(String(value));
         if (item && !isPurchaseOrderLinked) {
           nextLine.uomId = item.baseUomId;
+          nextLine.uomCode = item.baseUomCode;
+          nextLine.uomName = item.baseUomName;
         }
+      }
+
+      if (key === "uomId") {
+        const uom = uomLookup.get(String(value));
+        nextLine.uomCode = uom?.code ?? null;
+        nextLine.uomName = uom?.name ?? null;
       }
 
       if (key === "itemId" || key === "receivedQty" || key === "uomId") {
@@ -590,10 +662,10 @@ export function PurchaseReceiptFormPage() {
   }
 
   function removeLine(index: number) {
-    setValues((current) => ({
-      ...current,
-      lines: current.lines.filter((_, lineIndex) => lineIndex !== index).map((line, lineIndex) => ({ ...line, lineNo: lineIndex + 1 })),
-    }));
+    setValues((current) => withCalculatedSupplierPayableAmount({
+        ...current,
+        lines: current.lines.filter((_, lineIndex) => lineIndex !== index).map((line, lineIndex) => ({ ...line, lineNo: lineIndex + 1 })),
+      }));
   }
 
   const documentStatus = (
@@ -764,14 +836,18 @@ export function PurchaseReceiptFormPage() {
               </Field>
               <Field label="Supplier payable amount" required>
                 <Input
-                  disabled={!isEditable}
+                  disabled={!isEditable || isPurchaseOrderLinked}
                   min={0}
                   step="0.000001"
                   type="number"
                   value={values.supplierPayableAmount}
                   onChange={(event) => setValue("supplierPayableAmount", event.target.value === "" ? "" : Number(event.target.value))}
                 />
-                <div className="hc-field__hint">Used for supplier statement and payment allocation until receipt pricing is modeled per line.</div>
+                <div className="hc-field__hint">
+                  {isPurchaseOrderLinked
+                    ? t("Calculated from linked purchase order unit prices and received quantities.")
+                    : t("Used for supplier statement and payment allocation until receipt pricing is modeled per line.")}
+                </div>
                 {errors.supplierPayableAmount ? <small className="hc-field-error">{errors.supplierPayableAmount[0]}</small> : null}
               </Field>
               <Field className="hc-document-field--summary" label="Receipt mode">
@@ -816,6 +892,8 @@ export function PurchaseReceiptFormPage() {
                     <th>Item</th>
                     <th className="hc-table__numeric">Ordered Snapshot</th>
                     <th className="hc-table__numeric">Received Qty</th>
+                    <th className="hc-table__numeric">{t("Unit price")}</th>
+                    <th className="hc-table__numeric">{t("Line amount")}</th>
                     <th>UOM</th>
                     <th>Notes</th>
                     <th className="hc-table__head-actions" />
@@ -824,6 +902,10 @@ export function PurchaseReceiptFormPage() {
                 <tbody>
                   {values.lines.map((line, lineIndex) => {
                     const item = itemLookup.get(line.itemId);
+                    const lineAmount = calculateReceiptLineAmount(line);
+                    const unitPrice = toNumber(line.unitPrice);
+                    const uomName = resolveLineUomName(line, uomLookup);
+                    const uomCode = resolveLineUomCode(line, uomLookup);
 
                     return [
                       <tr key={`${line.lineNo}-${lineIndex}`}>
@@ -855,15 +937,26 @@ export function PurchaseReceiptFormPage() {
                           />
                           {errors[`lines.${lineIndex}.receivedQty`] ? <small className="hc-field-error">{errors[`lines.${lineIndex}.receivedQty`][0]}</small> : null}
                         </td>
+                        <td className="hc-table__numeric">
+                          <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                            <span className="hc-table__title">{formatCurrency(unitPrice)}</span>
+                          </div>
+                        </td>
+                        <td className="hc-table__numeric">
+                          <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
+                            <span className="hc-table__title">{formatCurrency(lineAmount)}</span>
+                          </div>
+                        </td>
                         <td>
                           <div className="hc-table__cell-strong">
                             <Select disabled={!isEditable || isPurchaseOrderLinked} value={line.uomId} onChange={(event) => setLineValue(lineIndex, "uomId", event.target.value)}>
                               <option value="">Select UOM</option>
                               {uoms.map((uom) => (
-                                <option key={uom.id} value={uom.id}>{uom.code}</option>
+                                <option key={uom.id} value={uom.id}>{uom.name}</option>
                               ))}
                             </Select>
-                            {line.uomId ? <span className="hc-table__subtitle">{uomLookup.get(line.uomId)?.name ?? "Selected UOM"}</span> : null}
+                            {uomName ? <span className="hc-table__title">{uomName}</span> : null}
+                            {uomCode ? <span className="hc-table__subtitle">{uomCode}</span> : null}
                             {errors[`lines.${lineIndex}.uomId`] ? <small className="hc-field-error">{errors[`lines.${lineIndex}.uomId`][0]}</small> : null}
                           </div>
                         </td>
@@ -874,8 +967,9 @@ export function PurchaseReceiptFormPage() {
                           <Button disabled={!isEditable} type="button" variant="ghost" onClick={() => removeLine(lineIndex)}>Remove</Button>
                         </td>
                       </tr>,
-                      <tr key={`components-${line.lineNo}-${lineIndex}`} className="hc-table__detail-row">
-                        <td colSpan={7}>
+                      line.components.length > 0 ? (
+                        <tr key={`components-${line.lineNo}-${lineIndex}`} className="hc-table__detail-row">
+                        <td colSpan={9}>
                           <div className="hc-line-components hc-line-components--panel">
                             <div className="hc-line-components__header">
                               <div className="po-form-toolbar">
@@ -903,8 +997,7 @@ export function PurchaseReceiptFormPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {line.components.length > 0 ? (
-                                    line.components.map((component, componentIndex) => {
+                                  {line.components.map((component, componentIndex) => {
                                       const componentDefinition = item?.components.find((definition) => definition.componentItemId === component.componentItemId);
                                       const shortageQty = calculateShortageQty(component);
                                       const hasShortage = shortageQty > 0;
@@ -920,8 +1013,8 @@ export function PurchaseReceiptFormPage() {
                                           </td>
                                           <td className="hc-table__numeric">
                                             <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
-                                              <span className="hc-table__title">{component.expectedQty.toLocaleString()}</span>
-                                              <span className="hc-table__subtitle">{componentDefinition?.uomCode ?? ""}</span>
+                                              <span className="hc-table__title">{formatQuantity(component.expectedQty)}</span>
+                                              <span className="hc-table__subtitle">{componentDefinition?.uomName ?? ""}</span>
                                             </div>
                                           </td>
                                           <td className="hc-table__numeric">
@@ -939,7 +1032,7 @@ export function PurchaseReceiptFormPage() {
                                           </td>
                                           <td>
                                             {hasShortage
-                                              ? <Badge tone="warning">Short {shortageQty.toLocaleString()}</Badge>
+                                              ? <Badge tone="warning">{t("Short {value}", { value: formatQuantity(shortageQty) })}</Badge>
                                               : <Badge tone="success">No shortage</Badge>}
                                           </td>
                                           <td>
@@ -948,20 +1041,14 @@ export function PurchaseReceiptFormPage() {
                                           </td>
                                         </tr>
                                       );
-                                    })
-                                  ) : (
-                                    <tr>
-                                      <td colSpan={5}>
-                                        <div className="hc-table__empty">No components defined for this item.</div>
-                                      </td>
-                                    </tr>
-                                  )}
+                                    })}
                                 </tbody>
                               </table>
                             </div>
                           </div>
                         </td>
                       </tr>
+                      ) : null
                     ];
                   })}
                 </tbody>

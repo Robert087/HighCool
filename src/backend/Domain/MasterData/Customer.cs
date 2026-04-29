@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.MasterData;
 
-public sealed class Customer : AuditableEntity
+public sealed class Customer : OrganizationScopedAuditableEntity
 {
     public string Code { get; set; } = string.Empty;
 

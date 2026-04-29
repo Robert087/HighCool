@@ -57,6 +57,8 @@ export interface PurchaseReceiptLine {
   itemName: string;
   orderedQtySnapshot: number | null;
   receivedQty: number;
+  unitPrice: number | null;
+  lineAmount: number | null;
   returnedQty: number;
   remainingReturnableQty: number;
   uomId: string;
@@ -105,7 +107,10 @@ export interface PurchaseReceiptLineFormValues {
   itemId: string;
   orderedQtySnapshot: number | "";
   receivedQty: number | "";
+  unitPrice: number | null;
   uomId: string;
+  uomCode?: string | null;
+  uomName?: string | null;
   notes: string;
   components: PurchaseReceiptLineComponentFormValues[];
 }

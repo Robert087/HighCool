@@ -3,7 +3,7 @@ using ERP.Domain.MasterData;
 
 namespace ERP.Domain.Purchasing;
 
-public sealed class PurchaseReturnLine : AuditableEntity
+public sealed class PurchaseReturnLine : OrganizationScopedAuditableEntity
 {
     public Guid PurchaseReturnId { get; set; }
 

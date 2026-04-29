@@ -1,6 +1,7 @@
 using ERP.Application.Common.Exceptions;
 using ERP.Application.MasterData.Items;
 using ERP.Application.MasterData.UomConversions;
+using ERP.Application.Security;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -10,19 +11,19 @@ public static class ItemMasterDataEndpoints
 {
     public static IEndpointRouteBuilder MapItemMasterDataEndpoints(this IEndpointRouteBuilder app)
     {
-        var items = app.MapGroup("/api/items");
-        items.MapGet("/", ListItemsAsync);
-        items.MapGet("/{id:guid}", GetItemAsync);
-        items.MapPost("/", CreateItemAsync);
-        items.MapPut("/{id:guid}", UpdateItemAsync);
-        items.MapPost("/{id:guid}/deactivate", DeactivateItemAsync);
+        var items = app.MapGroup("/api/items").RequireAuthorization();
+        items.MapGet("/", ListItemsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ItemsView));
+        items.MapGet("/{id:guid}", GetItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ItemsView));
+        items.MapPost("/", CreateItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ItemsCreate));
+        items.MapPut("/{id:guid}", UpdateItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ItemsEdit));
+        items.MapPost("/{id:guid}/deactivate", DeactivateItemAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ItemsEdit));
 
-        var conversions = app.MapGroup("/api/uom-conversions");
-        conversions.MapGet("/", ListUomConversionsAsync);
-        conversions.MapGet("/{id:guid}", GetUomConversionAsync);
-        conversions.MapPost("/", CreateUomConversionAsync);
-        conversions.MapPut("/{id:guid}", UpdateUomConversionAsync);
-        conversions.MapPost("/{id:guid}/deactivate", DeactivateUomConversionAsync);
+        var conversions = app.MapGroup("/api/uom-conversions").RequireAuthorization();
+        conversions.MapGet("/", ListUomConversionsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom, OrganizationFeatureKeys.UomConversion)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        conversions.MapGet("/{id:guid}", GetUomConversionAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom, OrganizationFeatureKeys.UomConversion)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        conversions.MapPost("/", CreateUomConversionAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom, OrganizationFeatureKeys.UomConversion)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        conversions.MapPut("/{id:guid}", UpdateUomConversionAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom, OrganizationFeatureKeys.UomConversion)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        conversions.MapPost("/{id:guid}/deactivate", DeactivateUomConversionAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom, OrganizationFeatureKeys.UomConversion)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
 
         return app;
     }

@@ -13,7 +13,7 @@ import {
   useToast,
 } from "../components/ui";
 import { ApiError, type ValidationErrors } from "../services/api";
-import { listItems, listSuppliers, type Item, type Supplier } from "../services/masterDataApi";
+import { getActiveItemsCached, getActiveSuppliersCached, type Item, type Supplier } from "../services/masterDataApi";
 import {
   createShortageResolution,
   getShortageResolution,
@@ -226,8 +226,8 @@ export function ShortageResolutionFormPage() {
         setFormError("");
 
         const [supplierRows, itemRows, existingResolution] = await Promise.all([
-          listSuppliers("", "active"),
-          listItems("", "active"),
+          getActiveSuppliersCached(),
+          getActiveItemsCached(),
           shortageResolutionId ? getShortageResolution(shortageResolutionId) : Promise.resolve(null),
         ]);
 

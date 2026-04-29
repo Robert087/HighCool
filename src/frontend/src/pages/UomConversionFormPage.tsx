@@ -5,8 +5,8 @@ import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Button, Checkbox, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
 import {
   createUomConversion,
+  getActiveUomsCached,
   getUomConversion,
-  listUoms,
   updateUomConversion,
   type RoundingMode,
   type Uom,
@@ -44,7 +44,7 @@ export function UomConversionFormPage() {
       try {
         setLoading(true);
         const [uomList, row] = await Promise.all([
-          listUoms("", "active"),
+          getActiveUomsCached(),
           uomConversionId ? getUomConversion(uomConversionId) : Promise.resolve(null),
         ]);
 

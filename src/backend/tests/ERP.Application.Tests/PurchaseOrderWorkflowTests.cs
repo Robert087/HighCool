@@ -47,7 +47,7 @@ public sealed class PurchaseOrderWorkflowTests
                 DateTime.UtcNow.Date.AddDays(2),
                 "PO notes",
                 [
-                    new UpsertPurchaseOrderLineRequest(1, references.Item.Id, 10m, references.Uom.Id, null)
+                    new UpsertPurchaseOrderLineRequest(1, references.Item.Id, 10m, 25m, references.Uom.Id, null)
                 ]),
             "tester",
             CancellationToken.None);
@@ -69,9 +69,11 @@ public sealed class PurchaseOrderWorkflowTests
     {
         await using var dbContext = CreateDbContext();
         var references = await SeedReferencesAsync(dbContext);
-        var purchaseOrder = await CreatePostedPurchaseOrderAsync(dbContext, references, orderedQty: 12m);
+        var purchaseOrder = await CreatePostedPurchaseOrderAsync(dbContext, references, orderedQty: 12m, unitPrice: 15m);
         var conversionService = new QuantityConversionService(dbContext);
-        var receiptService = new PurchaseReceiptService(dbContext, conversionService);
+        var organizationId = dbContext.Organizations.IgnoreQueryFilters().Select(entity => entity.Id).Single();
+        var executionContext = TestOrganizationContext.CreateExecutionContext(organizationId);
+        var receiptService = new PurchaseReceiptService(dbContext, executionContext, conversionService);
 
         var receipt = await receiptService.CreateDraftAsync(
             new UpsertPurchaseReceiptDraftRequest(
@@ -100,6 +102,9 @@ public sealed class PurchaseOrderWorkflowTests
         Assert.Equal(purchaseOrder.PoNo, receipt.PurchaseOrderNo);
         Assert.Equal(purchaseOrder.Lines.Single().Id, receipt.Lines.Single().PurchaseOrderLineId);
         Assert.Equal(12m, receipt.Lines.Single().OrderedQtySnapshot);
+        Assert.Equal(15m, receipt.Lines.Single().UnitPrice);
+        Assert.Equal(75m, receipt.Lines.Single().LineAmount);
+        Assert.Equal(75m, receipt.SupplierPayableAmount);
     }
 
     [Fact]
@@ -163,9 +168,12 @@ public sealed class PurchaseOrderWorkflowTests
         await dbContext.SaveChangesAsync();
 
         var conversionService = new QuantityConversionService(dbContext);
-        var receiptService = new PurchaseReceiptService(dbContext, conversionService);
+        var organizationId = dbContext.Organizations.IgnoreQueryFilters().Select(entity => entity.Id).Single();
+        var executionContext = TestOrganizationContext.CreateExecutionContext(organizationId);
+        var receiptService = new PurchaseReceiptService(dbContext, executionContext, conversionService);
         var postingService = new PurchaseReceiptPostingService(
             dbContext,
+            executionContext,
             receiptService,
             new StockLedgerService(dbContext, conversionService),
             new ShortageDetectionService(dbContext, conversionService),
@@ -254,8 +262,10 @@ public sealed class PurchaseOrderWorkflowTests
             .UseSqlite($"Data Source={databasePath}")
             .Options;
 
-        var dbContext = new AppDbContext(options);
+        var executionContext = TestOrganizationContext.CreateExecutionContext();
+        var dbContext = new AppDbContext(options, executionContext);
         dbContext.Database.EnsureCreated();
+        TestOrganizationContext.EnsureOrganizationAsync(dbContext, executionContext).GetAwaiter().GetResult();
         return dbContext;
     }
 
@@ -313,7 +323,8 @@ public sealed class PurchaseOrderWorkflowTests
     private static async Task<PurchaseOrder> CreatePostedPurchaseOrderAsync(
         AppDbContext dbContext,
         (Supplier Supplier, Warehouse Warehouse, Uom Uom, Item Item) references,
-        decimal orderedQty)
+        decimal orderedQty,
+        decimal unitPrice = 20m)
     {
         var purchaseOrder = new PurchaseOrder
         {
@@ -329,6 +340,7 @@ public sealed class PurchaseOrderWorkflowTests
                     LineNo = 1,
                     ItemId = references.Item.Id,
                     OrderedQty = orderedQty,
+                    UnitPrice = unitPrice,
                     UomId = references.Uom.Id,
                     CreatedBy = "seed"
                 }

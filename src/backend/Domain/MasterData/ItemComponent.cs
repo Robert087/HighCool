@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.MasterData;
 
-public sealed class ItemComponent : AuditableEntity
+public sealed class ItemComponent : OrganizationScopedAuditableEntity
 {
     public Guid ItemId { get; set; }
 

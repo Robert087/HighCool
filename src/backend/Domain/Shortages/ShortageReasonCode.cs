@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.Shortages;
 
-public sealed class ShortageReasonCode : AuditableEntity
+public sealed class ShortageReasonCode : OrganizationScopedAuditableEntity
 {
     public string Code { get; set; } = string.Empty;
 

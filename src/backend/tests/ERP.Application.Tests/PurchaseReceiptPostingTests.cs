@@ -195,12 +195,15 @@ public sealed class PurchaseReceiptPostingTests
     private static IPurchaseReceiptPostingService CreatePostingService(AppDbContext dbContext)
     {
         var quantityConversionService = new QuantityConversionService(dbContext);
-        var receiptService = new PurchaseReceiptService(dbContext, quantityConversionService);
+        var organizationId = dbContext.Organizations.IgnoreQueryFilters().Select(entity => entity.Id).Single();
+        var executionContext = TestOrganizationContext.CreateExecutionContext(organizationId);
+        var receiptService = new PurchaseReceiptService(dbContext, executionContext, quantityConversionService);
         var stockLedgerService = new StockLedgerService(dbContext, quantityConversionService);
         var shortageDetectionService = new ShortageDetectionService(dbContext, quantityConversionService);
 
         return new PurchaseReceiptPostingService(
             dbContext,
+            executionContext,
             receiptService,
             stockLedgerService,
             shortageDetectionService,
@@ -215,8 +218,10 @@ public sealed class PurchaseReceiptPostingTests
             .UseSqlite($"Data Source={databasePath}")
             .Options;
 
-        var dbContext = new AppDbContext(options);
+        var executionContext = TestOrganizationContext.CreateExecutionContext();
+        var dbContext = new AppDbContext(options, executionContext);
         dbContext.Database.EnsureCreated();
+        TestOrganizationContext.EnsureOrganizationAsync(dbContext, executionContext).GetAwaiter().GetResult();
         return dbContext;
     }
 
