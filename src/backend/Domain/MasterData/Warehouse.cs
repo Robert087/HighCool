@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.MasterData;
 
-public sealed class Warehouse : AuditableEntity
+public sealed class Warehouse : OrganizationScopedAuditableEntity
 {
     public string Code { get; set; } = string.Empty;
 

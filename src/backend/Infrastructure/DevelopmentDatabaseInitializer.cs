@@ -46,14 +46,21 @@ public sealed class DevelopmentDatabaseInitializer(
             await ResetSqliteDatabaseFileAsync(dbContext, databasePath);
         }
 
+        if (!string.IsNullOrWhiteSpace(databasePath) &&
+            File.Exists(databasePath) &&
+            await IsMissingRequiredSchemaAsync(dbContext, cancellationToken))
+        {
+            await ResetSqliteDatabaseFileAsync(dbContext, databasePath);
+        }
+
         try
         {
-            await dbContext.Database.MigrateAsync(cancellationToken);
+            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         }
         catch (SqliteException) when (!string.IsNullOrWhiteSpace(databasePath) && File.Exists(databasePath))
         {
             await ResetSqliteDatabaseFileAsync(dbContext, databasePath);
-            await dbContext.Database.MigrateAsync(cancellationToken);
+            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         }
     }
 
@@ -133,6 +140,73 @@ public sealed class DevelopmentDatabaseInitializer(
         }
 
         return !hasMigrationHistoryTable;
+    }
+
+    private static async Task<bool> IsMissingRequiredSchemaAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var requiredTables = new[]
+        {
+            "organizations",
+            "organization_security_settings",
+            "user_accounts",
+            "organization_memberships",
+            "roles",
+            "user_profiles",
+            "user_sessions",
+            "email_verification_tokens",
+            "audit_log_entries"
+        };
+
+        foreach (var tableName in requiredTables)
+        {
+            if (!await TableExistsAsync(dbContext, tableName, cancellationToken))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        AppDbContext dbContext,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldCloseConnection = connection.State != System.Data.ConnectionState.Open;
+
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT COUNT(*)
+                FROM sqlite_master
+                WHERE type = 'table'
+                  AND name = $tableName;
+                """;
+
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "$tableName";
+            parameter.Value = tableName;
+            command.Parameters.Add(parameter);
+
+            return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) > 0;
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 
     private static async Task SeedAsync(AppDbContext dbContext, CancellationToken cancellationToken)

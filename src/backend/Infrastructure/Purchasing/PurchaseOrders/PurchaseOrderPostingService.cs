@@ -41,6 +41,11 @@ public sealed class PurchaseOrderPostingService(
             throw new InvalidOperationException("At least one purchase order line is required before posting.");
         }
 
+        if (purchaseOrder.Lines.Any(line => line.UnitPrice < 0m))
+        {
+            throw new InvalidOperationException("Purchase order line unit prices cannot be negative.");
+        }
+
         purchaseOrder.Status = DocumentStatus.Posted;
         purchaseOrder.UpdatedBy = actor;
         await dbContext.SaveChangesAsync(cancellationToken);

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using ERP.Infrastructure.Security;
 
 namespace ERP.Infrastructure.Persistence.Factories;
 
@@ -30,6 +31,6 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
                 sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName));
         }
 
-        return new AppDbContext(optionsBuilder.Options);
+        return new AppDbContext(optionsBuilder.Options, SystemRequestExecutionContext.Instance);
     }
 }

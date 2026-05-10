@@ -39,6 +39,9 @@ public sealed class UpsertPurchaseOrderRequestValidator : AbstractValidator<Upse
                 line.RuleFor(entry => entry.OrderedQty)
                     .GreaterThan(0m);
 
+                line.RuleFor(entry => entry.UnitPrice)
+                    .GreaterThanOrEqualTo(0m);
+
                 line.RuleFor(entry => entry.UomId)
                     .NotEmpty();
 

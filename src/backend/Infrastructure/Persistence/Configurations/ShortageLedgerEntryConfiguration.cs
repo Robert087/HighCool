@@ -134,6 +134,10 @@ public sealed class ShortageLedgerEntryConfiguration : AuditableEntityConfigurat
         builder.HasIndex(entity => entity.PurchaseOrderId);
         builder.HasIndex(entity => entity.PurchaseOrderLineId);
         builder.HasIndex(entity => entity.Status);
+        builder.HasIndex(entity => entity.ItemId);
+        builder.HasIndex(entity => entity.ComponentItemId);
+        builder.HasIndex(entity => new { entity.Status, entity.ComponentItemId });
+        builder.HasIndex(entity => new { entity.Status, entity.ItemId });
         builder.HasIndex(entity => new { entity.PurchaseReceiptLineId, entity.ComponentItemId })
             .IsUnique();
     }

@@ -66,5 +66,6 @@ public sealed class ShortageResolutionAllocationConfiguration : AuditableEntityC
             .IsUnique();
         builder.HasIndex(entity => new { entity.ResolutionId, entity.ShortageLedgerId })
             .IsUnique();
+        builder.HasIndex(entity => new { entity.ShortageLedgerId, entity.AllocationType });
     }
 }

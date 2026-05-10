@@ -3,7 +3,7 @@ using ERP.Domain.MasterData;
 
 namespace ERP.Domain.Statements;
 
-public sealed class SupplierStatementEntry : AuditableEntity
+public sealed class SupplierStatementEntry : OrganizationScopedAuditableEntity
 {
     public Guid SupplierId { get; set; }
 

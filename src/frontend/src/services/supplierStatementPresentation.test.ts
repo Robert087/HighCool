@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { SupplierStatementEntry, SupplierStatementSummary } from "./supplierStatementsApi";
 import {
   buildSupplierStatementSummaryViewModel,
+  formatEffectType,
+  formatSourceType,
   groupSupplierStatementEntries,
   interpretSupplierBalance,
 } from "./supplierStatementPresentation";
@@ -96,6 +98,15 @@ describe("groupSupplierStatementEntries", () => {
 
     expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.sourceDocumentNo)).toEqual(["SR-0001", "PR-0001"]);
+  });
+});
+
+describe("statement label formatting", () => {
+  it("formats purchase return and reversal types without falling back to payment labels", () => {
+    expect(formatEffectType("PurchaseReturn")).toBe("Purchase return");
+    expect(formatEffectType("PaymentReversal")).toBe("Payment reversal");
+    expect(formatSourceType("PurchaseReturn")).toBe("Purchase return");
+    expect(formatSourceType("PurchaseReceiptReversal")).toBe("Purchase receipt reversal");
   });
 });
 

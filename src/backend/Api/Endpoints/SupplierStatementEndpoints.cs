@@ -1,4 +1,6 @@
 using ERP.Application.Statements;
+using ERP.Application.Common.Pagination;
+using ERP.Application.Security;
 using ERP.Domain.Statements;
 
 namespace ERP.Api.Endpoints;
@@ -7,9 +9,18 @@ public static class SupplierStatementEndpoints
 {
     public static IEndpointRouteBuilder MapSupplierStatementEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/supplier-statements", ListAsync);
-        app.MapGet("/api/suppliers/{supplierId:guid}/statement", ListForSupplierAsync);
-        app.MapGet("/api/suppliers/{supplierId:guid}/statement/summary", GetSummaryAsync);
+        app.MapGet("/api/supplier-statements", ListAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        app.MapGet("/api/suppliers/{supplierId:guid}/statement", ListForSupplierAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
+        app.MapGet("/api/suppliers/{supplierId:guid}/statement/summary", GetSummaryAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierFinancials))
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SupplierFinancialsPayablesView));
 
         return app;
     }
@@ -21,6 +32,10 @@ public static class SupplierStatementEndpoints
         SupplierStatementSourceDocumentType? sourceDocType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         ISupplierStatementQueryService service,
         CancellationToken cancellationToken)
     {
@@ -31,7 +46,7 @@ public static class SupplierStatementEndpoints
         }
 
         var result = await service.ListAsync(
-            new SupplierStatementQuery(search, supplierId, effectType, sourceDocType, fromDate, toDate),
+            new SupplierStatementQuery(search, supplierId, effectType, sourceDocType, fromDate, toDate, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Desc),
             cancellationToken);
 
         return Results.Ok(result);
@@ -44,6 +59,10 @@ public static class SupplierStatementEndpoints
         SupplierStatementSourceDocumentType? sourceDocType,
         DateTime? fromDate,
         DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         ISupplierStatementQueryService service,
         CancellationToken cancellationToken)
     {
@@ -54,6 +73,10 @@ public static class SupplierStatementEndpoints
             sourceDocType,
             fromDate,
             toDate,
+            page,
+            pageSize,
+            sortBy,
+            sortDirection,
             service,
             cancellationToken);
     }

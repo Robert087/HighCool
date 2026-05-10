@@ -1,3 +1,4 @@
+using ERP.Application.Common.Pagination;
 using ERP.Application.Payments;
 using ERP.Domain.Common;
 using ERP.Domain.Payments;
@@ -8,12 +9,12 @@ namespace ERP.Infrastructure.Payments;
 
 public sealed class PaymentQueryService(AppDbContext dbContext) : IPaymentQueryService
 {
-    public async Task<IReadOnlyList<PaymentListItemDto>> ListAsync(PaymentListQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<PaymentListItemDto>> ListAsync(PaymentListQuery query, CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
+
         var paymentsQuery = dbContext.Payments
             .AsNoTracking()
-            .Include(entity => entity.Supplier)
-            .Include(entity => entity.Allocations)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -57,37 +58,75 @@ public sealed class PaymentQueryService(AppDbContext dbContext) : IPaymentQueryS
             paymentsQuery = paymentsQuery.Where(entity => entity.PaymentDate <= query.ToDate.Value);
         }
 
-        var payments = await paymentsQuery
-            .OrderByDescending(entity => entity.PaymentDate)
-            .ThenByDescending(entity => entity.CreatedAt)
+        paymentsQuery = ApplySorting(paymentsQuery, query);
+
+        var totalCount = await paymentsQuery.CountAsync(cancellationToken);
+        var pageRows = await paymentsQuery
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
+            .Select(entity => new PaymentListItemDto(
+                entity.Id,
+                entity.PaymentNo,
+                entity.PartyType,
+                entity.PartyId,
+                entity.Supplier != null ? entity.Supplier.Code : string.Empty,
+                entity.Supplier != null ? entity.Supplier.Name : string.Empty,
+                entity.Direction,
+                entity.Amount,
+                0m,
+                0m,
+                entity.PaymentDate,
+                entity.Currency,
+                entity.PaymentMethod,
+                entity.ReferenceNote,
+                entity.Status,
+                entity.Allocations.Count(),
+                entity.ReversalDocumentId,
+                entity.ReversedAt,
+                entity.CreatedAt,
+                entity.UpdatedAt))
             .ToListAsync(cancellationToken);
 
-        return payments
+        var paymentIds = pageRows.Select(entity => entity.Id).ToArray();
+        var allocatedAmountsByPaymentId = paymentIds.Length == 0
+            ? new Dictionary<Guid, decimal>()
+            : (await dbContext.PaymentAllocations
+                .AsNoTracking()
+                .Where(entity => paymentIds.Contains(entity.PaymentId))
+                .Select(entity => new { entity.PaymentId, entity.AllocatedAmount })
+                .ToListAsync(cancellationToken))
+                .GroupBy(entity => entity.PaymentId)
+                .ToDictionary(group => group.Key, group => group.Sum(entity => entity.AllocatedAmount));
+
+        var items = pageRows
             .Select(entity =>
             {
-                var allocatedAmount = Round(entity.Allocations.Sum(allocation => allocation.AllocatedAmount));
-
-                return new PaymentListItemDto(
-                    entity.Id,
-                    entity.PaymentNo,
-                    entity.PartyType,
-                    entity.PartyId,
-                    entity.Supplier?.Code ?? string.Empty,
-                    entity.Supplier?.Name ?? string.Empty,
-                    entity.Direction,
-                    entity.Amount,
-                    allocatedAmount,
-                    Round(entity.Amount - allocatedAmount),
-                    entity.PaymentDate,
-                    entity.Currency,
-                    entity.PaymentMethod,
-                    entity.ReferenceNote,
-                    entity.Status,
-                    entity.Allocations.Count,
-                    entity.CreatedAt,
-                    entity.UpdatedAt);
+                var allocatedAmount = allocatedAmountsByPaymentId.GetValueOrDefault(entity.Id, 0m);
+                return entity with
+                {
+                    AllocatedAmount = allocatedAmount,
+                    UnallocatedAmount = entity.Amount - allocatedAmount
+                };
             })
-            .ToArray();
+            .ToList();
+
+        return new PagedResult<PaymentListItemDto>(
+            items,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new
+            {
+                query.Search,
+                query.SupplierId,
+                query.Direction,
+                query.Status,
+                query.PaymentMethod,
+                query.FromDate,
+                query.ToDate
+            },
+            new PagedSort(ResolveSortBy(query.SortBy), query.SortDirection));
     }
 
     public async Task<PaymentDto?> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -125,6 +164,8 @@ public sealed class PaymentQueryService(AppDbContext dbContext) : IPaymentQueryS
             payment.ReferenceNote,
             payment.Notes,
             payment.Status,
+            payment.ReversalDocumentId,
+            payment.ReversedAt,
             allocations,
             payment.CreatedAt,
             payment.UpdatedAt);
@@ -153,168 +194,63 @@ public sealed class PaymentQueryService(AppDbContext dbContext) : IPaymentQueryS
             return [];
         }
 
-        var targetSnapshots = await LoadTargetSnapshotsAsync(allocations, cancellationToken);
-        var postedAllocatedTotals = await LoadPostedAllocationTotalsAsync(allocations, cancellationToken);
+        var targetStates = await new SupplierFinancialTargetStateService(dbContext)
+            .GetByTargetAsync(
+                allocations
+                    .Select(allocation => (allocation.TargetDocType, allocation.TargetDocId))
+                    .Distinct()
+                    .ToArray(),
+                cancellationToken);
 
         return allocations.Select(allocation =>
         {
-            var targetKey = BuildTargetKey(allocation.TargetDocType, allocation.TargetDocId, allocation.TargetLineId);
-            if (!targetSnapshots.TryGetValue(targetKey, out var snapshot))
+            var targetKey = SupplierFinancialTargetStateService.BuildTargetKey(allocation.TargetDocType, allocation.TargetDocId);
+            if (!targetStates.TryGetValue(targetKey, out var state))
             {
-                snapshot = new TargetSnapshot(
+                state = new SupplierFinancialTargetState(
                     allocation.TargetDocType,
                     allocation.TargetDocId,
-                    allocation.TargetLineId,
+                    payment.PartyId,
+                    string.Empty,
+                    string.Empty,
                     allocation.TargetDocId.ToString(),
                     payment.PaymentDate,
                     0m,
+                    0m,
+                    0m,
+                    0m,
+                    0m,
+                    "Closed",
+                    null,
                     null);
             }
 
-            var totalAllocated = postedAllocatedTotals.TryGetValue(targetKey, out var allocatedTotal) ? allocatedTotal : 0m;
+            var alreadyAllocated = state.AllocatedAmount;
+            var openAmount = state.OpenAmount;
+
             if (payment.Status != DocumentStatus.Posted)
             {
-                totalAllocated = Round(totalAllocated + allocation.AllocatedAmount);
+                openAmount = ClampToZero(Round(state.OpenAmount - allocation.AllocatedAmount));
             }
-
-            var alreadyAllocated = Round(Math.Max(totalAllocated - allocation.AllocatedAmount, 0m));
-            var openAmount = ClampToZero(Round(snapshot.OriginalAmount - totalAllocated));
 
             return new PaymentAllocationDto(
                 allocation.Id,
                 allocation.TargetDocType,
                 allocation.TargetDocId,
                 allocation.TargetLineId,
-                snapshot.DocumentNo,
-                snapshot.DocumentDate,
-                snapshot.OriginalAmount,
+                state.TargetDocumentNo,
+                state.TargetDocumentDate,
+                state.OriginalAmount,
+                state.AdjustedAmount,
+                state.NetAmount,
                 alreadyAllocated,
                 openAmount,
+                state.Status,
                 allocation.AllocatedAmount,
                 allocation.AllocationOrder,
                 allocation.CreatedAt,
                 allocation.CreatedBy);
         }).ToArray();
-    }
-
-    private async Task<Dictionary<string, TargetSnapshot>> LoadTargetSnapshotsAsync(
-        IReadOnlyCollection<PaymentAllocation> allocations,
-        CancellationToken cancellationToken)
-    {
-        var receiptIds = allocations
-            .Where(entity => entity.TargetDocType == PaymentTargetDocumentType.PurchaseReceipt)
-            .Select(entity => entity.TargetDocId)
-            .Distinct()
-            .ToArray();
-
-        var resolutionIds = allocations
-            .Where(entity => entity.TargetDocType == PaymentTargetDocumentType.ShortageResolution)
-            .Select(entity => entity.TargetDocId)
-            .Distinct()
-            .ToArray();
-
-        var snapshots = new Dictionary<string, TargetSnapshot>();
-
-        if (receiptIds.Length > 0)
-        {
-            var receipts = await dbContext.PurchaseReceipts
-                .AsNoTracking()
-                .Where(entity => receiptIds.Contains(entity.Id))
-                .Select(entity => new
-                {
-                    entity.Id,
-                    entity.ReceiptNo,
-                    entity.ReceiptDate,
-                    entity.SupplierPayableAmount,
-                    entity.Notes
-                })
-                .ToListAsync(cancellationToken);
-
-            foreach (var receipt in receipts)
-            {
-                snapshots[BuildTargetKey(PaymentTargetDocumentType.PurchaseReceipt, receipt.Id, null)] =
-                    new TargetSnapshot(
-                        PaymentTargetDocumentType.PurchaseReceipt,
-                        receipt.Id,
-                        null,
-                        receipt.ReceiptNo,
-                        receipt.ReceiptDate,
-                        receipt.SupplierPayableAmount,
-                        receipt.Notes);
-            }
-        }
-
-        if (resolutionIds.Length > 0)
-        {
-            var resolutions = await dbContext.ShortageResolutions
-                .AsNoTracking()
-                .Where(entity => resolutionIds.Contains(entity.Id))
-                .Select(entity => new
-                {
-                    entity.Id,
-                    entity.ResolutionNo,
-                    entity.ResolutionDate,
-                    entity.TotalAmount,
-                    entity.Notes
-                })
-                .ToListAsync(cancellationToken);
-
-            foreach (var resolution in resolutions)
-            {
-                snapshots[BuildTargetKey(PaymentTargetDocumentType.ShortageResolution, resolution.Id, null)] =
-                    new TargetSnapshot(
-                        PaymentTargetDocumentType.ShortageResolution,
-                        resolution.Id,
-                        null,
-                        resolution.ResolutionNo,
-                        resolution.ResolutionDate,
-                        Round(resolution.TotalAmount ?? 0m),
-                        resolution.Notes);
-            }
-        }
-
-        return snapshots;
-    }
-
-    private async Task<Dictionary<string, decimal>> LoadPostedAllocationTotalsAsync(
-        IReadOnlyCollection<PaymentAllocation> allocations,
-        CancellationToken cancellationToken)
-    {
-        var receiptIds = allocations
-            .Where(entity => entity.TargetDocType == PaymentTargetDocumentType.PurchaseReceipt)
-            .Select(entity => entity.TargetDocId)
-            .Distinct()
-            .ToArray();
-
-        var resolutionIds = allocations
-            .Where(entity => entity.TargetDocType == PaymentTargetDocumentType.ShortageResolution)
-            .Select(entity => entity.TargetDocId)
-            .Distinct()
-            .ToArray();
-
-        var postedAllocations = await dbContext.PaymentAllocations
-            .AsNoTracking()
-            .Where(entity =>
-                entity.Payment!.Status == DocumentStatus.Posted &&
-                ((entity.TargetDocType == PaymentTargetDocumentType.PurchaseReceipt && receiptIds.Contains(entity.TargetDocId)) ||
-                 (entity.TargetDocType == PaymentTargetDocumentType.ShortageResolution && resolutionIds.Contains(entity.TargetDocId))))
-            .Select(entity => new
-            {
-                entity.TargetDocType,
-                entity.TargetDocId,
-                entity.TargetLineId,
-                entity.AllocatedAmount
-            })
-            .ToListAsync(cancellationToken);
-
-        return postedAllocations
-            .GroupBy(entity => BuildTargetKey(entity.TargetDocType, entity.TargetDocId, entity.TargetLineId))
-            .ToDictionary(group => group.Key, group => Round(group.Sum(entry => entry.AllocatedAmount)));
-    }
-
-    private static string BuildTargetKey(PaymentTargetDocumentType targetDocType, Guid targetDocId, Guid? targetLineId)
-    {
-        return $"{targetDocType}:{targetDocId}:{targetLineId?.ToString() ?? "header"}";
     }
 
     private static decimal Round(decimal value)
@@ -327,12 +263,33 @@ public sealed class PaymentQueryService(AppDbContext dbContext) : IPaymentQueryS
         return value < 0m ? 0m : value;
     }
 
-    private sealed record TargetSnapshot(
-        PaymentTargetDocumentType TargetDocType,
-        Guid TargetDocId,
-        Guid? TargetLineId,
-        string DocumentNo,
-        DateTime DocumentDate,
-        decimal OriginalAmount,
-        string? Notes);
+    private static IQueryable<Payment> ApplySorting(IQueryable<Payment> query, PaymentListQuery request)
+    {
+        var sortBy = ResolveSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("paymentNo", true) => query.OrderBy(entity => entity.PaymentNo).ThenBy(entity => entity.Id),
+            ("paymentNo", false) => query.OrderByDescending(entity => entity.PaymentNo).ThenByDescending(entity => entity.Id),
+            ("partyName", true) => query.OrderBy(entity => entity.Supplier!.Name).ThenBy(entity => entity.PaymentDate),
+            ("partyName", false) => query.OrderByDescending(entity => entity.Supplier!.Name).ThenByDescending(entity => entity.PaymentDate),
+            ("amount", true) => query.OrderBy(entity => entity.Amount).ThenBy(entity => entity.PaymentDate),
+            ("amount", false) => query.OrderByDescending(entity => entity.Amount).ThenByDescending(entity => entity.PaymentDate),
+            ("status", true) => query.OrderBy(entity => entity.Status).ThenBy(entity => entity.PaymentDate),
+            ("status", false) => query.OrderByDescending(entity => entity.Status).ThenByDescending(entity => entity.PaymentDate),
+            _ when ascending => query.OrderBy(entity => entity.PaymentDate).ThenBy(entity => entity.CreatedAt),
+            _ => query.OrderByDescending(entity => entity.PaymentDate).ThenByDescending(entity => entity.CreatedAt)
+        };
+    }
+
+    private static string ResolveSortBy(string? sortBy)
+    {
+        return string.IsNullOrWhiteSpace(sortBy) ? "paymentDate" : sortBy.Trim();
+    }
+
+    private static int CalculateTotalPages(int totalCount, int pageSize)
+    {
+        return totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+    }
 }

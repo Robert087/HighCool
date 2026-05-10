@@ -3,7 +3,7 @@ using ERP.Domain.MasterData;
 
 namespace ERP.Domain.Shortages;
 
-public sealed class ShortageLedgerEntry : AuditableEntity
+public sealed class ShortageLedgerEntry : OrganizationScopedAuditableEntity
 {
     public Guid PurchaseReceiptId { get; set; }
 

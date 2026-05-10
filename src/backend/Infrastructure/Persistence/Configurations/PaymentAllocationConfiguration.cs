@@ -41,5 +41,6 @@ public sealed class PaymentAllocationConfiguration : AuditableEntityConfiguratio
             .IsUnique();
 
         builder.HasIndex(entity => new { entity.TargetDocType, entity.TargetDocId, entity.TargetLineId });
+        builder.HasIndex(entity => entity.PaymentId);
     }
 }

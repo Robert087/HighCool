@@ -45,6 +45,10 @@ public sealed class UpsertPaymentRequestValidator : AbstractValidator<UpsertPaym
             .Must(HaveUniqueAllocationOrder)
             .WithMessage("Allocation order values must be unique inside the payment.");
 
+        RuleFor(request => request.Allocations)
+            .Must(HaveUniqueTargets)
+            .WithMessage("Duplicate payment allocation targets are not allowed inside the same payment.");
+
         RuleForEach(request => request.Allocations)
             .ChildRules(allocation =>
             {
@@ -69,5 +73,14 @@ public sealed class UpsertPaymentRequestValidator : AbstractValidator<UpsertPaym
     private static bool HaveUniqueAllocationOrder(IReadOnlyList<UpsertPaymentAllocationRequest> allocations)
     {
         return allocations.Select(allocation => allocation.AllocationOrder).Distinct().Count() == allocations.Count;
+    }
+
+    private static bool HaveUniqueTargets(IReadOnlyList<UpsertPaymentAllocationRequest> allocations)
+    {
+        return allocations
+            .Where(allocation => allocation.TargetDocId != Guid.Empty)
+            .Select(allocation => $"{allocation.TargetDocType}:{allocation.TargetDocId}")
+            .Distinct()
+            .Count() == allocations.Count(allocation => allocation.TargetDocId != Guid.Empty);
     }
 }

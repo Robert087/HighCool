@@ -1,4 +1,5 @@
 import { Button } from "./Button";
+import { useI18n } from "../../i18n";
 
 export interface PaginationProps {
   currentPage: number;
@@ -27,38 +28,37 @@ export function Pagination({
   totalCount,
   totalPages,
 }: PaginationProps) {
-  if (totalPages <= 1) {
-    return null;
-  }
-
-  const pages = getPageRange(currentPage, totalPages);
-  const rangeStart = totalCount && pageSize ? (currentPage - 1) * pageSize + 1 : undefined;
+  const { t } = useI18n();
+  const normalizedTotalPages = Math.max(totalPages, 1);
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), normalizedTotalPages);
+  const pages = getPageRange(safeCurrentPage, normalizedTotalPages);
+  const rangeStart = totalCount && pageSize ? (safeCurrentPage - 1) * pageSize + 1 : undefined;
   const rangeEnd =
-    totalCount && pageSize ? Math.min(currentPage * pageSize, totalCount) : undefined;
+    totalCount && pageSize ? Math.min(safeCurrentPage * pageSize, totalCount) : undefined;
 
   return (
     <div className="hc-pagination">
       <div className="hc-pagination__summary">
         {typeof totalCount === "number" && typeof rangeStart === "number" && typeof rangeEnd === "number"
-          ? `Showing ${rangeStart}-${rangeEnd} of ${totalCount}`
-          : `Page ${currentPage} of ${totalPages}`}
+          ? t("common.showingOf", { rangeStart, rangeEnd, totalCount })
+          : t("common.pageOf", { currentPage: safeCurrentPage, totalPages: normalizedTotalPages })}
       </div>
 
       <div className="hc-pagination__controls">
         <Button
           variant="secondary"
           size="sm"
-          disabled={currentPage <= 1}
-          onClick={() => onPageChange(currentPage - 1)}
+          disabled={safeCurrentPage <= 1}
+          onClick={() => onPageChange(safeCurrentPage - 1)}
         >
-          Previous
+          {t("common.previous")}
         </Button>
 
         <div className="hc-pagination__pages">
           {pages.map((page) => (
             <Button
               key={page}
-              variant={page === currentPage ? "primary" : "ghost"}
+              variant={page === safeCurrentPage ? "primary" : "ghost"}
               size="sm"
               onClick={() => onPageChange(page)}
             >
@@ -70,10 +70,10 @@ export function Pagination({
         <Button
           variant="secondary"
           size="sm"
-          disabled={currentPage >= totalPages}
-          onClick={() => onPageChange(currentPage + 1)}
+          disabled={safeCurrentPage >= normalizedTotalPages}
+          onClick={() => onPageChange(safeCurrentPage + 1)}
         >
-          Next
+          {t("common.next")}
         </Button>
       </div>
     </div>

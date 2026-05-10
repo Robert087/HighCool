@@ -15,6 +15,13 @@ public abstract class BusinessDocumentConfigurationBase<TEntity> : AuditableEnti
             .HasMaxLength(20)
             .IsRequired();
 
+        builder.Property(entity => entity.ReversalDocumentId)
+            .HasColumnName("reversal_document_id");
+
+        builder.Property(entity => entity.ReversedAt)
+            .HasColumnName("reversed_at")
+            .HasColumnType("datetime2");
+
         ConfigureDocument(builder);
     }
 

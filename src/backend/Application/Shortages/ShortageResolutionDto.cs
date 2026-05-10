@@ -16,6 +16,8 @@ public sealed record ShortageResolutionDto(
     string? Currency,
     string? Notes,
     DocumentStatus Status,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     string? ApprovedBy,
     DateTime CreatedAt,
     string CreatedBy,

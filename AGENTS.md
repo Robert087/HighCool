@@ -72,6 +72,13 @@ Build a production-ready ERP web application for:
 
 * Stack: React + TypeScript
 * Build responsive UI (desktop + mobile)
+* Arabic and English are first-class supported UI languages
+* All user-facing text must use shared localization keys
+* No visible hardcoded UI strings are allowed in shipped screens or shared components
+* All new UI must support both RTL and LTR
+* Forms must be fully localized internally, including labels, placeholders, helper text, validation messages, selector prompts, and inline workflow messages
+* Filters must be both localized and functionally complete, with clear reset/clear behavior and server-side-compatible binding
+* Dates, numbers, quantities, percentages, and currencies must use locale-aware shared formatting
 * Offline support = drafts only
 * Use IndexedDB for local drafts
 * Do NOT implement offline posting
@@ -96,6 +103,7 @@ Build a production-ready ERP web application for:
 
 * Prefer simple and readable code
 * Avoid over-engineering
+* Treat performance as a first-class design concern, not a cleanup step
 * Write unit tests for:
 
   * posting logic
@@ -103,6 +111,7 @@ Build a production-ready ERP web application for:
   * shortage logic
   * reversal logic
 * Add integration tests for document flows
+* Add pagination/filter/sort coverage for major list endpoints
 * Update docs when schema or behavior changes
 * Do not change business rules unless explicitly instructed
 
@@ -170,6 +179,10 @@ No inline styling unless unavoidable
 Use shared tokens only
 Keep components small and composable
 Separate presentational and business logic when possible
+Do not hardcode UI strings in new modules
+A module is not complete if Arabic support stops at headers while forms, dialogs, filters, grids, or navigation still contain untranslated text
+Validate new screens in both Arabic/RTL and English/LTR
+Validate form internals, filters, dialogs, tables, and navigation in both Arabic/RTL and English/LTR
 UX rules
 Search visible by default on list pages
 Quick filters visible, advanced filters in popover/drawer
@@ -177,6 +190,7 @@ Pagination always at bottom right/consistent position
 Selected rows count visible in bulk actions
 No modal for long forms; use page or drawer
 Validation inline, not only toast-based
+Mixed Arabic labels with English document numbers, codes, and financial values must remain readable
 
 ## Development Commands (Linux)
 
@@ -220,3 +234,10 @@ A task is complete only when:
 ## Final Rule
 
 > The system must always favor correctness, traceability, and safety over speed or shortcuts.
+
+Performance follow-up:
+
+* no future module may expose an unbounded list API
+* all ERP grids must use server-side pagination, filtering, and sorting
+* read-heavy modules must use lightweight query/read models instead of loading full write aggregates
+* schema design must include indexing for foreign keys, common filters, and high-volume joins

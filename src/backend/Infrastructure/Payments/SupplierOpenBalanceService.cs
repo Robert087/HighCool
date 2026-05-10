@@ -1,182 +1,75 @@
+using ERP.Application.Common.Pagination;
 using ERP.Application.Payments;
-using ERP.Domain.Common;
-using ERP.Domain.Payments;
-using ERP.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Payments;
 
-public sealed class SupplierOpenBalanceService(AppDbContext dbContext) : ISupplierOpenBalanceService
+public sealed class SupplierOpenBalanceService(SupplierFinancialTargetStateService stateService) : ISupplierOpenBalanceService
 {
-    public async Task<IReadOnlyList<SupplierOpenBalanceDto>> ListAsync(SupplierOpenBalanceQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<SupplierOpenBalanceDto>> ListAsync(SupplierOpenBalanceQuery query, CancellationToken cancellationToken)
     {
-        return query.Direction == PaymentDirection.OutboundToParty
-            ? await ListPurchaseReceiptBalancesAsync(query, cancellationToken)
-            : await ListShortageResolutionBalancesAsync(query, cancellationToken);
-    }
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
+        var states = await stateService.ListAsync(query, cancellationToken);
+        var sortedStates = ApplySorting(states, query);
+        var totalCount = sortedStates.Count;
 
-    private async Task<IReadOnlyList<SupplierOpenBalanceDto>> ListPurchaseReceiptBalancesAsync(
-        SupplierOpenBalanceQuery query,
-        CancellationToken cancellationToken)
-    {
-        var receiptsQuery = dbContext.PurchaseReceipts
-            .AsNoTracking()
-            .Include(entity => entity.Supplier)
-            .Where(entity =>
-                entity.Status == DocumentStatus.Posted &&
-                entity.SupplierId == query.SupplierId &&
-                entity.SupplierPayableAmount > 0m)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim();
-            receiptsQuery = receiptsQuery.Where(entity =>
-                entity.ReceiptNo.Contains(search) ||
-                (entity.Notes != null && entity.Notes.Contains(search)));
-        }
-
-        if (query.FromDate.HasValue)
-        {
-            receiptsQuery = receiptsQuery.Where(entity => entity.ReceiptDate >= query.FromDate.Value);
-        }
-
-        if (query.ToDate.HasValue)
-        {
-            receiptsQuery = receiptsQuery.Where(entity => entity.ReceiptDate <= query.ToDate.Value);
-        }
-
-        var receipts = await receiptsQuery
-            .OrderBy(entity => entity.ReceiptDate)
-            .ThenBy(entity => entity.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        var receiptIds = receipts.Select(entity => entity.Id).ToArray();
-        var allocatedByReceiptId = receiptIds.Length == 0
-            ? new Dictionary<Guid, decimal>()
-            : await dbContext.PaymentAllocations
-                .AsNoTracking()
-                .Where(entity =>
-                    entity.TargetDocType == PaymentTargetDocumentType.PurchaseReceipt &&
-                    receiptIds.Contains(entity.TargetDocId) &&
-                    entity.Payment!.Status == DocumentStatus.Posted &&
-                    entity.Payment.Direction == PaymentDirection.OutboundToParty)
-                .GroupBy(entity => entity.TargetDocId)
-                .ToDictionaryAsync(
-                    group => group.Key,
-                    group => Round(group.Sum(entity => entity.AllocatedAmount)),
-                    cancellationToken);
-
-        return receipts
-            .Select(receipt =>
-            {
-                var allocatedAmount = allocatedByReceiptId.TryGetValue(receipt.Id, out var allocated) ? allocated : 0m;
-                var openAmount = ClampToZero(Round(receipt.SupplierPayableAmount - allocatedAmount));
-
-                return new SupplierOpenBalanceDto(
-                    PaymentTargetDocumentType.PurchaseReceipt,
-                    receipt.Id,
-                    receipt.SupplierId,
-                    receipt.Supplier?.Code ?? string.Empty,
-                    receipt.Supplier?.Name ?? string.Empty,
-                    receipt.ReceiptNo,
-                    receipt.ReceiptDate,
-                    receipt.SupplierPayableAmount,
-                    allocatedAmount,
-                    openAmount,
-                    null,
-                    receipt.Notes);
-            })
-            .Where(entity => entity.OpenAmount > 0m)
+        var items = sortedStates
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
+            .Select(state => new SupplierOpenBalanceDto(
+                state.TargetDocType,
+                state.TargetDocId,
+                state.SupplierId,
+                state.SupplierCode,
+                state.SupplierName,
+                state.TargetDocumentNo,
+                state.TargetDocumentDate,
+                state.OriginalAmount,
+                state.AdjustedAmount,
+                state.NetAmount,
+                state.AllocatedAmount,
+                state.OpenAmount,
+                state.Status,
+                state.Currency,
+                state.Notes))
             .ToArray();
-    }
 
-    private async Task<IReadOnlyList<SupplierOpenBalanceDto>> ListShortageResolutionBalancesAsync(
-        SupplierOpenBalanceQuery query,
-        CancellationToken cancellationToken)
-    {
-        var resolutionsQuery = dbContext.ShortageResolutions
-            .AsNoTracking()
-            .Include(entity => entity.Supplier)
-            .Where(entity =>
-                entity.Status == DocumentStatus.Posted &&
-                entity.SupplierId == query.SupplierId &&
-                entity.ResolutionType == Domain.Shortages.ShortageResolutionType.Financial &&
-                entity.TotalAmount.HasValue &&
-                entity.TotalAmount.Value > 0m)
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(query.Search))
-        {
-            var search = query.Search.Trim();
-            resolutionsQuery = resolutionsQuery.Where(entity =>
-                entity.ResolutionNo.Contains(search) ||
-                (entity.Notes != null && entity.Notes.Contains(search)));
-        }
-
-        if (query.FromDate.HasValue)
-        {
-            resolutionsQuery = resolutionsQuery.Where(entity => entity.ResolutionDate >= query.FromDate.Value);
-        }
-
-        if (query.ToDate.HasValue)
-        {
-            resolutionsQuery = resolutionsQuery.Where(entity => entity.ResolutionDate <= query.ToDate.Value);
-        }
-
-        var resolutions = await resolutionsQuery
-            .OrderBy(entity => entity.ResolutionDate)
-            .ThenBy(entity => entity.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        var resolutionIds = resolutions.Select(entity => entity.Id).ToArray();
-        var allocatedByResolutionId = resolutionIds.Length == 0
-            ? new Dictionary<Guid, decimal>()
-            : await dbContext.PaymentAllocations
-                .AsNoTracking()
-                .Where(entity =>
-                    entity.TargetDocType == PaymentTargetDocumentType.ShortageResolution &&
-                    resolutionIds.Contains(entity.TargetDocId) &&
-                    entity.Payment!.Status == DocumentStatus.Posted &&
-                    entity.Payment.Direction == PaymentDirection.InboundFromParty)
-                .GroupBy(entity => entity.TargetDocId)
-                .ToDictionaryAsync(
-                    group => group.Key,
-                    group => Round(group.Sum(entity => entity.AllocatedAmount)),
-                    cancellationToken);
-
-        return resolutions
-            .Select(resolution =>
+        return new PagedResult<SupplierOpenBalanceDto>(
+            items,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pagination.NormalizedPageSize),
+            new
             {
-                var originalAmount = Round(resolution.TotalAmount ?? 0m);
-                var allocatedAmount = allocatedByResolutionId.TryGetValue(resolution.Id, out var allocated) ? allocated : 0m;
-                var openAmount = ClampToZero(Round(originalAmount - allocatedAmount));
-
-                return new SupplierOpenBalanceDto(
-                    PaymentTargetDocumentType.ShortageResolution,
-                    resolution.Id,
-                    resolution.SupplierId,
-                    resolution.Supplier?.Code ?? string.Empty,
-                    resolution.Supplier?.Name ?? string.Empty,
-                    resolution.ResolutionNo,
-                    resolution.ResolutionDate,
-                    originalAmount,
-                    allocatedAmount,
-                    openAmount,
-                    resolution.Currency,
-                    resolution.Notes);
-            })
-            .Where(entity => entity.OpenAmount > 0m)
-            .ToArray();
+                query.SupplierId,
+                query.Direction,
+                query.Search,
+                query.FromDate,
+                query.ToDate
+            },
+            new PagedSort(ResolveSortBy(query.SortBy), query.SortDirection));
     }
 
-    private static decimal Round(decimal value)
+    private static IReadOnlyList<SupplierFinancialTargetState> ApplySorting(IReadOnlyList<SupplierFinancialTargetState> states, SupplierOpenBalanceQuery query)
     {
-        return decimal.Round(value, 6, MidpointRounding.AwayFromZero);
+        var sortBy = ResolveSortBy(query.SortBy);
+        var ascending = query.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("targetDocumentNo", true) => states.OrderBy(entity => entity.TargetDocumentNo).ThenBy(entity => entity.TargetDocId).ToArray(),
+            ("targetDocumentNo", false) => states.OrderByDescending(entity => entity.TargetDocumentNo).ThenByDescending(entity => entity.TargetDocId).ToArray(),
+            ("netAmount", true) => states.OrderBy(entity => entity.NetAmount).ThenBy(entity => entity.TargetDocumentDate).ToArray(),
+            ("netAmount", false) => states.OrderByDescending(entity => entity.NetAmount).ThenByDescending(entity => entity.TargetDocumentDate).ToArray(),
+            ("openAmount", true) => states.OrderBy(entity => entity.OpenAmount).ThenBy(entity => entity.TargetDocumentDate).ToArray(),
+            ("openAmount", false) => states.OrderByDescending(entity => entity.OpenAmount).ThenByDescending(entity => entity.TargetDocumentDate).ToArray(),
+            _ when ascending => states.OrderBy(entity => entity.TargetDocumentDate).ThenBy(entity => entity.TargetDocumentNo).ToArray(),
+            _ => states.OrderByDescending(entity => entity.TargetDocumentDate).ThenByDescending(entity => entity.TargetDocumentNo).ToArray()
+        };
     }
 
-    private static decimal ClampToZero(decimal value)
+    private static string ResolveSortBy(string? sortBy)
     {
-        return value < 0m ? 0m : value;
+        return string.IsNullOrWhiteSpace(sortBy) ? "targetDocumentDate" : sortBy.Trim();
     }
 }

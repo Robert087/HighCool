@@ -1,5 +1,9 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Purchasing.PurchaseOrders;
+using ERP.Application.Security;
+using ERP.Domain.Common;
+using ERP.Domain.Purchasing;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -9,24 +13,49 @@ public static class PurchaseOrderEndpoints
 {
     public static IEndpointRouteBuilder MapPurchaseOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        var purchaseOrders = app.MapGroup("/api/purchase-orders");
-        purchaseOrders.MapGet("/", ListAsync);
-        purchaseOrders.MapGet("/{id:guid}", GetAsync);
-        purchaseOrders.MapGet("/{id:guid}/available-lines-for-receipt", ListAvailableLinesForReceiptAsync);
-        purchaseOrders.MapPost("/", CreateDraftAsync);
-        purchaseOrders.MapPut("/{id:guid}", UpdateDraftAsync);
-        purchaseOrders.MapPost("/{id:guid}/post", PostAsync);
-        purchaseOrders.MapPost("/{id:guid}/cancel", CancelAsync);
+        var purchaseOrders = app.MapGroup("/api/purchase-orders").RequireAuthorization();
+        purchaseOrders.MapGet("/", ListAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderView));
+        purchaseOrders.MapGet("/{id:guid}", GetAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderView));
+        purchaseOrders.MapGet("/{id:guid}/available-lines-for-receipt", ListAvailableLinesForReceiptAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders, OrganizationFeatureKeys.PurchaseReceipts)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderView));
+        purchaseOrders.MapPost("/", CreateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderCreate));
+        purchaseOrders.MapPut("/{id:guid}", UpdateDraftAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderEdit));
+        purchaseOrders.MapPost("/{id:guid}/post", PostAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderPost));
+        purchaseOrders.MapPost("/{id:guid}/cancel", CancelAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Procurement, OrganizationFeatureKeys.PurchaseOrders)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.ProcurementPurchaseOrderCancel));
 
         return app;
     }
 
     private static async Task<IResult> ListAsync(
         string? search,
+        DocumentStatus? status,
+        PurchaseOrderReceiptProgressStatus? receiptProgressStatus,
+        DateTime? fromDate,
+        DateTime? toDate,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IPurchaseOrderService service,
         CancellationToken cancellationToken)
     {
-        var result = await service.ListAsync(new PurchaseOrderListQuery(search), cancellationToken);
+        if (fromDate.HasValue && toDate.HasValue && fromDate.Value > toDate.Value)
+        {
+            return Results.BadRequest(new { message = "From date cannot be later than to date." });
+        }
+
+        var result = await service.ListAsync(
+            new PurchaseOrderListQuery(
+                search,
+                status,
+                receiptProgressStatus,
+                fromDate,
+                toDate,
+                page ?? 1,
+                pageSize ?? 20,
+                sortBy,
+                sortDirection ?? SortDirection.Desc),
+            cancellationToken);
+
         return Results.Ok(result);
     }
 

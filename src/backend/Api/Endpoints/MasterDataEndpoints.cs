@@ -3,6 +3,7 @@ using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.Uoms;
 using ERP.Application.MasterData.Warehouses;
+using ERP.Application.Security;
 using FluentValidation;
 using FluentValidation.Results;
 
@@ -12,34 +13,34 @@ public static class MasterDataEndpoints
 {
     public static IEndpointRouteBuilder MapMasterDataEndpoints(this IEndpointRouteBuilder app)
     {
-        var customers = app.MapGroup("/api/customers");
-        customers.MapGet("/", ListCustomersAsync);
-        customers.MapGet("/{id:guid}", GetCustomerAsync);
-        customers.MapPost("/", CreateCustomerAsync);
-        customers.MapPut("/{id:guid}", UpdateCustomerAsync);
-        customers.MapPost("/{id:guid}/activate", ActivateCustomerAsync);
-        customers.MapPost("/{id:guid}/deactivate", DeactivateCustomerAsync);
+        var customers = app.MapGroup("/api/customers").RequireAuthorization();
+        customers.MapGet("/", ListCustomersAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersView));
+        customers.MapGet("/{id:guid}", GetCustomerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersView));
+        customers.MapPost("/", CreateCustomerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersCreate));
+        customers.MapPut("/{id:guid}", UpdateCustomerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersEdit));
+        customers.MapPost("/{id:guid}/activate", ActivateCustomerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersEdit));
+        customers.MapPost("/{id:guid}/deactivate", DeactivateCustomerAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.CustomersEdit));
 
-        var suppliers = app.MapGroup("/api/suppliers");
-        suppliers.MapGet("/", ListSuppliersAsync);
-        suppliers.MapGet("/{id:guid}", GetSupplierAsync);
-        suppliers.MapPost("/", CreateSupplierAsync);
-        suppliers.MapPut("/{id:guid}", UpdateSupplierAsync);
-        suppliers.MapPost("/{id:guid}/deactivate", DeactivateSupplierAsync);
+        var suppliers = app.MapGroup("/api/suppliers").RequireAuthorization();
+        suppliers.MapGet("/", ListSuppliersAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SuppliersView));
+        suppliers.MapGet("/{id:guid}", GetSupplierAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SuppliersView));
+        suppliers.MapPost("/", CreateSupplierAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SuppliersCreate));
+        suppliers.MapPut("/{id:guid}", UpdateSupplierAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SuppliersEdit));
+        suppliers.MapPost("/{id:guid}/deactivate", DeactivateSupplierAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.SupplierManagement)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.SuppliersEdit));
 
-        var warehouses = app.MapGroup("/api/warehouses");
-        warehouses.MapGet("/", ListWarehousesAsync);
-        warehouses.MapGet("/{id:guid}", GetWarehouseAsync);
-        warehouses.MapPost("/", CreateWarehouseAsync);
-        warehouses.MapPut("/{id:guid}", UpdateWarehouseAsync);
-        warehouses.MapPost("/{id:guid}/deactivate", DeactivateWarehouseAsync);
+        var warehouses = app.MapGroup("/api/warehouses").RequireAuthorization();
+        warehouses.MapGet("/", ListWarehousesAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory, OrganizationFeatureKeys.Warehouses)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryWarehouseManage));
+        warehouses.MapGet("/{id:guid}", GetWarehouseAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory, OrganizationFeatureKeys.Warehouses)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryWarehouseManage));
+        warehouses.MapPost("/", CreateWarehouseAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory, OrganizationFeatureKeys.Warehouses)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryWarehouseManage));
+        warehouses.MapPut("/{id:guid}", UpdateWarehouseAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory, OrganizationFeatureKeys.Warehouses)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryWarehouseManage));
+        warehouses.MapPost("/{id:guid}/deactivate", DeactivateWarehouseAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Inventory, OrganizationFeatureKeys.Warehouses)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.InventoryWarehouseManage));
 
-        var uoms = app.MapGroup("/api/uoms");
-        uoms.MapGet("/", ListUomsAsync);
-        uoms.MapGet("/{id:guid}", GetUomAsync);
-        uoms.MapPost("/", CreateUomAsync);
-        uoms.MapPut("/{id:guid}", UpdateUomAsync);
-        uoms.MapPost("/{id:guid}/deactivate", DeactivateUomAsync);
+        var uoms = app.MapGroup("/api/uoms").RequireAuthorization();
+        uoms.MapGet("/", ListUomsAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        uoms.MapGet("/{id:guid}", GetUomAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        uoms.MapPost("/", CreateUomAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        uoms.MapPut("/{id:guid}", UpdateUomAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
+        uoms.MapPost("/{id:guid}/deactivate", DeactivateUomAsync).AddEndpointFilter(new OrganizationSetupEndpointFilter(true, OrganizationFeatureKeys.Uom)).AddEndpointFilter(new PermissionEndpointFilter(Permissions.UomsManage));
 
         return app;
     }

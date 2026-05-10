@@ -1,4 +1,8 @@
 import type { SupplierStatementEntry, SupplierStatementSummary } from "./supplierStatementsApi";
+import { formatDate, formatNumber } from "../i18n";
+import { messagesByLocale } from "../i18n/messages";
+import { interpolate } from "../i18n/utils";
+import { getRuntimeLocale } from "../i18n/runtime";
 
 export type SupplierBalanceType = "Payable" | "Receivable" | "Settled";
 
@@ -39,23 +43,23 @@ export function interpretSupplierBalance(balance: number): SupplierBalanceMeanin
   if (absoluteValue === 0) {
     return {
       absoluteValue: 0,
-      explanation: "No open supplier balance.",
-      type: "Settled",
+      explanation: t("payment.balance.settledExplanation"),
+      type: t("payment.balance.settledType") as SupplierBalanceType,
     };
   }
 
   if (balance > 0) {
     return {
       absoluteValue,
-      explanation: "You owe supplier",
-      type: "Payable",
+      explanation: t("payment.balance.payableExplanation"),
+      type: t("payment.balance.payableType") as SupplierBalanceType,
     };
   }
 
   return {
     absoluteValue,
-    explanation: "Supplier owes you",
-    type: "Receivable",
+    explanation: t("payment.balance.receivableExplanation"),
+    type: t("payment.balance.receivableType") as SupplierBalanceType,
   };
 }
 
@@ -115,9 +119,9 @@ export function buildSupplierStatementSummaryViewModel(
 
   return {
     balanceMeaning,
-    currentBalanceText: balanceMeaning.absoluteValue.toLocaleString(),
+    currentBalanceText: formatNumber(balanceMeaning.absoluteValue),
     currentBalanceTypeText: `${balanceMeaning.type} (${balanceMeaning.explanation})`,
-    dateRangeText: `${summary.fromDate ? new Date(summary.fromDate).toLocaleDateString() : "Any start date"} to ${summary.toDate ? new Date(summary.toDate).toLocaleDateString() : "Any end date"}`,
+    dateRangeText: `${summary.fromDate ? formatDate(summary.fromDate) : t("common.anyStartDate")} ${t("common.to")} ${summary.toDate ? formatDate(summary.toDate) : t("common.anyEndDate")}`,
     supplierText: selectedSupplierLabel,
     totalCredit: summary.totalCredit,
     totalDebit: summary.totalDebit,
@@ -126,26 +130,62 @@ export function buildSupplierStatementSummaryViewModel(
 
 export function formatEffectType(value: SupplierStatementEntry["effectType"]) {
   if (value === "PurchaseReceipt") {
-    return "Purchase receipt";
+    return t("statement.effect.purchaseReceipt");
+  }
+
+  if (value === "PurchaseReturn") {
+    return t("statement.effect.purchaseReturn");
   }
 
   if (value === "ShortageFinancialResolution") {
-    return "Shortage financial resolution";
+    return t("statement.effect.shortageFinancialResolution");
   }
 
-  return "Payment";
+  if (value === "PurchaseReceiptReversal") {
+    return t("statement.effect.purchaseReceiptReversal");
+  }
+
+  if (value === "PaymentReversal") {
+    return t("statement.effect.paymentReversal");
+  }
+
+  if (value === "ShortageResolutionReversal") {
+    return t("statement.effect.shortageResolutionReversal");
+  }
+
+  return t("statement.effect.payment");
 }
 
 export function formatSourceType(value: SupplierStatementEntry["sourceDocType"]) {
   if (value === "PurchaseReceipt") {
-    return "Purchase receipt";
+    return t("statement.source.purchaseReceipt");
   }
 
-  if (value === "ShortageResolution") {
-    return "Shortage resolution";
+  if (value === "PurchaseReturn") {
+    return t("statement.source.purchaseReturn");
   }
 
-  return "Payment";
+  if (value === "ShortageFinancialResolution" || value === "ShortageResolution") {
+    return t("statement.source.shortageResolution");
+  }
+
+  if (value === "PurchaseReceiptReversal") {
+    return t("statement.source.purchaseReceiptReversal");
+  }
+
+  if (value === "PaymentReversal") {
+    return t("statement.source.paymentReversal");
+  }
+
+  if (value === "ShortageResolutionReversal") {
+    return t("statement.source.shortageResolutionReversal");
+  }
+
+  if (value === "DocumentReversal") {
+    return t("statement.source.documentReversal");
+  }
+
+  return t("statement.source.payment");
 }
 
 function compareStatementEntrySequence(left: SupplierStatementEntry, right: SupplierStatementEntry) {
@@ -180,4 +220,10 @@ function mergeNotes(current: string, incoming: string | null) {
 
 function round(value: number) {
   return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function t(key: string, values?: Record<string, string | number | null | undefined>) {
+  const locale = getRuntimeLocale();
+  const template = messagesByLocale[locale][key] ?? messagesByLocale.en[key] ?? key;
+  return interpolate(template, values);
 }

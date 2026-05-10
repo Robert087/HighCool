@@ -236,6 +236,27 @@ Examples:
 * "Received quantity must be greater than zero."
 * "Shortage reason is required when actual quantity is less than expected."
 
+## 4.6 Bilingual completion
+
+Arabic and English support must be complete at the workflow level, not only at the page frame level.
+
+Rules:
+- no visible hardcoded UI strings in reusable components or shipped screens
+- localize labels, placeholders, helper text, validation, empty states, confirmation text, workflow hints, and read-only messages
+- selectors, dropdown prompts, drawer titles, inline row-editor text, and pagination text must be localized
+- every touched form and grid must be checked in both LTR and RTL
+- mixed Arabic labels with English codes and numbers must remain readable
+
+## 4.7 Filters
+
+Filters are production workflow controls, not decorative UI.
+
+Rules:
+- major grids must expose localized search, quick filters, advanced filters, and reset/clear actions
+- filter labels, options, date ranges, and applied-filter chips must be localized
+- filter behavior must stay compatible with server-side pagination and sorting
+- translated filters are not sufficient unless the controls are wired and usable
+
 ## 4.5 Section Separation Rules
 
 When a page contains multiple related workflows in the same screen, the UI must separate them into clearly distinct sections.

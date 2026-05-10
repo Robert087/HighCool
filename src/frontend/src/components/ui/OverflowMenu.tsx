@@ -11,6 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/cn";
+import { useI18n } from "../../i18n";
 
 export interface OverflowMenuItem {
   label: string;
@@ -39,6 +40,7 @@ function isFocusable(target: EventTarget | null) {
 }
 
 export function OverflowMenu({ items, label = "More" }: OverflowMenuProps) {
+  const { translateText } = useI18n();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<MenuPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -245,7 +247,7 @@ export function OverflowMenu({ items, label = "More" }: OverflowMenuProps) {
             setOpen(false);
           }}
         >
-          {item.label}
+          {translateText(item.label)}
         </Link>
       );
     }
@@ -267,7 +269,7 @@ export function OverflowMenu({ items, label = "More" }: OverflowMenuProps) {
           setOpen(false);
         }}
       >
-        {item.label}
+        {translateText(item.label)}
       </button>
     );
   }
@@ -279,12 +281,13 @@ export function OverflowMenu({ items, label = "More" }: OverflowMenuProps) {
         aria-controls={open ? menuId : undefined}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label={translateText(label)}
         className="hc-button hc-button--ghost hc-button--sm hc-overflow-menu__trigger"
         type="button"
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleTriggerKeyDown}
       >
-        {label}
+        {translateText(label)}
       </button>
 
       {open ? createPortal(

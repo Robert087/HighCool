@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.Purchasing.PurchaseOrders;
 
 public interface IPurchaseOrderService
 {
-    Task<IReadOnlyList<PurchaseOrderListItemDto>> ListAsync(PurchaseOrderListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<PurchaseOrderListItemDto>> ListAsync(PurchaseOrderListQuery query, CancellationToken cancellationToken);
 
     Task<PurchaseOrderDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

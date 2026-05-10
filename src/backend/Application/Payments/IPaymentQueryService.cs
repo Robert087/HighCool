@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.Payments;
 
 public interface IPaymentQueryService
 {
-    Task<IReadOnlyList<PaymentListItemDto>> ListAsync(PaymentListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<PaymentListItemDto>> ListAsync(PaymentListQuery query, CancellationToken cancellationToken);
 
     Task<PaymentDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

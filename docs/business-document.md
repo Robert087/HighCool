@@ -38,8 +38,9 @@ The purchase order is the source of expected supplier quantities.
 Approved rules:
 
 * PO defines expected items and ordered quantities
+* PO line pricing is captured as `unit_price`
 * PO has no stock impact
-* PO has no financial impact
+* PO has no financial or statement impact until a receipt is posted
 * PO has no statement impact
 * only `Draft` POs can be edited
 * only `Draft` POs can be posted
@@ -122,7 +123,8 @@ Mandatory rules:
 * physical shortage resolution does not create supplier statement entries
 * supplier statement rows remain traceable to shortage resolution allocations
 * purchase receipt statement amount follows the current receipt financial basis available in the system
-* in the current implementation, posted purchase receipts create traceability rows but receipt payable amount remains `0` until receipt pricing or valuation is implemented explicitly
+* PO-linked purchase receipts calculate `supplier_payable_amount` from `received_qty x purchase_order_line.unit_price`
+* manual purchase receipts continue to use the explicit receipt header payable amount until manual receipt line pricing is implemented
 
 ## UI Expectations
 

@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 import type { DocumentStatus } from "./purchaseReceiptsApi";
 
 export type ShortageResolutionType = "Physical" | "Financial";
@@ -42,7 +42,10 @@ export interface OpenShortage {
   componentItemCode: string;
   componentItemName: string;
   shortageQty: number;
+  expectedComponentQty: number;
+  initialActualComponentQty: number;
   resolvedPhysicalQty: number;
+  finalPhysicalComponentQty: number;
   resolvedFinancialQtyEquivalent: number;
   resolvedQtyEquivalent: number;
   openQty: number;
@@ -82,7 +85,10 @@ export interface ShortageResolutionAllocation {
   componentItemCode: string;
   componentItemName: string;
   shortageQty: number;
+  expectedComponentQty: number;
+  initialActualComponentQty: number;
   resolvedPhysicalQty: number;
+  finalPhysicalComponentQty: number;
   resolvedFinancialQtyEquivalent: number;
   resolvedQtyEquivalent: number;
   openQty: number;
@@ -106,6 +112,8 @@ export interface ShortageResolution {
   currency: string | null;
   notes: string | null;
   status: DocumentStatus;
+  reversalDocumentId: string | null;
+  reversedAt: string | null;
   approvedBy: string | null;
   createdAt: string;
   createdBy: string;
@@ -165,6 +173,14 @@ export interface ShortageResolutionFormValues {
   allocations: ShortageResolutionAllocationFormValues[];
 }
 
+export interface OpenShortageListRequest extends PaginationParams {
+  filters: OpenShortageFilters;
+}
+
+export interface ShortageResolutionListRequest extends PaginationParams {
+  filters: ShortageResolutionFilters;
+}
+
 function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   if (fromDate) {
     url.searchParams.set("fromDate", new Date(fromDate).toISOString());
@@ -177,8 +193,9 @@ function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   }
 }
 
-function buildOpenShortageUrl(filters: OpenShortageFilters) {
+function buildOpenShortageUrl(request: OpenShortageListRequest) {
   const url = new URL("/api/shortages/open", window.location.origin);
+  const { filters } = request;
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -205,11 +222,22 @@ function buildOpenShortageUrl(filters: OpenShortageFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
+  url.searchParams.set("page", String(request.page));
+  url.searchParams.set("pageSize", String(request.pageSize));
+  if (request.sortBy) {
+    url.searchParams.set("sortBy", request.sortBy);
+  }
+
+  if (request.sortDirection) {
+    url.searchParams.set("sortDirection", request.sortDirection);
+  }
+
   return `${url.pathname}${url.search}`;
 }
 
-function buildResolutionListUrl(filters: ShortageResolutionFilters) {
+function buildResolutionListUrl(request: ShortageResolutionListRequest) {
   const url = new URL("/api/shortage-resolutions", window.location.origin);
+  const { filters } = request;
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -228,6 +256,16 @@ function buildResolutionListUrl(filters: ShortageResolutionFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
+  url.searchParams.set("page", String(request.page));
+  url.searchParams.set("pageSize", String(request.pageSize));
+  if (request.sortBy) {
+    url.searchParams.set("sortBy", request.sortBy);
+  }
+
+  if (request.sortDirection) {
+    url.searchParams.set("sortDirection", request.sortDirection);
+  }
+
   return `${url.pathname}${url.search}`;
 }
 
@@ -252,16 +290,16 @@ function normalizePayload(values: ShortageResolutionFormValues) {
   };
 }
 
-export function listOpenShortages(filters: OpenShortageFilters) {
-  return requestJson<OpenShortage[]>(buildOpenShortageUrl(filters));
+export function listOpenShortages(request: OpenShortageListRequest) {
+  return requestJson<PaginatedResult<OpenShortage>>(buildOpenShortageUrl(request));
 }
 
 export function getShortage(id: string) {
   return requestJson<OpenShortage>(`/api/shortages/${id}`);
 }
 
-export function listShortageResolutions(filters: ShortageResolutionFilters) {
-  return requestJson<ShortageResolutionListItem[]>(buildResolutionListUrl(filters));
+export function listShortageResolutions(request: ShortageResolutionListRequest) {
+  return requestJson<PaginatedResult<ShortageResolutionListItem>>(buildResolutionListUrl(request));
 }
 
 export function getShortageResolution(id: string) {

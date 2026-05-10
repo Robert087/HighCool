@@ -3,7 +3,7 @@ using ERP.Domain.MasterData;
 
 namespace ERP.Domain.Purchasing;
 
-public sealed class PurchaseOrderLine : AuditableEntity
+public sealed class PurchaseOrderLine : OrganizationScopedAuditableEntity
 {
     public Guid PurchaseOrderId { get; set; }
 
@@ -16,6 +16,8 @@ public sealed class PurchaseOrderLine : AuditableEntity
     public Item? Item { get; set; }
 
     public decimal OrderedQty { get; set; }
+
+    public decimal UnitPrice { get; set; }
 
     public Guid UomId { get; set; }
 

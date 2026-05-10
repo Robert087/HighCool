@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn";
+import { useI18n } from "../../i18n";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -41,23 +42,25 @@ interface FiltersDateRangeProps {
 }
 
 export function FiltersDateRange({
-  fromLabel = "From",
+  fromLabel = "common.from",
   fromValue,
-  label = "Date range",
+  label = "common.date",
   onFromChange,
   onToChange,
-  toLabel = "To",
+  toLabel = "common.to",
   toValue,
 }: FiltersDateRangeProps) {
+  const { translateText } = useI18n();
+
   return (
     <Field className="hc-filters-panel__date-field" label={label}>
-      <div className="hc-filters-panel__date-range" role="group" aria-label={typeof label === "string" ? label : "Date range"}>
+      <div className="hc-filters-panel__date-range" role="group" aria-label={typeof label === "string" ? translateText(label) : translateText("common.date")}>
         <label className="hc-filters-panel__date-input">
-          <span className="hc-filters-panel__date-label">{fromLabel}</span>
+          <span className="hc-filters-panel__date-label">{translateText(fromLabel)}</span>
           <Input type="date" value={fromValue} onChange={(event) => onFromChange(event.target.value)} />
         </label>
         <label className="hc-filters-panel__date-input">
-          <span className="hc-filters-panel__date-label">{toLabel}</span>
+          <span className="hc-filters-panel__date-label">{translateText(toLabel)}</span>
           <Input type="date" value={toValue} onChange={(event) => onToChange(event.target.value)} />
         </label>
       </div>
@@ -68,7 +71,7 @@ export function FiltersDateRange({
 export function FiltersPanel({
   activeFilters = [],
   advancedFilters,
-  advancedLabel = "Advanced filters",
+  advancedLabel = "common.advancedFilters",
   className,
   dateRange,
   defaultAdvancedOpen = false,
@@ -77,11 +80,12 @@ export function FiltersPanel({
   helperText,
   onReset,
   primaryFilters,
-  resetLabel = "Reset filters",
+  resetLabel = "common.resetFilters",
   resultLabel,
   search,
-  title = "Filters",
+  title = "common.filters",
 }: FiltersPanelProps) {
+  const { t } = useI18n();
   const advancedPanelId = useId();
   const [advancedOpen, setAdvancedOpen] = useState(defaultAdvancedOpen);
 
@@ -95,15 +99,15 @@ export function FiltersPanel({
     <Card className={cn("hc-filters-panel", className)} padding="sm">
       <div className="hc-filters-panel__header">
         <div className="hc-filters-panel__copy">
-          <h2 className="hc-filters-panel__title">{title}</h2>
-          {description ? <p className="hc-filters-panel__description">{description}</p> : null}
+          <h2 className="hc-filters-panel__title">{t(title)}</h2>
+          {description ? <p className="hc-filters-panel__description">{t(description)}</p> : null}
         </div>
 
         <div className="hc-filters-panel__meta">
           <Badge tone="neutral">{resultLabel}</Badge>
-          {helperText ? <p className="hc-filters-panel__helper">{helperText}</p> : null}
+          {helperText ? <p className="hc-filters-panel__helper">{t(helperText)}</p> : null}
           <Button size="sm" variant="ghost" disabled={!hasFilters} onClick={onReset}>
-            {resetLabel}
+            {t(resetLabel)}
           </Button>
         </div>
       </div>
@@ -126,9 +130,9 @@ export function FiltersPanel({
             type="button"
             onClick={() => setAdvancedOpen((current) => !current)}
           >
-            <span>{advancedLabel}</span>
+            <span>{t(advancedLabel)}</span>
             <span className="hc-filters-panel__toggle-indicator" aria-hidden="true">
-              {advancedOpen ? "Hide" : "Show"}
+              {advancedOpen ? t("app.hide") : t("app.show")}
             </span>
           </button>
 
@@ -141,18 +145,18 @@ export function FiltersPanel({
       ) : null}
 
       {activeFilters.length > 0 ? (
-        <div className="hc-filters-panel__chips" aria-label="Active filters">
+        <div className="hc-filters-panel__chips" aria-label={t("common.activeFilters")}>
           {activeFilters.map((filter) => (
             <button
               key={filter.key}
-              aria-label={`Remove ${filter.label}`}
+              aria-label={t("common.removeFilter", { label: filter.label })}
               className="hc-filters-panel__chip"
               type="button"
               onClick={filter.onRemove}
             >
               <span>{filter.label}</span>
               <span className="hc-filters-panel__chip-action" aria-hidden="true">
-                Clear
+                {t("app.clear")}
               </span>
             </button>
           ))}

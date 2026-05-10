@@ -48,5 +48,7 @@ public sealed class PurchaseOrderConfiguration : BusinessDocumentConfigurationBa
 
         builder.HasIndex(entity => entity.OrderDate);
         builder.HasIndex(entity => entity.Status);
+        builder.HasIndex(entity => new { entity.SupplierId, entity.Status, entity.OrderDate });
+        builder.HasIndex(entity => new { entity.SupplierId, entity.OrderDate });
     }
 }

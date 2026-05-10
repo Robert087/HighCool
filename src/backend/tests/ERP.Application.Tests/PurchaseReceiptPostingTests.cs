@@ -48,7 +48,7 @@ public sealed class PurchaseReceiptPostingTests
         Assert.Equal(Domain.Statements.SupplierStatementEffectType.PurchaseReceipt, statementEntry.EffectType);
         Assert.Equal(Domain.Statements.SupplierStatementSourceDocumentType.PurchaseReceipt, statementEntry.SourceDocType);
         Assert.Equal(0m, statementEntry.Debit);
-        Assert.Equal(0m, statementEntry.Credit);
+        Assert.Equal(500m, statementEntry.Credit);
     }
 
     [Fact]
@@ -195,12 +195,15 @@ public sealed class PurchaseReceiptPostingTests
     private static IPurchaseReceiptPostingService CreatePostingService(AppDbContext dbContext)
     {
         var quantityConversionService = new QuantityConversionService(dbContext);
-        var receiptService = new PurchaseReceiptService(dbContext, quantityConversionService);
+        var organizationId = dbContext.Organizations.IgnoreQueryFilters().Select(entity => entity.Id).Single();
+        var executionContext = TestOrganizationContext.CreateExecutionContext(organizationId);
+        var receiptService = new PurchaseReceiptService(dbContext, executionContext, quantityConversionService);
         var stockLedgerService = new StockLedgerService(dbContext, quantityConversionService);
         var shortageDetectionService = new ShortageDetectionService(dbContext, quantityConversionService);
 
         return new PurchaseReceiptPostingService(
             dbContext,
+            executionContext,
             receiptService,
             stockLedgerService,
             shortageDetectionService,
@@ -215,8 +218,10 @@ public sealed class PurchaseReceiptPostingTests
             .UseSqlite($"Data Source={databasePath}")
             .Options;
 
-        var dbContext = new AppDbContext(options);
+        var executionContext = TestOrganizationContext.CreateExecutionContext();
+        var dbContext = new AppDbContext(options, executionContext);
         dbContext.Database.EnsureCreated();
+        TestOrganizationContext.EnsureOrganizationAsync(dbContext, executionContext).GetAwaiter().GetResult();
         return dbContext;
     }
 
@@ -341,6 +346,7 @@ public sealed class PurchaseReceiptPostingTests
             SupplierId = references.Supplier.Id,
             WarehouseId = references.Warehouse.Id,
             ReceiptDate = DateTime.UtcNow.Date,
+            SupplierPayableAmount = 500m,
             Status = DocumentStatus.Draft,
             CreatedBy = "seed",
             Lines =

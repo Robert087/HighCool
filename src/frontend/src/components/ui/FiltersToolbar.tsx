@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn";
+import { useI18n } from "../../i18n";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { Card } from "./Card";
@@ -58,20 +59,22 @@ export function FilterDateRangeInline({
   onToChange,
   toValue,
 }: FilterDateRangeInlineProps) {
+  const { translateText } = useI18n();
+
   return (
-    <div className="hc-filter-toolbar__date-range" role="group" aria-label="Date range">
+    <div className="hc-filter-toolbar__date-range" role="group" aria-label={translateText("common.date")}>
       <Input
-        aria-label="From date"
+        aria-label="common.fromDate"
         className="hc-filter-toolbar__control"
         type="date"
         value={fromValue}
         onChange={(event) => onFromChange(event.target.value)}
       />
       <span className="hc-filter-toolbar__date-separator" aria-hidden="true">
-        to
+        {translateText("common.to")}
       </span>
       <Input
-        aria-label="To date"
+        aria-label="common.toDate"
         className="hc-filter-toolbar__control"
         type="date"
         value={toValue}
@@ -82,16 +85,18 @@ export function FilterDateRangeInline({
 }
 
 export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
+  const { t } = useI18n();
+
   if (filters.length === 0) {
     return null;
   }
 
   return (
-    <div className="hc-filter-toolbar__chips" aria-label="Active filters">
+    <div className="hc-filter-toolbar__chips" aria-label={t("common.activeFilters")}>
       {filters.map((filter) => (
         <button
           key={filter.key}
-          aria-label={`Remove ${filter.label}`}
+          aria-label={t("common.removeFilter", { label: filter.label })}
           className="hc-filter-toolbar__chip"
           type="button"
           onClick={filter.onRemove}
@@ -106,7 +111,9 @@ export function ActiveFilterChips({ filters }: ActiveFilterChipsProps) {
   );
 }
 
-export function FiltersDrawer({ children, onClose, open, title = "More filters" }: FiltersDrawerProps) {
+export function FiltersDrawer({ children, onClose, open, title = "common.moreFilters" }: FiltersDrawerProps) {
+  const { translateText } = useI18n();
+
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -134,14 +141,12 @@ export function FiltersDrawer({ children, onClose, open, title = "More filters" 
   }
 
   return (
-    <div className="hc-filter-drawer" role="dialog" aria-modal="true" aria-label={title}>
-      <button className="hc-filter-drawer__backdrop" type="button" aria-label="Close filters" onClick={onClose} />
+    <div className="hc-filter-drawer" role="dialog" aria-modal="true" aria-label={translateText(title)}>
+      <button className="hc-filter-drawer__backdrop" type="button" aria-label={translateText("common.closeFilters")} onClick={onClose} />
       <Card className="hc-filter-drawer__panel" padding="md">
         <div className="hc-filter-drawer__header">
-          <strong className="hc-filter-drawer__title">{title}</strong>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Close
-          </Button>
+          <strong className="hc-filter-drawer__title">{translateText(title)}</strong>
+          <Button size="sm" variant="ghost" onClick={onClose}>common.closeFilters</Button>
         </div>
         <div className="hc-filter-drawer__content">{children}</div>
       </Card>
@@ -156,12 +161,13 @@ export function FiltersToolbar({
   mobileTriggerOnly = false,
   onReset,
   primaryFilters,
-  resetLabel = "Reset",
+  resetLabel = "common.resetFilters",
   resultLabel,
   search,
   secondaryActiveCount = 0,
   secondaryFilters,
 }: FiltersToolbarProps) {
+  const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(secondaryActiveCount > 0);
 
   useEffect(() => {
@@ -189,11 +195,11 @@ export function FiltersToolbar({
                 variant="secondary"
                 onClick={() => setDrawerOpen(true)}
               >
-                {secondaryActiveCount > 0 ? `More filters (${secondaryActiveCount})` : "More filters"}
+                {secondaryActiveCount > 0 ? `${t("common.moreFilters")} (${secondaryActiveCount})` : t("common.moreFilters")}
               </Button>
             ) : null}
             <Button size="sm" variant="ghost" disabled={activeFilters.length === 0} onClick={onReset}>
-              {resetLabel}
+              {t(resetLabel)}
             </Button>
           </div>
         </div>

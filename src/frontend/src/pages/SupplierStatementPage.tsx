@@ -17,6 +17,7 @@ import {
   Select,
   SkeletonLoader,
   type FilterChip,
+  useI18n,
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listSuppliers, type Supplier } from "../services/masterDataApi";
@@ -35,8 +36,28 @@ import {
   groupSupplierStatementEntries,
   type GroupedSupplierStatementRow,
 } from "../services/supplierStatementPresentation";
+import { formatDate, formatNumber } from "../i18n";
 
 const PAGE_SIZE = 15;
+const EFFECT_TYPE_OPTIONS: SupplierStatementEntry["effectType"][] = [
+  "PurchaseReceipt",
+  "PurchaseReturn",
+  "ShortageFinancialResolution",
+  "Payment",
+  "PurchaseReceiptReversal",
+  "PaymentReversal",
+  "ShortageResolutionReversal",
+];
+
+const SOURCE_TYPE_OPTIONS: SupplierStatementEntry["sourceDocType"][] = [
+  "PurchaseReceipt",
+  "PurchaseReturn",
+  "ShortageFinancialResolution",
+  "Payment",
+  "PurchaseReceiptReversal",
+  "PaymentReversal",
+  "ShortageResolutionReversal",
+];
 
 const INITIAL_FILTERS: SupplierStatementFilters = {
   search: "",
@@ -52,17 +73,27 @@ function getStatementSourcePath(sourceDocType: SupplierStatementEntry["sourceDoc
     return `/purchase-receipts/${sourceDocId}/edit`;
   }
 
-  if (sourceDocType === "ShortageResolution") {
+  if (sourceDocType === "PurchaseReturn") {
+    return `/purchase-returns/${sourceDocId}/edit`;
+  }
+
+  if (sourceDocType === "ShortageFinancialResolution" || sourceDocType === "ShortageResolution") {
     return `/shortage-resolutions/${sourceDocId}/edit`;
   }
 
-  return `/payments/${sourceDocId}`;
+  if (sourceDocType === "Payment") {
+    return `/payments/${sourceDocId}/edit`;
+  }
+
+  return null;
 }
 
 export function SupplierStatementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [rows, setRows] = useState<SupplierStatementEntry[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [summary, setSummary] = useState<SupplierStatementSummary | null>(null);
   const [filters, setFilters] = useState<SupplierStatementFilters>({
     ...INITIAL_FILTERS,
@@ -74,6 +105,7 @@ export function SupplierStatementPage() {
   const [page, setPage] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -86,7 +118,7 @@ export function SupplierStatementPage() {
         }
       } catch {
         if (active) {
-          setError("Failed to load supplier statement filters.");
+          setError(t("module.supplierStatement.filterError"));
         }
       }
     }
@@ -106,16 +138,32 @@ export function SupplierStatementPage() {
         setLoading(true);
         setError("");
         const result = filters.supplierId
-          ? await getSupplierStatement(filters.supplierId, filters)
-          : await listSupplierStatements(filters);
+          ? await getSupplierStatement(filters.supplierId, {
+            filters,
+            page,
+            pageSize: PAGE_SIZE,
+            sortBy: "entryDate",
+            sortDirection: "Desc",
+          })
+          : await listSupplierStatements({
+            filters,
+            page,
+            pageSize: PAGE_SIZE,
+            sortBy: "entryDate",
+            sortDirection: "Desc",
+          });
 
         if (active) {
-          setRows(result);
+          setRows(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
-          setError(loadError instanceof ApiError ? loadError.message : "Failed to load supplier statements.");
+          setError(loadError instanceof ApiError ? loadError.message : t("module.supplierStatement.error"));
           setRows([]);
+          setTotalCount(0);
+          setTotalPages(0);
         }
       } finally {
         if (active) {
@@ -129,7 +177,7 @@ export function SupplierStatementPage() {
     return () => {
       active = false;
     };
-  }, [filters, reloadKey]);
+  }, [filters, page, reloadKey]);
 
   useEffect(() => {
     let active = true;
@@ -179,10 +227,7 @@ export function SupplierStatementPage() {
     [filters],
   );
   const groupedRows = useMemo(() => groupSupplierStatementEntries(rows), [rows]);
-  const totalPages = Math.max(1, Math.ceil(groupedRows.length / PAGE_SIZE));
-  const safePage = Math.min(page, Math.max(1, Math.ceil(groupedRows.length / PAGE_SIZE)));
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleRows = groupedRows.slice(pageStart, pageStart + PAGE_SIZE);
+  const safePage = totalPages > 0 ? Math.min(page, totalPages) : 1;
   const activeFilters = useMemo(() => {
     const selectedSupplier = suppliers.find((supplier) => supplier.id === filters.supplierId);
     const chips: FilterChip[] = [];
@@ -190,7 +235,7 @@ export function SupplierStatementPage() {
     if (filters.search.trim()) {
       chips.push({
         key: "search",
-        label: `Search: ${filters.search.trim()}`,
+        label: t("module.supplierStatement.filter.searchChip", { value: filters.search.trim() }),
         onRemove: () => setFilter("search", ""),
       });
     }
@@ -198,7 +243,7 @@ export function SupplierStatementPage() {
     if (selectedSupplier) {
       chips.push({
         key: "supplier",
-        label: `Supplier: ${selectedSupplier.code} - ${selectedSupplier.name}`,
+        label: t("module.supplierStatement.filter.supplierChip", { value: `${selectedSupplier.code} - ${selectedSupplier.name}` }),
         onRemove: () => setFilter("supplierId", ""),
       });
     }
@@ -206,7 +251,7 @@ export function SupplierStatementPage() {
     if (filters.effectType) {
       chips.push({
         key: "effectType",
-        label: `Effect: ${formatEffectType(filters.effectType as SupplierStatementEntry["effectType"])}`,
+        label: t("module.supplierStatement.filter.effectChip", { value: formatEffectType(filters.effectType as SupplierStatementEntry["effectType"]) }),
         onRemove: () => setFilter("effectType", ""),
       });
     }
@@ -214,7 +259,7 @@ export function SupplierStatementPage() {
     if (filters.sourceDocType) {
       chips.push({
         key: "sourceDocType",
-        label: `Source: ${formatSourceType(filters.sourceDocType as SupplierStatementEntry["sourceDocType"])}`,
+        label: t("module.supplierStatement.filter.sourceChip", { value: formatSourceType(filters.sourceDocType as SupplierStatementEntry["sourceDocType"]) }),
         onRemove: () => setFilter("sourceDocType", ""),
       });
     }
@@ -222,7 +267,7 @@ export function SupplierStatementPage() {
     if (filters.fromDate || filters.toDate) {
       chips.push({
         key: "dateRange",
-        label: `Date: ${filters.fromDate || "Any"} to ${filters.toDate || "Any"}`,
+        label: t("module.supplierStatement.filter.dateChip", { from: filters.fromDate || t("common.any"), to: filters.toDate || t("common.any") }),
         onRemove: () => {
           setFilter("fromDate", "");
           setFilter("toDate", "");
@@ -232,7 +277,7 @@ export function SupplierStatementPage() {
 
     return chips;
   }, [filters, suppliers]);
-  const resultLabel = groupedRows.length === 1 ? "1 statement document" : `${groupedRows.length} statement documents`;
+  const resultLabel = totalCount === 1 ? t("module.supplierStatement.resultLabel.one", { count: totalCount }) : t("module.supplierStatement.resultLabel.other", { count: totalCount });
 
   function setFilter<K extends keyof SupplierStatementFilters>(key: K, value: SupplierStatementFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -245,9 +290,9 @@ export function SupplierStatementPage() {
   );
   const summaryViewModel = useMemo(
     () => (summary && selectedSupplier
-      ? buildSupplierStatementSummaryViewModel(summary, `${selectedSupplier.code} - ${selectedSupplier.name}`)
+      ? buildSupplierStatementSummaryViewModel(summary, t("module.supplierStatement.supplierSpecificLabel", { code: selectedSupplier.code, name: selectedSupplier.name }))
       : null),
-    [selectedSupplier, summary],
+    [selectedSupplier, summary, t],
   );
 
   function toggleExpandedRow(key: string) {
@@ -255,12 +300,17 @@ export function SupplierStatementPage() {
   }
 
   function renderViewAction(row: Pick<GroupedSupplierStatementRow, "sourceDocId" | "sourceDocType"> | Pick<SupplierStatementEntry, "sourceDocId" | "sourceDocType">) {
+    const path = getStatementSourcePath(row.sourceDocType, row.sourceDocId);
+    if (!path) {
+      return null;
+    }
+
     return (
       <Link
         className="hc-button hc-button--secondary hc-button--sm hc-table__action-button"
-        to={getStatementSourcePath(row.sourceDocType, row.sourceDocId)}
+        to={path}
       >
-        View
+        {t("common.view")}
       </Link>
     );
   }
@@ -268,9 +318,9 @@ export function SupplierStatementPage() {
   return (
     <section className="hc-list-page">
       <PageHeader
-        title="Supplier Statement"
-        description="Review supplier statement movement generated only from posted purchasing documents and financial shortage resolutions."
-        eyebrow="Purchasing"
+        title="module.supplierStatement"
+        description="module.supplierStatement.description"
+        eyebrow="route.section.purchasing"
       />
 
       <FiltersToolbar
@@ -285,7 +335,7 @@ export function SupplierStatementPage() {
         )}
         mobileFilters={(
           <>
-            <Field label="Supplier">
+            <Field label={t("common.supplier")}>
               <Select value={filters.supplierId} onChange={(event) => setFilter("supplierId", event.target.value)}>
                 <option value="">All suppliers</option>
                 {suppliers.map((supplier) => (
@@ -296,29 +346,33 @@ export function SupplierStatementPage() {
               </Select>
             </Field>
 
-            <Field label="Effect type">
+            <Field label={t("module.supplierStatement.effectType")}>
               <Select value={filters.effectType} onChange={(event) => setFilter("effectType", event.target.value)}>
-                <option value="">All effect types</option>
-                <option value="PurchaseReceipt">Purchase receipt</option>
-                <option value="ShortageFinancialResolution">Shortage financial resolution</option>
-                <option value="Payment">Payment</option>
+                <option value="">{t("module.supplierStatement.allEffectTypes")}</option>
+                {EFFECT_TYPE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {formatEffectType(value)}
+                  </option>
+                ))}
               </Select>
             </Field>
 
-            <Field label="Source document">
+            <Field label={t("common.source")}>
               <Select value={filters.sourceDocType} onChange={(event) => setFilter("sourceDocType", event.target.value)}>
-                <option value="">All source documents</option>
-                <option value="PurchaseReceipt">Purchase receipt</option>
-                <option value="ShortageResolution">Shortage resolution</option>
-                <option value="Payment">Payment</option>
+                <option value="">{t("module.supplierStatement.allSourceDocuments")}</option>
+                {SOURCE_TYPE_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {formatSourceType(value)}
+                  </option>
+                ))}
               </Select>
             </Field>
 
-            <Field label="From date">
+            <Field label={t("common.fromDate")}>
               <Input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} />
             </Field>
 
-            <Field label="To date">
+            <Field label={t("common.toDate")}>
               <Input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} />
             </Field>
           </>
@@ -336,30 +390,34 @@ export function SupplierStatementPage() {
             </FilterDropdown>
 
             <FilterDropdown aria-label="Effect type filter" value={filters.effectType} onChange={(event) => setFilter("effectType", event.target.value)}>
-              <option value="">Effect type</option>
-              <option value="PurchaseReceipt">Purchase receipt</option>
-              <option value="ShortageFinancialResolution">Shortage financial resolution</option>
-              <option value="Payment">Payment</option>
+              <option value="">{t("module.supplierStatement.allEffectTypes")}</option>
+              {EFFECT_TYPE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {formatEffectType(value)}
+                </option>
+              ))}
             </FilterDropdown>
           </>
         )}
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search supplier statements"
-            placeholder="Search supplier or notes"
+            aria-label={t("module.supplierStatement")}
+            placeholder={t("module.supplierStatement.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
           />
         )}
         secondaryActiveCount={filters.sourceDocType ? 1 : 0}
         secondaryFilters={(
-          <Field label="Source document">
+          <Field label={t("common.source")}>
             <Select value={filters.sourceDocType} onChange={(event) => setFilter("sourceDocType", event.target.value)}>
-              <option value="">All source documents</option>
-              <option value="PurchaseReceipt">Purchase receipt</option>
-              <option value="ShortageResolution">Shortage resolution</option>
-              <option value="Payment">Payment</option>
+              <option value="">{t("module.supplierStatement.allSourceDocuments")}</option>
+              {SOURCE_TYPE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {formatSourceType(value)}
+                </option>
+              ))}
             </Select>
           </Field>
         )}
@@ -368,17 +426,17 @@ export function SupplierStatementPage() {
       <Card className="hc-statement-summary-panel" padding="md">
         <div className="hc-statement-summary-panel__header">
           <div>
-            <h2 className="hc-statement-summary-panel__title">Summary</h2>
+            <h2 className="hc-statement-summary-panel__title">{t("module.supplierStatement.summary")}</h2>
             <p className="hc-statement-summary-panel__description">
               {selectedSupplier
-                ? `${selectedSupplier.name} (${selectedSupplier.code})`
-                : "Select a supplier to view supplier-specific balance context."}
+                ? t("module.supplierStatement.supplierSpecificLabel", { name: selectedSupplier.name, code: selectedSupplier.code })
+                : t("module.supplierStatement.selectSupplierSummary")}
             </p>
           </div>
           <div className="hc-statement-summary-panel__range">
-            <span>{filters.fromDate || "Any start date"}</span>
-            <span className="hc-statement-summary-panel__range-separator">to</span>
-            <span>{filters.toDate || "Any end date"}</span>
+            <span>{filters.fromDate || t("common.anyStartDate")}</span>
+            <span className="hc-statement-summary-panel__range-separator">{t("common.to")}</span>
+            <span>{filters.toDate || t("common.anyEndDate")}</span>
           </div>
         </div>
 
@@ -392,46 +450,46 @@ export function SupplierStatementPage() {
         ) : summaryViewModel ? (
           <div className="hc-statement-summary-grid">
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Supplier</span>
+              <span className="hc-statement-summary-metric__label">{t("common.supplier")}</span>
               <strong className="hc-statement-summary-metric__value">{summaryViewModel.supplierText}</strong>
             </div>
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Current balance</span>
+              <span className="hc-statement-summary-metric__label">{t("module.supplierStatement.currentBalance")}</span>
               <strong className="hc-statement-summary-metric__value">
-                {summaryViewModel.currentBalanceText} {statementCurrency ?? "Base currency"}
+                {summaryViewModel.currentBalanceText} {statementCurrency ?? t("common.baseCurrency")}
               </strong>
               <span className="hc-statement-summary-metric__caption">{summaryViewModel.balanceMeaning.explanation}</span>
             </div>
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Balance type</span>
+              <span className="hc-statement-summary-metric__label">{t("module.supplierStatement.balanceType")}</span>
               <strong className="hc-statement-summary-metric__value">{summaryViewModel.balanceMeaning.type}</strong>
             </div>
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Total debit</span>
-              <strong className="hc-statement-summary-metric__value">{summaryViewModel.totalDebit.toLocaleString()}</strong>
+              <span className="hc-statement-summary-metric__label">{t("module.supplierStatement.totalDebit")}</span>
+              <strong className="hc-statement-summary-metric__value">{formatNumber(summaryViewModel.totalDebit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </div>
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Total credit</span>
-              <strong className="hc-statement-summary-metric__value">{summaryViewModel.totalCredit.toLocaleString()}</strong>
+              <span className="hc-statement-summary-metric__label">{t("module.supplierStatement.totalCredit")}</span>
+              <strong className="hc-statement-summary-metric__value">{formatNumber(summaryViewModel.totalCredit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
             </div>
             <div className="hc-statement-summary-metric">
-              <span className="hc-statement-summary-metric__label">Date range</span>
+              <span className="hc-statement-summary-metric__label">{t("module.supplierStatement.dateRange")}</span>
               <strong className="hc-statement-summary-metric__value">{summaryViewModel.dateRangeText}</strong>
             </div>
           </div>
         ) : (
-          <div className="hc-statement-summary-empty">Select a supplier to view a clear payable or receivable balance summary.</div>
+          <div className="hc-statement-summary-empty">{t("module.supplierStatement.summaryEmpty")}</div>
         )}
       </Card>
 
       {error ? (
         <Card padding="md">
           <EmptyState
-            title="Unable to load supplier statements"
+            title="module.supplierStatement.error"
             description={error}
             action={
               <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>
-                Retry
+                {t("common.retry")}
               </Button>
             }
           />
@@ -455,16 +513,16 @@ export function SupplierStatementPage() {
           columns={
             <tr>
               <th scope="col">Entry date</th>
-              <th scope="col">Source document</th>
-              <th scope="col">Effect type</th>
-              <th scope="col" className="hc-table__numeric">Debit</th>
-              <th scope="col" className="hc-table__numeric">Credit</th>
-              <th scope="col" className="hc-table__numeric">Running balance</th>
-              <th scope="col">Notes</th>
-              <th scope="col" className="hc-table__head-actions">Actions</th>
+              <th scope="col">{t("common.source")}</th>
+              <th scope="col">{t("module.supplierStatement.effectType")}</th>
+              <th scope="col" className="hc-table__numeric">{t("table.debit")}</th>
+              <th scope="col" className="hc-table__numeric">{t("table.credit")}</th>
+              <th scope="col" className="hc-table__numeric">{t("module.supplierStatement.runningBalance")}</th>
+              <th scope="col">{t("module.supplierStatement.notes")}</th>
+              <th scope="col" className="hc-table__head-actions">{t("common.actions")}</th>
             </tr>
           }
-          rows={visibleRows.map((row) => {
+          rows={groupedRows.map((row) => {
             const isExpanded = Boolean(expandedRows[row.id]);
 
             return (
@@ -472,8 +530,8 @@ export function SupplierStatementPage() {
                 <tr className="hc-table__row">
                   <td>
                     <div className="hc-table__cell-strong">
-                      <span className="hc-table__title">{new Date(row.entryDate).toLocaleDateString()}</span>
-                      <span className="hc-table__subtitle">{row.details.length} posted line{row.details.length === 1 ? "" : "s"}</span>
+                      <span className="hc-table__title">{formatDate(row.entryDate)}</span>
+                      <span className="hc-table__subtitle">{row.details.length === 1 ? t("module.supplierStatement.postedLine.one", { count: row.details.length }) : t("module.supplierStatement.postedLine.other", { count: row.details.length })}</span>
                     </div>
                   </td>
                   <td>
@@ -481,7 +539,7 @@ export function SupplierStatementPage() {
                       <span className="hc-table__title">{row.sourceDocumentNo}</span>
                       <span className="hc-table__subtitle">
                         {formatSourceType(row.sourceDocType)}
-                        {row.details.length > 1 ? ` · ${row.details.length} allocations` : ""}
+                        {row.details.length > 1 ? ` · ${t("module.supplierStatement.allocations", { count: row.details.length })}` : ""}
                       </span>
                       {row.details.length > 1 ? (
                         <Button
@@ -490,7 +548,7 @@ export function SupplierStatementPage() {
                           variant="ghost"
                           onClick={() => toggleExpandedRow(row.id)}
                         >
-                          {isExpanded ? "Hide detail" : "View detail"}
+                          {isExpanded ? t("module.supplierStatement.hideDetail") : t("module.supplierStatement.viewDetail")}
                         </Button>
                       ) : null}
                     </div>
@@ -498,18 +556,18 @@ export function SupplierStatementPage() {
                   <td>
                     <div className="hc-table__cell-strong">
                       <span className="hc-table__title">{row.effectTypeLabel}</span>
-                      <span className="hc-table__subtitle">Grouped by source document</span>
+                      <span className="hc-table__subtitle">{t("module.supplierStatement.groupedBySource")}</span>
                     </div>
                   </td>
-                  <td className="hc-table__numeric"><span className="hc-table__subtitle">{row.debit.toLocaleString()}</span></td>
-                  <td className="hc-table__numeric"><span className="hc-table__subtitle">{row.credit.toLocaleString()}</span></td>
+                  <td className="hc-table__numeric"><span className="hc-table__subtitle">{formatNumber(row.debit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></td>
+                  <td className="hc-table__numeric"><span className="hc-table__subtitle">{formatNumber(row.credit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></td>
                   <td className="hc-table__numeric">
                     <div className="hc-table__cell-strong hc-table__cell-strong--numeric">
-                      <span className="hc-table__title">{row.balanceMeaning.absoluteValue.toLocaleString()}</span>
+                      <span className="hc-table__title">{formatNumber(row.balanceMeaning.absoluteValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span className="hc-table__subtitle">{row.balanceMeaning.type} · {row.balanceMeaning.explanation}</span>
                     </div>
                   </td>
-                  <td><span className="hc-table__subtitle">{row.notes || "No notes"}</span></td>
+                  <td><span className="hc-table__subtitle">{row.notes || t("module.supplierStatement.noNotes")}</span></td>
                   <td className="hc-table__cell-actions">
                     <RowActions primaryAction={renderViewAction(row)} />
                   </td>
@@ -520,30 +578,30 @@ export function SupplierStatementPage() {
                     <td colSpan={8}>
                       <div className="hc-statement-table__detail-panel">
                         <div className="hc-statement-table__detail-header">
-                          <strong>Posted detail lines</strong>
+                          <strong>{t("module.supplierStatement.postedDetailLines")}</strong>
                           <span>{row.sourceDocumentNo}</span>
                         </div>
 
                         <div className="hc-statement-table__detail-list">
                           {row.details.map((detail) => {
-                            const detailBalance = Math.abs(detail.runningBalance).toLocaleString();
-                            const detailBalanceType = detail.runningBalance > 0 ? "Payable" : detail.runningBalance < 0 ? "Receivable" : "Settled";
+                            const detailBalance = formatNumber(Math.abs(detail.runningBalance), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            const detailBalanceType = detail.runningBalance > 0 ? t("payment.balance.payableType") : detail.runningBalance < 0 ? t("payment.balance.receivableType") : t("payment.balance.settledType");
 
                             return (
                               <div key={detail.id} className="hc-statement-table__detail-item">
                                 <div className="hc-statement-table__detail-main">
                                   <span className="hc-table__title">
-                                    {detail.sourceSequenceNo ? `Allocation ${detail.sourceSequenceNo}` : formatSourceType(detail.sourceDocType)}
+                                    {detail.sourceSequenceNo ? t("module.supplierStatement.allocation", { count: detail.sourceSequenceNo }) : formatSourceType(detail.sourceDocType)}
                                   </span>
                                   <span className="hc-table__subtitle">
-                                    {formatEffectType(detail.effectType)} · {new Date(detail.entryDate).toLocaleDateString()}
+                                    {formatEffectType(detail.effectType)} · {formatDate(detail.entryDate)}
                                   </span>
                                 </div>
                                 <div className="hc-statement-table__detail-values">
-                                  <span className="hc-table__subtitle">Debit {detail.debit.toLocaleString()}</span>
-                                  <span className="hc-table__subtitle">Credit {detail.credit.toLocaleString()}</span>
-                                  <span className="hc-table__subtitle">Balance {detailBalance} · {detailBalanceType}</span>
-                                  <span className="hc-table__subtitle">{detail.notes || "No notes"}</span>
+                                  <span className="hc-table__subtitle">{t("module.supplierStatement.detailDebit", { value: formatNumber(detail.debit, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}</span>
+                                  <span className="hc-table__subtitle">{t("module.supplierStatement.detailCredit", { value: formatNumber(detail.credit, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) })}</span>
+                                  <span className="hc-table__subtitle">{t("module.supplierStatement.detailBalance", { value: detailBalance, type: detailBalanceType })}</span>
+                                  <span className="hc-table__subtitle">{detail.notes || t("module.supplierStatement.noNotes")}</span>
                                 </div>
                                 <div className="hc-statement-table__detail-actions">
                                   {renderViewAction(detail)}
@@ -559,12 +617,12 @@ export function SupplierStatementPage() {
               </Fragment>
             );
           })}
-          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={groupedRows.length} totalPages={totalPages} />}
+          footer={<Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={Math.max(totalPages, 1)} />}
           emptyState={
             hasFilters ? (
-              <EmptyState title="No supplier statement rows match the current filters" description="Try a broader date range or clear one of the filters." />
+              <EmptyState title="module.supplierStatement.emptyFiltered" description="module.supplierStatement.emptyFilteredDescription" />
             ) : (
-              <EmptyState title="No supplier statement rows yet" description="Statement rows appear only after posted purchasing documents generate supplier financial effects." />
+              <EmptyState title="module.supplierStatement.empty" description="module.supplierStatement.emptyDescription" />
             )
           }
         />

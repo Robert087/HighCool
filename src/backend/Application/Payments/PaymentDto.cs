@@ -21,6 +21,8 @@ public sealed record PaymentDto(
     string? ReferenceNote,
     string? Notes,
     DocumentStatus Status,
+    Guid? ReversalDocumentId,
+    DateTime? ReversedAt,
     IReadOnlyList<PaymentAllocationDto> Allocations,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
