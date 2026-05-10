@@ -34,6 +34,7 @@ Required variables:
 ASPNETCORE_ENVIRONMENT=Production
 DatabaseProvider=Sqlite
 ConnectionStrings__DefaultConnection=Data Source=/app/data/highcool.db
+DataProtection__KeysPath=/app/data/dataprotection-keys
 Cors__AllowedOrigins__0=https://high-cool-production.vercel.app
 ```
 
@@ -46,11 +47,16 @@ For SQLite production persistence, attach a Railway volume mounted at:
 Without this volume, the SQLite database can be lost when Railway rebuilds or replaces the
 container.
 
+The Docker image declares `/app/data` as a volume, and the local `docker-compose.yml` uses a
+named volume mounted to the same path. Railway still requires creating or attaching the
+volume on the Railway service itself; keep the mount path exactly `/app/data`.
+
 The backend container also sets these safe defaults:
 
 ```bash
 DatabaseProvider=Sqlite
 ConnectionStrings__DefaultConnection=Data Source=/app/data/highcool.db
+DataProtection__KeysPath=/app/data/dataprotection-keys
 ASPNETCORE_URLS=http://+:8080
 ```
 

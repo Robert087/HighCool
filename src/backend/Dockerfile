@@ -20,6 +20,8 @@ RUN mkdir -p /app/data
 ENV ASPNETCORE_URLS=http://+:8080
 ENV DatabaseProvider=Sqlite
 ENV ConnectionStrings__DefaultConnection="Data Source=/app/data/highcool.db"
+ENV DataProtection__KeysPath=/app/data/dataprotection-keys
+VOLUME ["/app/data"]
 EXPOSE 8080
 
 COPY --from=build /app/publish ./
