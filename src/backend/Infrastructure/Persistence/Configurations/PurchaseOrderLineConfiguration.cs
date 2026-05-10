@@ -28,6 +28,11 @@ public sealed class PurchaseOrderLineConfiguration : AuditableEntityConfiguratio
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 
+        builder.Property(entity => entity.UnitPrice)
+            .HasColumnName("unit_price")
+            .HasColumnType("decimal(18,6)")
+            .IsRequired();
+
         builder.Property(entity => entity.UomId)
             .HasColumnName("uom_id")
             .IsRequired();
@@ -48,5 +53,8 @@ public sealed class PurchaseOrderLineConfiguration : AuditableEntityConfiguratio
 
         builder.HasIndex(entity => new { entity.PurchaseOrderId, entity.LineNo })
             .IsUnique();
+        builder.HasIndex(entity => entity.ItemId);
+        builder.HasIndex(entity => entity.UomId);
+        builder.HasIndex(entity => new { entity.PurchaseOrderId, entity.ItemId });
     }
 }

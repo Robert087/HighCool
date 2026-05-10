@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Shortages;
 using ERP.Domain.Common;
 using ERP.Domain.Shortages;
@@ -9,12 +10,12 @@ namespace ERP.Infrastructure.Shortages;
 
 public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortageResolutionService
 {
-    public async Task<IReadOnlyList<ShortageResolutionListItemDto>> ListAsync(ShortageResolutionListQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<ShortageResolutionListItemDto>> ListAsync(ShortageResolutionListQuery query, CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
+
         var resolutions = dbContext.ShortageResolutions
             .AsNoTracking()
-            .Include(entity => entity.Supplier)
-            .Include(entity => entity.Allocations)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -52,9 +53,12 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             resolutions = resolutions.Where(entity => entity.ResolutionDate <= query.ToDate.Value);
         }
 
-        return await resolutions
-            .OrderByDescending(entity => entity.ResolutionDate)
-            .ThenByDescending(entity => entity.CreatedAt)
+        resolutions = ApplyResolutionSorting(resolutions, query);
+
+        var totalCount = await resolutions.CountAsync(cancellationToken);
+        var items = await resolutions
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
             .Select(entity => new ShortageResolutionListItemDto(
                 entity.Id,
                 entity.ResolutionNo,
@@ -68,9 +72,28 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
                 entity.Currency,
                 entity.Status,
                 entity.Allocations.Count,
+                entity.ReversalDocumentId,
+                entity.ReversedAt,
                 entity.CreatedAt,
                 entity.UpdatedAt))
             .ToListAsync(cancellationToken);
+
+        return new PagedResult<ShortageResolutionListItemDto>(
+            items,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new
+            {
+                query.Search,
+                query.SupplierId,
+                query.ResolutionType,
+                query.Status,
+                query.FromDate,
+                query.ToDate
+            },
+            new PagedSort(ResolveResolutionSortBy(query.SortBy), query.SortDirection));
     }
 
     public async Task<ShortageResolutionDto?> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -150,8 +173,9 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             .ToList() ?? [];
     }
 
-    public async Task<IReadOnlyList<OpenShortageDto>> ListOpenShortagesAsync(OpenShortageQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<OpenShortageDto>> ListOpenShortagesAsync(OpenShortageQuery query, CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
         var shortages = BuildOpenShortagesQuery();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -204,14 +228,32 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             shortages = shortages.Where(entity => entity.PurchaseReceipt!.ReceiptDate <= query.ToDate.Value);
         }
 
+        shortages = ApplyOpenShortageSorting(shortages, query);
+
+        var totalCount = await shortages.CountAsync(cancellationToken);
         var entities = await shortages
-            .OrderBy(entity => entity.PurchaseReceipt!.ReceiptDate)
-            .ThenBy(entity => entity.CreatedAt)
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
             .ToListAsync(cancellationToken);
 
-        return entities
-            .Select(ToOpenShortageDto)
-            .ToList();
+        return new PagedResult<OpenShortageDto>(
+            entities.Select(ToOpenShortageDto).ToArray(),
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new
+            {
+                query.Search,
+                query.SupplierId,
+                query.ItemId,
+                query.ComponentItemId,
+                query.AffectsSupplierBalance,
+                query.Status,
+                query.FromDate,
+                query.ToDate
+            },
+            new PagedSort(ResolveOpenShortageSortBy(query.SortBy), query.SortDirection));
     }
 
     public async Task<OpenShortageDto?> GetShortageAsync(Guid id, CancellationToken cancellationToken)
@@ -360,6 +402,59 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
         }
 
         return query;
+    }
+
+    private static IQueryable<ShortageResolution> ApplyResolutionSorting(IQueryable<ShortageResolution> query, ShortageResolutionListQuery request)
+    {
+        var sortBy = ResolveResolutionSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("resolutionNo", true) => query.OrderBy(entity => entity.ResolutionNo).ThenBy(entity => entity.Id),
+            ("resolutionNo", false) => query.OrderByDescending(entity => entity.ResolutionNo).ThenByDescending(entity => entity.Id),
+            ("supplierName", true) => query.OrderBy(entity => entity.Supplier!.Name).ThenBy(entity => entity.ResolutionDate),
+            ("supplierName", false) => query.OrderByDescending(entity => entity.Supplier!.Name).ThenByDescending(entity => entity.ResolutionDate),
+            ("status", true) => query.OrderBy(entity => entity.Status).ThenBy(entity => entity.ResolutionDate),
+            ("status", false) => query.OrderByDescending(entity => entity.Status).ThenByDescending(entity => entity.ResolutionDate),
+            _ when ascending => query.OrderBy(entity => entity.ResolutionDate).ThenBy(entity => entity.CreatedAt),
+            _ => query.OrderByDescending(entity => entity.ResolutionDate).ThenByDescending(entity => entity.CreatedAt)
+        };
+    }
+
+    private static IQueryable<ShortageLedgerEntry> ApplyOpenShortageSorting(IQueryable<ShortageLedgerEntry> query, OpenShortageQuery request)
+    {
+        var sortBy = ResolveOpenShortageSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("supplierName", true) => query.OrderBy(entity => entity.PurchaseReceipt!.Supplier!.Name).ThenBy(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("supplierName", false) => query.OrderByDescending(entity => entity.PurchaseReceipt!.Supplier!.Name).ThenByDescending(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("itemCode", true) => query.OrderBy(entity => entity.Item!.Code).ThenBy(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("itemCode", false) => query.OrderByDescending(entity => entity.Item!.Code).ThenByDescending(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("componentItemCode", true) => query.OrderBy(entity => entity.ComponentItem!.Code).ThenBy(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("componentItemCode", false) => query.OrderByDescending(entity => entity.ComponentItem!.Code).ThenByDescending(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("openQty", true) => query.OrderBy(entity => entity.OpenQty).ThenBy(entity => entity.PurchaseReceipt!.ReceiptDate),
+            ("openQty", false) => query.OrderByDescending(entity => entity.OpenQty).ThenByDescending(entity => entity.PurchaseReceipt!.ReceiptDate),
+            _ when ascending => query.OrderBy(entity => entity.PurchaseReceipt!.ReceiptDate).ThenBy(entity => entity.CreatedAt),
+            _ => query.OrderByDescending(entity => entity.PurchaseReceipt!.ReceiptDate).ThenByDescending(entity => entity.CreatedAt)
+        };
+    }
+
+    private static string ResolveResolutionSortBy(string? sortBy)
+    {
+        return string.IsNullOrWhiteSpace(sortBy) ? "resolutionDate" : sortBy.Trim();
+    }
+
+    private static string ResolveOpenShortageSortBy(string? sortBy)
+    {
+        return string.IsNullOrWhiteSpace(sortBy) ? "receiptDate" : sortBy.Trim();
+    }
+
+    private static int CalculateTotalPages(int totalCount, int pageSize)
+    {
+        return totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
     }
 
     private async Task<Dictionary<Guid, ShortageLedgerEntry>> ValidateDraftRequestAsync(
@@ -540,6 +635,8 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             resolution.Currency,
             resolution.Notes,
             resolution.Status,
+            resolution.ReversalDocumentId,
+            resolution.ReversedAt,
             resolution.ApprovedBy,
             resolution.CreatedAt,
             resolution.CreatedBy,
@@ -575,7 +672,10 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             shortage?.ComponentItem?.Code ?? string.Empty,
             shortage?.ComponentItem?.Name ?? string.Empty,
             shortage?.ShortageQty ?? 0m,
+            shortage?.ExpectedQty ?? 0m,
+            shortage?.ActualQty ?? 0m,
             shortage?.ResolvedPhysicalQty ?? 0m,
+            shortage is null ? 0m : GetFinalPhysicalComponentQty(shortage),
             shortage?.ResolvedFinancialQtyEquivalent ?? 0m,
             GetEffectiveResolvedQtyEquivalent(shortage),
             shortage is null ? 0m : GetEffectiveOpenQty(shortage),
@@ -611,7 +711,10 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
             entity.ComponentItem!.Code,
             entity.ComponentItem.Name,
             entity.ShortageQty,
+            entity.ExpectedQty,
+            entity.ActualQty,
             entity.ResolvedPhysicalQty,
+            GetFinalPhysicalComponentQty(entity),
             entity.ResolvedFinancialQtyEquivalent,
             GetEffectiveResolvedQtyEquivalent(entity),
             openQty,
@@ -636,6 +739,11 @@ public sealed class ShortageResolutionService(AppDbContext dbContext) : IShortag
         }
 
         return ClampToZero(Round(entity.ShortageQty - GetEffectiveResolvedQtyEquivalent(entity)));
+    }
+
+    private static decimal GetFinalPhysicalComponentQty(ShortageLedgerEntry entity)
+    {
+        return Round(entity.ActualQty + entity.ResolvedPhysicalQty);
     }
 
     private static decimal? GetEffectiveShortageValue(ShortageLedgerEntry entity)

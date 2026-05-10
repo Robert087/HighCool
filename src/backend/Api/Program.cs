@@ -30,6 +30,8 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 app.UseCors(FrontendCorsPolicy);
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/", () => Results.Ok(new
 {
@@ -46,15 +48,19 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
+app.MapIdentityEndpoints();
+app.MapOrganizationSecurityEndpoints();
 app.MapMasterDataEndpoints();
 app.MapItemMasterDataEndpoints();
 app.MapPurchaseOrderEndpoints();
 app.MapPurchaseReceiptEndpoints();
+app.MapPurchaseReturnEndpoints();
 app.MapShortageReasonCodeEndpoints();
 app.MapShortageResolutionEndpoints();
 app.MapPaymentEndpoints();
 app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
+app.MapReversalEndpoints();
 
 app.Run();
 

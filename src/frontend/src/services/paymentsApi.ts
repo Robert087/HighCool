@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 
 export type DocumentStatus = "Draft" | "Posted" | "Canceled";
 export type PaymentPartyType = "Supplier";
@@ -45,8 +45,11 @@ export interface PaymentAllocation {
   targetDocumentNo: string;
   targetDocumentDate: string;
   originalAmount: number;
+  adjustedAmount: number;
+  netAmount: number;
   alreadyAllocatedAmount: number;
   openAmount: number;
+  status: string;
   allocatedAmount: number;
   allocationOrder: number;
   createdAt: string;
@@ -71,6 +74,8 @@ export interface Payment {
   referenceNote: string | null;
   notes: string | null;
   status: DocumentStatus;
+  reversalDocumentId: string | null;
+  reversedAt: string | null;
   allocations: PaymentAllocation[];
   createdAt: string;
   updatedAt: string | null;
@@ -85,8 +90,11 @@ export interface SupplierOpenBalance {
   targetDocumentNo: string;
   targetDocumentDate: string;
   originalAmount: number;
+  adjustedAmount: number;
+  netAmount: number;
   allocatedAmount: number;
   openAmount: number;
+  status: string;
   currency: string | null;
   notes: string | null;
 }
@@ -114,6 +122,10 @@ export interface PaymentFormValues {
   allocations: PaymentAllocationFormValues[];
 }
 
+export interface PaymentListRequest extends PaginationParams {
+  filters: PaymentFilters;
+}
+
 function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   if (fromDate) {
     url.searchParams.set("fromDate", new Date(fromDate).toISOString());
@@ -126,8 +138,9 @@ function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   }
 }
 
-function buildListUrl(filters: PaymentFilters) {
+function buildListUrl(request: PaymentListRequest) {
   const url = new URL("/api/payments", window.location.origin);
+  const { filters } = request;
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -150,6 +163,16 @@ function buildListUrl(filters: PaymentFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
+  url.searchParams.set("page", String(request.page));
+  url.searchParams.set("pageSize", String(request.pageSize));
+  if (request.sortBy) {
+    url.searchParams.set("sortBy", request.sortBy);
+  }
+
+  if (request.sortDirection) {
+    url.searchParams.set("sortDirection", request.sortDirection);
+  }
+
   return `${url.pathname}${url.search}`;
 }
 
@@ -176,8 +199,8 @@ function normalizePayload(values: PaymentFormValues) {
   };
 }
 
-export function listPayments(filters: PaymentFilters) {
-  return requestJson<PaymentListItem[]>(buildListUrl(filters));
+export function listPayments(request: PaymentListRequest) {
+  return requestJson<PaginatedResult<PaymentListItem>>(buildListUrl(request));
 }
 
 export function getPayment(id: string) {
@@ -214,6 +237,8 @@ export function listSupplierOpenBalances(
   search = "",
   fromDate = "",
   toDate = "",
+  page = 1,
+  pageSize = 100,
 ) {
   const url = new URL(`/api/suppliers/${supplierId}/open-balances`, window.location.origin);
   url.searchParams.set("direction", direction);
@@ -223,5 +248,8 @@ export function listSupplierOpenBalances(
   }
 
   applyDateFilters(url, fromDate, toDate);
-  return requestJson<SupplierOpenBalance[]>(`${url.pathname}${url.search}`);
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("pageSize", String(pageSize));
+  return requestJson<PaginatedResult<SupplierOpenBalance>>(`${url.pathname}${url.search}`)
+    .then((result) => result.items);
 }

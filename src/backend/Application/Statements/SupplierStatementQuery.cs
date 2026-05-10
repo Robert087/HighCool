@@ -1,3 +1,4 @@
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Statements;
 
 namespace ERP.Application.Statements;
@@ -8,4 +9,8 @@ public sealed record SupplierStatementQuery(
     SupplierStatementEffectType? EffectType,
     SupplierStatementSourceDocumentType? SourceDocType,
     DateTime? FromDate,
-    DateTime? ToDate);
+    DateTime? ToDate,
+    int Page = 1,
+    int PageSize = 20,
+    string? SortBy = null,
+    SortDirection SortDirection = SortDirection.Desc);

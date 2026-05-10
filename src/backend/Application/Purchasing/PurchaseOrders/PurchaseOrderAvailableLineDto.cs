@@ -7,6 +7,7 @@ public sealed record PurchaseOrderAvailableLineDto(
     string ItemCode,
     string ItemName,
     decimal OrderedQty,
+    decimal UnitPrice,
     decimal ReceivedQty,
     decimal RemainingQty,
     Guid UomId,

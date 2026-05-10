@@ -1,3 +1,4 @@
+using ERP.Application.Common.Pagination;
 using ERP.Domain.Common;
 using ERP.Domain.Shortages;
 
@@ -9,4 +10,8 @@ public sealed record ShortageResolutionListQuery(
     ShortageResolutionType? ResolutionType,
     DocumentStatus? Status,
     DateTime? FromDate,
-    DateTime? ToDate);
+    DateTime? ToDate,
+    int Page = 1,
+    int PageSize = 20,
+    string? SortBy = null,
+    SortDirection SortDirection = SortDirection.Desc);

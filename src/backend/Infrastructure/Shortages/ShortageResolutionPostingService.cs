@@ -57,7 +57,11 @@ public sealed class ShortageResolutionPostingService(
         }
 
         var statementEffectsExist = await dbContext.SupplierStatementEntries
-            .AnyAsync(entity => entity.SourceDocId == resolution.Id && entity.SourceDocType == Domain.Statements.SupplierStatementSourceDocumentType.ShortageResolution, cancellationToken);
+            .AnyAsync(
+                entity => entity.SourceDocId == resolution.Id &&
+                          (entity.SourceDocType == Domain.Statements.SupplierStatementSourceDocumentType.ShortageFinancialResolution ||
+                           entity.SourceDocType == Domain.Statements.SupplierStatementSourceDocumentType.ShortageResolution),
+                cancellationToken);
 
         if (statementEffectsExist)
         {

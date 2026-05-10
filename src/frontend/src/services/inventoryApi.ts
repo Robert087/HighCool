@@ -1,4 +1,4 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 
 export type StockTransactionType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortagePhysicalResolution";
 export type SourceDocumentType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortageResolution";
@@ -10,6 +10,10 @@ export interface InventoryFilters {
   transactionType: string;
   fromDate: string;
   toDate: string;
+}
+
+export interface InventoryListRequest extends PaginationParams {
+  filters: InventoryFilters;
 }
 
 export interface StockLedgerEntry {
@@ -53,8 +57,9 @@ export interface StockBalance {
   lastTransactionDate: string | null;
 }
 
-function buildInventoryUrl(path: string, filters: InventoryFilters): string {
+function buildInventoryUrl(path: string, request: InventoryListRequest): string {
   const url = new URL(path, window.location.origin);
+  const { filters } = request;
 
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
@@ -82,13 +87,23 @@ function buildInventoryUrl(path: string, filters: InventoryFilters): string {
     url.searchParams.set("toDate", endOfDay.toISOString());
   }
 
+  url.searchParams.set("page", String(request.page));
+  url.searchParams.set("pageSize", String(request.pageSize));
+  if (request.sortBy) {
+    url.searchParams.set("sortBy", request.sortBy);
+  }
+
+  if (request.sortDirection) {
+    url.searchParams.set("sortDirection", request.sortDirection);
+  }
+
   return `${url.pathname}${url.search}`;
 }
 
-export function listStockLedger(filters: InventoryFilters) {
-  return requestJson<StockLedgerEntry[]>(buildInventoryUrl("/api/stock-ledger", filters));
+export function listStockLedger(request: InventoryListRequest) {
+  return requestJson<PaginatedResult<StockLedgerEntry>>(buildInventoryUrl("/api/stock-ledger", request));
 }
 
-export function listStockBalances(filters: InventoryFilters) {
-  return requestJson<StockBalance[]>(buildInventoryUrl("/api/stock-balance", filters));
+export function listStockBalances(request: InventoryListRequest) {
+  return requestJson<PaginatedResult<StockBalance>>(buildInventoryUrl("/api/stock-balance", request));
 }

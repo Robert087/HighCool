@@ -1,7 +1,24 @@
-import { requestJson } from "./api";
+import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 
-export type SupplierStatementEffectType = "PurchaseReceipt" | "ShortageFinancialResolution" | "Payment";
-export type SupplierStatementSourceDocumentType = "PurchaseReceipt" | "ShortageResolution" | "Payment";
+export type SupplierStatementEffectType =
+  | "PurchaseReceipt"
+  | "PurchaseReturn"
+  | "ShortageFinancialResolution"
+  | "Payment"
+  | "PurchaseReceiptReversal"
+  | "PaymentReversal"
+  | "ShortageResolutionReversal";
+
+export type SupplierStatementSourceDocumentType =
+  | "PurchaseReceipt"
+  | "PurchaseReturn"
+  | "ShortageFinancialResolution"
+  | "Payment"
+  | "PurchaseReceiptReversal"
+  | "PaymentReversal"
+  | "ShortageResolutionReversal"
+  | "ShortageResolution"
+  | "DocumentReversal";
 
 export interface SupplierStatementFilters {
   search: string;
@@ -47,6 +64,10 @@ export interface SupplierStatementSummary {
   entryCount: number;
 }
 
+export interface SupplierStatementListRequest extends PaginationParams {
+  filters: SupplierStatementFilters;
+}
+
 function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   if (fromDate) {
     url.searchParams.set("fromDate", new Date(fromDate).toISOString());
@@ -59,7 +80,8 @@ function applyDateFilters(url: URL, fromDate: string, toDate: string) {
   }
 }
 
-function buildQuery(url: URL, filters: SupplierStatementFilters) {
+function buildQuery(url: URL, request: SupplierStatementListRequest) {
+  const { filters } = request;
   if (filters.search.trim()) {
     url.searchParams.set("search", filters.search.trim());
   }
@@ -77,17 +99,27 @@ function buildQuery(url: URL, filters: SupplierStatementFilters) {
   }
 
   applyDateFilters(url, filters.fromDate, filters.toDate);
+  url.searchParams.set("page", String(request.page));
+  url.searchParams.set("pageSize", String(request.pageSize));
+  if (request.sortBy) {
+    url.searchParams.set("sortBy", request.sortBy);
+  }
+
+  if (request.sortDirection) {
+    url.searchParams.set("sortDirection", request.sortDirection);
+  }
+
   return `${url.pathname}${url.search}`;
 }
 
-export function listSupplierStatements(filters: SupplierStatementFilters) {
+export function listSupplierStatements(request: SupplierStatementListRequest) {
   const url = new URL("/api/supplier-statements", window.location.origin);
-  return requestJson<SupplierStatementEntry[]>(buildQuery(url, filters));
+  return requestJson<PaginatedResult<SupplierStatementEntry>>(buildQuery(url, request));
 }
 
-export function getSupplierStatement(supplierId: string, filters: SupplierStatementFilters) {
+export function getSupplierStatement(supplierId: string, request: SupplierStatementListRequest) {
   const url = new URL(`/api/suppliers/${supplierId}/statement`, window.location.origin);
-  return requestJson<SupplierStatementEntry[]>(buildQuery(url, { ...filters, supplierId }));
+  return requestJson<PaginatedResult<SupplierStatementEntry>>(buildQuery(url, { ...request, filters: { ...request.filters, supplierId } }));
 }
 
 export function getSupplierStatementSummary(supplierId: string, filters: SupplierStatementFilters) {

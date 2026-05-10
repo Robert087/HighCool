@@ -8,6 +8,7 @@
 * React + TypeScript frontend
 * Server as source of truth
 * Draft-only offline support
+* Arabic/English bilingual UI with shared i18n and RTL/LTR support
 
 ## Backend Shape
 
@@ -77,6 +78,7 @@ Current implementation uses:
 * draft create, update, get, list
 * validates PO linkage when supplied
 * enforces `ordered_qty_snapshot` from PO line
+* calculates PO-linked supplier payable amount from linked PO line pricing
 * blocks linked receipt quantities beyond remaining posted PO quantity
 
 ### PurchaseReceiptPostingService
@@ -167,3 +169,46 @@ Important constraints:
 * posted document data is never mutated into a different business effect
 * PO-to-receipt traceability is stored directly in receipt header and line rows
 * shortage rows keep lifecycle state while every settlement remains traceable through allocation rows
+
+## Performance Standards
+
+Performance is a mandatory architecture concern for every ERP module.
+
+Required rules:
+
+* all list and report endpoints must use server-side pagination
+* list endpoints must support server-side filtering and deterministic sorting
+* no unbounded operational list API is allowed
+* read-heavy screens must use dedicated query services and lightweight DTO projections
+* detail endpoints may load document graphs, but list endpoints must not load full aggregates by default
+* read-only queries should use `AsNoTracking`
+* summary cards and header metrics must use summary queries instead of full list downloads
+* schema work must define indexes for foreign keys, high-frequency filters, and traceability joins during design
+* frontend grids must request only the current page and must not paginate large datasets in the browser
+
+## Frontend Form Performance Standards
+
+Form screens are operational entry points and must be optimized for fast first paint and fast repeat-open behavior.
+
+Required rules:
+
+* shared active reference datasets such as suppliers, customers, items, warehouses, UOMs, and global UOM conversions must load through shared cached option loaders rather than refetching identical lists on every form open
+* cached option loaders must support mutation invalidation so create, update, activate, and deactivate actions do not leave forms with stale selectors
+* form initialization must load only the minimum reference data required for initial interaction
+* forms must not eagerly hydrate full document details for every selectable record in a dropdown
+* reference document detail must be fetched on demand when the user selects a record or when edit mode requires one specific linked document
+* independent form queries should run in parallel, but each query must stay bounded and aligned to the first-screen need
+* form selectors must prefer lightweight list DTOs for candidate records and reserve detail DTOs for the active record being edited or linked
+
+## Localization Standards
+
+Frontend architecture must treat localization as platform infrastructure rather than page-level customization.
+
+Required rules:
+
+* the root app shell controls locale and document direction
+* shared components must be safe for both Arabic/RTL and English/LTR
+* module pages must use shared translation dictionaries and shared locale-aware formatters
+* business values remain server-sourced, but display formatting is client-localized
+* form internals, dialogs, drawers, grid toolbars, and navigation are part of the localization contract and must not ship with visible hardcoded strings
+* list filters must be standardized, localized, RTL-safe, and bound to real server-side query parameters where applicable

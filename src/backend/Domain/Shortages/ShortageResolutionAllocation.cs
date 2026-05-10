@@ -2,7 +2,7 @@ using ERP.Domain.Common;
 
 namespace ERP.Domain.Shortages;
 
-public sealed class ShortageResolutionAllocation : AuditableEntity
+public sealed class ShortageResolutionAllocation : OrganizationScopedAuditableEntity
 {
     public Guid ResolutionId { get; set; }
 

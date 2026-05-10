@@ -130,9 +130,9 @@ public sealed class PaymentApiTests : IClassFixture<PaymentApiTests.ApiFactory>
 
         var openBalancesResponse = await client.GetAsync($"/api/suppliers/{supplier.Id}/open-balances?direction=OutboundToParty");
         Assert.Equal(HttpStatusCode.OK, openBalancesResponse.StatusCode);
-        var balances = await openBalancesResponse.Content.ReadFromJsonAsync<SupplierOpenBalanceResponse[]>();
+        var balances = await openBalancesResponse.Content.ReadFromJsonAsync<PaginatedResponse<SupplierOpenBalanceResponse>>();
         Assert.NotNull(balances);
-        Assert.Empty(balances!);
+        Assert.Empty(balances!.Items);
     }
 
     public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
@@ -155,6 +155,7 @@ public sealed class PaymentApiTests : IClassFixture<PaymentApiTests.ApiFactory>
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
                 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }
 
@@ -179,6 +180,7 @@ public sealed class PaymentApiTests : IClassFixture<PaymentApiTests.ApiFactory>
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await dbContext.Database.EnsureDeletedAsync();
             await dbContext.Database.EnsureCreatedAsync();
+            await AuthenticatedApiTestSupport.SeedAuthenticatedContextAsync(scope.ServiceProvider, dbContext);
         }
     }
 

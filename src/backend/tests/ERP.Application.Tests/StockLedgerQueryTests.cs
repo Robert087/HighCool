@@ -23,7 +23,7 @@ public sealed class StockLedgerQueryTests
             new StockBalanceQuery(null, references.ItemA.Id, references.WarehouseA.Id, null, null, null),
             CancellationToken.None);
 
-        var balance = Assert.Single(balances);
+        var balance = Assert.Single(balances.Items);
         Assert.Equal(references.ItemA.Id, balance.ItemId);
         Assert.Equal(references.WarehouseA.Id, balance.WarehouseId);
         Assert.Equal("PCS", balance.BaseUomCode);
@@ -48,7 +48,7 @@ public sealed class StockLedgerQueryTests
                 new DateTime(2026, 4, 20, 23, 59, 59)),
             CancellationToken.None);
 
-        var balance = Assert.Single(balances);
+        var balance = Assert.Single(balances.Items);
         Assert.Equal(10m, balance.BalanceQty);
     }
 
@@ -76,10 +76,10 @@ public sealed class StockLedgerQueryTests
             new StockLedgerQuery("Main", references.ItemA.Id, references.WarehouseA.Id, null, null, null),
             CancellationToken.None);
 
-        Assert.Equal(2, rows.Count);
-        Assert.Equal(6m, rows[0].RunningBalanceQty);
-        Assert.Equal(10m, rows[1].RunningBalanceQty);
-        Assert.Equal("PR-0001", rows[1].SourceDocumentNo);
+        Assert.Equal(2, rows.TotalCount);
+        Assert.Equal(6m, rows.Items[0].RunningBalanceQty);
+        Assert.Equal(10m, rows.Items[1].RunningBalanceQty);
+        Assert.Equal("PR-0001", rows.Items[1].SourceDocumentNo);
     }
 
     [Fact]

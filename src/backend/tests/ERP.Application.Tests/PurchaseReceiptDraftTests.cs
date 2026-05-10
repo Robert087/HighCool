@@ -338,7 +338,8 @@ public sealed class PurchaseReceiptDraftTests
     private static PurchaseReceiptService CreateService(AppDbContext dbContext)
     {
         var quantityConversionService = new QuantityConversionService(dbContext);
-        return new PurchaseReceiptService(dbContext, quantityConversionService);
+        var organizationId = dbContext.Organizations.IgnoreQueryFilters().Select(entity => entity.Id).Single();
+        return new PurchaseReceiptService(dbContext, TestOrganizationContext.CreateExecutionContext(organizationId), quantityConversionService);
     }
 
     private static AppDbContext CreateDbContext()
@@ -347,7 +348,10 @@ public sealed class PurchaseReceiptDraftTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
 
-        return new AppDbContext(options);
+        var executionContext = TestOrganizationContext.CreateExecutionContext();
+        var dbContext = new AppDbContext(options, executionContext);
+        TestOrganizationContext.EnsureOrganizationAsync(dbContext, executionContext).GetAwaiter().GetResult();
+        return dbContext;
     }
 
     private static async Task<(Supplier Supplier, Warehouse Warehouse, Uom Uom, Item Item, Item ComponentItem, Uom? AltReceiptUom)> SeedReferencesAsync(

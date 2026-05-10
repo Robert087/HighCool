@@ -68,5 +68,9 @@ public sealed class PurchaseReceiptConfiguration : BusinessDocumentConfiguration
 
         builder.HasIndex(entity => entity.Status);
         builder.HasIndex(entity => entity.PurchaseOrderId);
+        builder.HasIndex(entity => entity.ReversalDocumentId);
+        builder.HasIndex(entity => new { entity.SupplierId, entity.Status, entity.ReceiptDate });
+        builder.HasIndex(entity => new { entity.WarehouseId, entity.ReceiptDate });
+        builder.HasIndex(entity => new { entity.PurchaseOrderId, entity.ReceiptDate });
     }
 }

@@ -171,8 +171,8 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
 
         var openShortagesResponse = await client.GetAsync($"/api/shortages/open?supplierId={supplier.Id}");
         Assert.Equal(HttpStatusCode.OK, openShortagesResponse.StatusCode);
-        var openShortages = await openShortagesResponse.Content.ReadFromJsonAsync<OpenShortageResponse[]>();
-        var openShortage = Assert.Single(openShortages!);
+        var openShortages = await openShortagesResponse.Content.ReadFromJsonAsync<PaginatedResponse<OpenShortageResponse>>();
+        var openShortage = Assert.Single(openShortages!.Items);
         Assert.Equal(3m, openShortage.OpenQty);
         Assert.Equal(30m, openShortage.OpenAmount);
 
@@ -205,6 +205,7 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
                 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }
 
@@ -229,6 +230,7 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await dbContext.Database.EnsureDeletedAsync();
             await dbContext.Database.EnsureCreatedAsync();
+            await AuthenticatedApiTestSupport.SeedAuthenticatedContextAsync(scope.ServiceProvider, dbContext);
         }
     }
 
