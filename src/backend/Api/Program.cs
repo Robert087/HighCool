@@ -1,33 +1,43 @@
 using ERP.Api.Endpoints;
 using ERP.Application;
 using ERP.Infrastructure;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Text.Json.Serialization;
 
-var builder = WebApplication.CreateBuilder(args);
+const string FrontendCorsPolicy = "Frontend";
 
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-});
+var builder = WebApplication.CreateBuilder(args);
+var allowedFrontendOrigins = GetAllowedFrontendOrigins(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontendDev", policy =>
+    options.AddPolicy(FrontendCorsPolicy, policy =>
     {
-        policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+        policy.WithOrigins(allowedFrontendOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
+});
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-app.UseCors("FrontendDev");
+app.UseCors(FrontendCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -61,5 +71,31 @@ app.MapStockLedgerEndpoints();
 app.MapReversalEndpoints();
 
 app.Run();
+
+static string[] GetAllowedFrontendOrigins(IConfiguration configuration)
+{
+    var configuredOrigins = configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>() ?? [];
+
+    var commaSeparatedOrigins = configuration["Cors:AllowedOrigins"]?
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
+
+    var origins = configuredOrigins
+        .Concat(commaSeparatedOrigins)
+        .Select(origin => origin.Trim().TrimEnd('/'))
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    return origins.Length > 0
+        ? origins
+        :
+        [
+            "http://localhost:5173",
+            "http://localhost:4173",
+            "https://high-cool-production.vercel.app"
+        ];
+}
 
 public partial class Program;

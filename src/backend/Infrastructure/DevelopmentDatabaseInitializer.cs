@@ -18,8 +18,7 @@ public sealed class DevelopmentDatabaseInitializer(
     {
         var provider = configuration["DatabaseProvider"] ?? "SqlServer";
 
-        if (!hostEnvironment.IsDevelopment() ||
-            !string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -28,7 +27,11 @@ public sealed class DevelopmentDatabaseInitializer(
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await EnsureSqliteDatabaseIsReadyAsync(dbContext, cancellationToken);
-        await SeedAsync(dbContext, cancellationToken);
+
+        if (hostEnvironment.IsDevelopment())
+        {
+            await SeedAsync(dbContext, cancellationToken);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

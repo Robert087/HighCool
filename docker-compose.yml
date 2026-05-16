@@ -1,0 +1,20 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5080:8080"
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      DatabaseProvider: Sqlite
+      ConnectionStrings__DefaultConnection: Data Source=/app/data/highcool.db
+      DataProtection__KeysPath: /app/data/dataprotection-keys
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:4173
+      Cors__AllowedOrigins__2: https://high-cool-production.vercel.app
+    volumes:
+      - highcool_data:/app/data
+
+volumes:
+  highcool_data:

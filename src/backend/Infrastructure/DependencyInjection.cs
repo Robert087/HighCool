@@ -34,6 +34,7 @@ using ERP.Infrastructure.Shortages;
 using ERP.Infrastructure.Statements;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,6 +59,7 @@ public static class DependencyInjection
         {
             if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
             {
+                EnsureSqliteDirectoryExists(connectionString);
                 options.UseSqlite(connectionString);
                 return;
             }
@@ -191,6 +193,33 @@ public static class DependencyInjection
         services.AddHostedService<DevelopmentDatabaseInitializer>();
 
         return services;
+    }
+
+    private static void EnsureSqliteDirectoryExists(string connectionString)
+    {
+        try
+        {
+            var builder = new SqliteConnectionStringBuilder(connectionString);
+
+            if (string.IsNullOrWhiteSpace(builder.DataSource) || builder.DataSource == ":memory:")
+            {
+                return;
+            }
+
+            var databasePath = Path.GetFullPath(builder.DataSource);
+            var directory = Path.GetDirectoryName(databasePath);
+
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException(
+                "The configured SQLite connection string is invalid.",
+                exception);
+        }
     }
 
     private static Guid? ParseGuid(string? value)

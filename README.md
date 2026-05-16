@@ -34,7 +34,7 @@ dotnet restore
 dotnet run
 ```
 
-In development, the API uses a local SQLite file (`highcool-dev.db`) by default so the master-data screens can run without a local SQL Server instance. Production/default configuration still targets SQL Server.
+In development, the API uses a local SQLite file (`highcool-dev.db`) by default so the master-data screens can run without a local SQL Server instance. The Railway container defaults to SQLite at `/app/data/highcool.db`; attach a Railway volume at `/app/data` for production persistence, or override the provider and connection string for SQL Server.
 
 ### Health Check
 
@@ -74,27 +74,50 @@ npm run build
 
 ## Notes
 
-* The backend includes EF Core and SQL Server base configuration only.
-* No ERP business logic or data models are implemented yet.
-* The frontend includes a minimal app shell, routing, and status UI only.
+* The backend includes EF Core configuration for SQLite and SQL Server.
+* Posting and ledger logic must remain server-side.
+* The frontend reads `VITE_API_BASE_URL` for deployed API calls.
+
+## Deployment
+
+Railway and Vercel deployment steps are documented in [docs/deployment.md](/home/botmother/HighCoolProduction/docs/deployment.md).
+
+Current production targets:
+
+* Backend: `https://highcool-production-production.up.railway.app`
+* Frontend: `https://high-cool-production.vercel.app`
+
+Required production variables:
+
+```bash
+# Railway
+ASPNETCORE_ENVIRONMENT=Production
+DatabaseProvider=Sqlite
+ConnectionStrings__DefaultConnection="Data Source=/app/data/highcool.db"
+Cors__AllowedOrigins__0=https://high-cool-production.vercel.app
+
+# Vercel
+VITE_API_BASE_URL=https://highcool-production-production.up.railway.app
+```
 
 ## Database Baseline
 
 ### Prerequisites
 
-* SQL Server reachable from the backend connection string
+* SQLite or SQL Server reachable from the backend connection string
 * `dotnet tool restore`
 
 ### Default Connection
 
-The default backend connection string is defined in [appsettings.json](/home/botmother/HighCool/src/backend/Api/appsettings.json).
+The default backend connection string is defined in [appsettings.json](/home/botmother/HighCoolProduction/src/backend/Api/appsettings.json).
 
-For local development, [appsettings.Development.json](/home/robb/HighCool/src/backend/Api/appsettings.Development.json) switches the provider to SQLite and auto-creates a seeded `highcool-dev.db` file when the API starts.
+For local development, [appsettings.Development.json](/home/botmother/HighCoolProduction/src/backend/Api/appsettings.Development.json) switches the provider to SQLite and auto-creates a seeded `highcool-dev.db` file when the API starts.
 
 You can override it from the terminal:
 
 ```bash
 export ConnectionStrings__DefaultConnection="Server=localhost,1433;Database=HighCoolERP;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True"
+export DatabaseProvider="SqlServer"
 ```
 
 ### Create Or Apply Migrations

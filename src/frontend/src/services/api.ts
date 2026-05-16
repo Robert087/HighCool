@@ -23,6 +23,22 @@ export interface PaginationParams {
   sortDirection?: SortDirection;
 }
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
+
+export function buildApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (!configuredApiBaseUrl) {
+    return normalizedPath;
+  }
+
+  return `${configuredApiBaseUrl}${normalizedPath}`;
+}
+
 export class ApiError extends Error {
   status: number;
   validationErrors?: ValidationErrors;

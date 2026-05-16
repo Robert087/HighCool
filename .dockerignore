@@ -1,0 +1,13 @@
+.git
+.codex
+.config
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.tsbuildinfo
+coverage
+packages-microsoft-prod.deb
