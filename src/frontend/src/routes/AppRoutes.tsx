@@ -30,6 +30,7 @@ import { StockBalancePage } from "../pages/StockBalancePage";
 import { StockMovementPage } from "../pages/StockMovementPage";
 import { SetupOrganizationPage } from "../pages/SetupOrganizationPage";
 import { SettingsRolesPage } from "../pages/settings/SettingsRolesPage";
+import { SettingsBackupRestorePage } from "../pages/settings/SettingsBackupRestorePage";
 import { SettingsUsersPage } from "../pages/settings/SettingsUsersPage";
 import { UomConversionFormPage } from "../pages/UomConversionFormPage";
 import { UomConversionsPage } from "../pages/UomConversionsPage";
@@ -112,6 +113,7 @@ export function AppRoutes() {
       <Route path="/settings" element={<Navigate to="/settings/users" replace />} />
       <Route path="/settings/organization" element={<Navigate to="/workspace" replace />} />
       <Route path="/settings/users" element={guard(<SettingsUsersPage />, Permissions.SettingsUsersManage, "settingsEnabled")} />
+      <Route path="/settings/backup-restore" element={guard(<SettingsBackupRestorePage />, Permissions.SettingsDatabaseDiagnosticsRead, "settingsEnabled")} />
       <Route path="/settings/profiles" element={<Navigate to="/workspace" replace />} />
       <Route path="/settings/roles" element={guard(<SettingsRolesPage />, Permissions.SettingsRolesManage, "settingsEnabled")} />
       <Route path="/settings/invitations" element={<Navigate to="/workspace" replace />} />

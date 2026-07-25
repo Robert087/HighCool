@@ -29,7 +29,11 @@ On 2026-07-25, Batch 3.2 reran the automated backend/frontend/desktop regression
 
 On 2026-07-25, pre-commit security hardening removed the committed JWT fallback secret, made JWT startup fail closed outside Development/Testing unless a valid non-placeholder secret is configured, preserved desktop app-data secret reuse with environment-variable delivery to the backend, removed the committed default SQL Server `sa` credential, and changed public password-reset/email-verification request endpoints to generic token-free responses backed by an internal delivery abstraction. Invitation delivery/log sanitization, real email integration, rate limits, and broader browser/session perimeter hardening remain open.
 
-The final desktop installer/updater, restore UI, scheduled backups, Cloudflare R2/cloud backups, production Windows key provider, Windows packaging verification, and fully approved desktop-host restore/window/failure-state smoke remain incomplete.
+## Post-Audit Update - Desktop Backup/Restore UI Batch 5
+
+On 2026-07-25, Batch 5 added the authenticated `/settings/backup-restore` page, managed local backup summary/history/details, manual backup, verify, restore preflight, restore execution, and retention settings. Batch 5.1 hardened restore execution with Desktop-only local-database API gating, server-issued expiring single-use preflight operation IDs bound to backup/user/installation/compatibility metadata, and process-local serialization for backup, restore, and retention operations. See `HIGHCOOL_DESKTOP_BATCH5_BACKUP_RESTORE_UI_RESULT.md`.
+
+The final desktop installer/updater, scheduled backups, Cloudflare R2/cloud backups, backup deletion, production Windows key provider, Windows packaging verification, and fully approved desktop-host restore/window/failure-state smoke remain incomplete.
 
 ## Evidence convention
 
@@ -53,7 +57,7 @@ The application is not production-ready. The most serious confirmed remaining fi
 5. Warehouse and branch scopes are modeled and administrable, but `EnsureWarehouseAccessAsync` is never called by a business workflow and branch access is never evaluated.
 6. Financial rows can mix null/default and user-selected currencies, while balances and running balances are aggregated without currency partitioning or exchange-rate application.
 7. Posting validates shared open quantities inside ordinary transactions but has no row version, serializable isolation, or locking strategy; concurrent posts can race over PO remaining quantity, returnable quantity, shortage quantity, or payment target balance.
-8. Desktop shell foundation now exists and builds with Tauri, and Batch 3.1 fixed observed WSLg readiness/lifecycle defects, but final desktop packaging, full interactive desktop smoke approval, restore UI, scheduled/cloud backups, production Windows key protection, and production operations remain incomplete even though the local SQLite safety foundation includes encrypted backups, manifests, retention, restore service contracts, and upgrade journals.
+8. Desktop shell foundation now exists and builds with Tauri, and Batch 5 added the authenticated backup/restore UI plus hardened restore operation-token checks, but final desktop packaging, full normal-desktop interactive smoke approval, scheduled/cloud backups, production Windows key protection, and production operations remain incomplete.
 
 Estimated completion:
 
@@ -493,7 +497,7 @@ All business/settings endpoints require JWT unless explicitly marked public. Bus
 | Critical | Tenant uniqueness indexes omit `OrganizationId`. | All master/document configuration files. Rebuild unique indexes as `(OrganizationId, business key...)` through a migration and add cross-tenant tests. |
 | Critical | Multi-currency balances can combine unlike currencies. | `SupplierStatementPostingService`, `SupplierBalanceService`, payment/resolution currency fields. Either enforce one organization currency end-to-end or partition/convert every ledger and allocation calculation. |
 | Critical | Concurrent posting is not protected at the business invariant row. | `BeginTransactionAsync` uses provider default isolation; no row version/lock. Use optimistic concurrency tokens with retry/conflict results or serializable/target-row locking for remaining-quantity/amount invariants. |
-| Medium | SQLite desktop host/restore drill is still incomplete. | Batch 3.1 fixed observed WSLg readiness/lifecycle defects and verified targeted startup, single-instance, shutdown, restart, and forced-termination behavior, but the full desktop devtools/external-navigation/protected-shutdown/startup-failure matrix is not complete. Restore UI, production Windows key provider, scheduled backups, Windows packaging, and CI/runtime restore drills still need completion. |
+| Medium | SQLite desktop host/restore drill is still incomplete. | Batch 5 added the authenticated backup/restore UI and hardened local restore execution, and Batch 3.1 fixed observed WSLg readiness/lifecycle defects, but the full normal-desktop devtools/external-navigation/protected-shutdown/startup-failure/restore matrix is not complete. Production Windows key provider, scheduled/cloud backups, Windows packaging, and CI/runtime restore drills still need completion. |
 | High | Posted/canceled audit columns remain null. | Posting/cancellation services set status and `UpdatedBy`, but never `PostedAt/By` or `CanceledAt/By`. Populate and test these fields. |
 | High | Organization settings contain flags with no enforcement. | Negative stock, approval, posting workflow, reversals, batch/serial/expiry, transfers, adjustments. Do not expose flags until behavior exists, or implement enforcement. |
 | Medium | Global document numbers use hardcoded prefixes/timestamps. | PO/receipt/return/payment/resolution/reversal services. Implement organization-scoped transactional numbering using configured prefixes. |
@@ -739,7 +743,7 @@ Production deployment should remain blocked until Phase 0 security/data-integrit
 
 The detailed, acceptance-testable backlog is in `HIGHCOOL_REMAINING_WORK.md`. Highest order:
 
-1. Keep SQLite startup preservation, encrypted backup/manifest, retention, diagnostics, restore-preflight behavior, and Tauri loopback startup covered in CI; complete real desktop-window smoke, desktop-host restore drill, restore UI, scheduled backup policy, and production Windows key provider.
+1. Keep SQLite startup preservation, encrypted backup/manifest, retention, diagnostics, restore-preflight/restore-token behavior, backup/restore UI, and Tauri loopback startup covered in CI; complete real desktop-window smoke, desktop-host restore drill, scheduled/cloud backup policy, and production Windows key provider.
 2. Finish safe invitation/email delivery and remove invitation token audit exposure.
 3. Fix organization-scoped unique indexes and add tenant isolation tests.
 4. Add posting concurrency protection for every shared open balance/quantity.

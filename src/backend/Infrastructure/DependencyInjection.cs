@@ -65,6 +65,7 @@ public static class DependencyInjection
             serviceProvider.GetRequiredService<IHostEnvironment>()));
         services.AddSingleton<IDatabaseConfigurationService, DatabaseConfigurationService>();
         services.Configure<BackupRetentionOptions>(configuration.GetSection(BackupRetentionOptions.SectionName));
+        services.Configure<RestorePreflightOperationOptions>(configuration.GetSection(RestorePreflightOperationOptions.SectionName));
 
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
@@ -93,12 +94,15 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IApplicationDatabaseMetadataService, ApplicationDatabaseMetadataService>();
         services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+        services.AddSingleton<ILocalDatabaseOperationCoordinator, LocalDatabaseOperationCoordinator>();
+        services.AddSingleton<IRestorePreflightOperationStore, InMemoryRestorePreflightOperationStore>();
         services.AddSingleton<BackupManifestService>();
         services.AddScoped<IBackupEncryptionKeyProvider, DevelopmentFileBackupEncryptionKeyProvider>();
         services.AddScoped<SqliteDatabaseBackupService>();
         services.AddScoped<IDatabaseBackupService>(serviceProvider => serviceProvider.GetRequiredService<SqliteDatabaseBackupService>());
         services.AddScoped<IDatabaseUpgradeService, DatabaseUpgradeService>();
         services.AddScoped<IDatabaseRestoreService, DatabaseRestoreService>();
+        services.AddScoped<IBackupCatalogService, BackupCatalogService>();
         services.AddScoped<IBackupRetentionService, BackupRetentionService>();
         services.AddScoped<IStartupDiagnosticsService, StartupDiagnosticsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();

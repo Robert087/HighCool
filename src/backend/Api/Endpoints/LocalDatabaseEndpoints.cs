@@ -9,9 +9,28 @@ public static class LocalDatabaseEndpoints
     public static IEndpointRouteBuilder MapLocalDatabaseEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/local-database")
-            .RequireAuthorization();
+            .RequireAuthorization()
+            .AddEndpointFilter<LocalDatabaseFeatureEndpointFilter>();
 
         group.MapPost("/backups", CreateBackupAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapGet("/backups/summary", BackupSummaryAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapGet("/backups", ListBackupsAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapGet("/backups/{backupId}", BackupDetailsAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapPost("/backups/{backupId}/verify", VerifyBackupAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapGet("/backup-retention", GetRetentionSettingsAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapPut("/backup-retention", SaveRetentionSettingsAsync)
             .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
 
         group.MapPost("/upgrades", UpgradeAsync)
@@ -87,6 +106,39 @@ public static class LocalDatabaseEndpoints
            string.Equals(propertyName, "destination", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(propertyName, "destinationPath", StringComparison.OrdinalIgnoreCase);
 
+    private static Task<IResult> BackupSummaryAsync(
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.GetSummaryAsync(cancellationToken));
+
+    private static Task<IResult> ListBackupsAsync(
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.ListAsync(cancellationToken));
+
+    private static Task<IResult> BackupDetailsAsync(
+        string backupId,
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.GetDetailsAsync(backupId, cancellationToken));
+
+    private static Task<IResult> VerifyBackupAsync(
+        string backupId,
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.VerifyAsync(backupId, cancellationToken));
+
+    private static Task<IResult> GetRetentionSettingsAsync(
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.GetRetentionSettingsAsync(cancellationToken));
+
+    private static Task<IResult> SaveRetentionSettingsAsync(
+        BackupRetentionSettingsDto request,
+        IBackupCatalogService backupCatalogService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await backupCatalogService.SaveRetentionSettingsAsync(request, cancellationToken));
+
     private static Task<IResult> UpgradeAsync(
         IDatabaseUpgradeService upgradeService,
         CancellationToken cancellationToken)
@@ -96,7 +148,7 @@ public static class LocalDatabaseEndpoints
         RestoreRequest request,
         IDatabaseRestoreService restoreService,
         CancellationToken cancellationToken)
-        => ExecuteAsync(async () => await restoreService.ValidateAsync(request, cancellationToken));
+        => ExecuteAsync(async () => await restoreService.CreatePreflightOperationAsync(request, cancellationToken));
 
     private static Task<IResult> RestoreAsync(
         RestoreRequest request,

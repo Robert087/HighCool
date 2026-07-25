@@ -66,6 +66,7 @@ const navigationGroups = [
     items: [
       { label: "settings.nav.users", to: "/settings/users", icon: "settings" },
       { label: "settings.nav.roles", to: "/settings/roles", icon: "settings" },
+      { label: "settings.nav.backupRestore", to: "/settings/backup-restore", icon: "settings" },
     ],
   },
 ] as const;
@@ -408,14 +409,18 @@ export function AppShell({ children }: PropsWithChildren) {
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
+        const permission = navigationPermissions[item.to];
+        if (permission && !hasPermission(permission)) {
+          return false;
+        }
+
         // TEMPORARILY_DISABLED: Feature gating bypassed until all module keys/routes are aligned.
         // Restore legacy behavior by showing all operational modules in sidebar.
         if (DISABLE_FEATURE_GATING) {
           return true;
         }
 
-        const permission = navigationPermissions[item.to];
-        return !permission || hasPermission(permission);
+        return true;
       }),
     }))
     .filter((group) => {
@@ -926,6 +931,7 @@ const navigationPermissions: Record<string, string | undefined> = {
   "/uoms": Permissions.UomsManage,
   "/settings/users": Permissions.SettingsUsersManage,
   "/settings/roles": Permissions.SettingsRolesManage,
+  "/settings/backup-restore": Permissions.SettingsDatabaseDiagnosticsRead,
 };
 
 const featureGroupVisibility = {

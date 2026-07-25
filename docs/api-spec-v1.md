@@ -636,3 +636,163 @@ Behavior:
 * receipt reversal is blocked by active posted returns, payment allocations, or shortage resolutions that depend on that receipt
 * shortage resolution reversal is blocked by active posted payment allocations that depend on that resolution
 * supplier statement reversal rows always invert the original financial supplier statement rows instead of generating unrelated generic payment effects
+
+## Local Backup & Restore Addendum
+
+Local database endpoints are authenticated and permission-gated. Backups are selected by server-issued backup ID only; clients must not send arbitrary filesystem paths.
+
+### `POST /api/local-database/backups`
+
+Creates a manual encrypted local SQLite backup.
+
+Permission:
+
+* `settings.database_backup.create`
+
+Behavior:
+
+* rejects client-provided path fields
+* creates a manifest-linked encrypted backup through the backend service
+* returns backup ID, safe file names, size, checksum, reason, status, and message
+
+### `GET /api/local-database/backups/summary`
+
+Returns safe Backup Center summary data.
+
+Permission:
+
+* `settings.database_diagnostics.read`
+
+Includes:
+
+* health status and reasons
+* last successful backup time
+* last integrity verification time
+* safe database file name and size
+* available backup count and storage used
+* encryption, retention, application version, and schema version
+
+### `GET /api/local-database/backups`
+
+Lists managed local backups newest first.
+
+Permission:
+
+* `settings.database_diagnostics.read`
+
+Behavior:
+
+* returns safe metadata only
+* omits raw filesystem paths
+* omits invalid manifests from the user-facing catalog while retention continues preserving them safely
+
+### `GET /api/local-database/backups/{backupId}`
+
+Returns details for one managed backup.
+
+Permission:
+
+* `settings.database_diagnostics.read`
+
+Includes:
+
+* manifest metadata
+* encrypted and plain SHA-256 values
+* encryption algorithm
+* sizes
+* persisted integrity status
+* restore preflight compatibility when available
+
+### `POST /api/local-database/backups/{backupId}/verify`
+
+Verifies one managed backup.
+
+Permission:
+
+* `settings.database_backup.create`
+
+Behavior:
+
+* decrypts to a temporary backend-managed file
+* runs SQLite integrity verification
+* persists a safe verification result sidecar
+* never marks a backup verified without backend confirmation
+
+### `GET /api/local-database/backup-retention`
+
+Returns effective local backup retention settings.
+
+Permission:
+
+* `settings.database_diagnostics.read`
+
+### `PUT /api/local-database/backup-retention`
+
+Saves local backup retention settings.
+
+Permission:
+
+* `settings.database_backup.create`
+
+Behavior:
+
+* persists settings in backend-managed local storage
+* clamps counts and age limits to safe ranges
+* does not allow arbitrary backup-root changes
+
+### `POST /api/local-database/restore/validate`
+
+Runs restore preflight for a backup ID and returns a server-issued restore operation ID when the selected backup is compatible.
+
+Permission:
+
+* `settings.database_restore.validate`
+
+Request:
+
+```json
+{
+  "backupId": "server-issued-backup-id"
+}
+```
+
+Successful response includes safe preflight details plus:
+
+```json
+{
+  "operationId": "server-issued-expiring-operation-id",
+  "operationExpiresAtUtc": "2026-07-25T12:00:00Z"
+}
+```
+
+The operation ID is bound to the selected backup, authenticated user, current installation metadata, and preflight compatibility metadata. It is single-use and expires.
+
+### `POST /api/local-database/restore`
+
+Executes restore after explicit backend confirmation.
+
+Permission:
+
+* `settings.database_restore.execute`
+
+Request:
+
+```json
+{
+  "backupId": "server-issued-backup-id",
+  "operationId": "server-issued-expiring-operation-id",
+  "confirmation": "RESTORE_LOCAL_DATABASE"
+}
+```
+
+Behavior:
+
+* requires the server-issued preflight operation ID and typed confirmation phrase
+* reruns preflight
+* rejects missing, expired, replayed, wrong-user, wrong-backup, or compatibility-mismatched operation IDs
+* creates a pre-restore safety backup
+* replaces the local database only through backend restore service logic
+* records restore journal state
+* returns selected backup ID and safety backup ID when available
+
+All `/api/local-database/*` endpoints are available only in the Desktop host environment. Automated tests may enable the explicit Testing-only `LocalDatabase:EnableEndpointCapability` flag to exercise these endpoints without running the desktop host.

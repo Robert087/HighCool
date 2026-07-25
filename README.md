@@ -79,6 +79,8 @@ Batch 3.2 on 2026-07-25 reran the full automated backend/frontend/desktop regres
 
 Pre-commit security hardening on 2026-07-25 removed the unsafe JWT fallback secret, removed the default SQL Server credential from committed configuration, stopped public reset/verification endpoints from returning raw tokens, added an internal auth-message delivery abstraction, and tightened desktop/local secret ignores.
 
+Batch 5 on 2026-07-25 added the authenticated `/settings/backup-restore` experience for managed local backups. The UI supports summary, history, details, manual backup, verification, restore preflight, restore execution, and retention settings. Restore now requires a server-issued, expiring, single-use preflight operation ID bound to the selected backup, authenticated user, installation, and compatibility metadata, plus the existing typed confirmation phrase. Local database endpoints are Desktop-only, with a Testing-only capability used by automated tests.
+
 ### Health Check
 
 ```bash
@@ -119,7 +121,7 @@ npm run build
 
 * The backend includes active ERP business logic and data models.
 * SQLite local storage and a basic Tauri shell are foundation work for a future single-PC desktop distribution.
-* Local encrypted backup/restore safety services exist, but the restore UI, scheduled backups, cloud backups, updater, and final installer are not implemented yet.
+* Local encrypted backup/restore safety services and the authenticated restore UI exist, but scheduled backups, cloud backups, updater, and final installer are not implemented yet.
 * The desktop shell is not yet customer-ready because the full interactive/failure/security matrix still needs a normal Linux/Windows desktop environment.
 
 ## Database Baseline
@@ -155,13 +157,15 @@ Batch 1 desktop-foundation verification on 2026-07-25 confirmed that local SQLit
 
 Batch 2 desktop-foundation verification on 2026-07-25 added encrypted backups, manifests, local retention, restore validation/execution service contracts, mandatory pre-upgrade backup orchestration, upgrade/restore journals, and startup diagnostics.
 
-Batch 3 desktop-foundation verification on 2026-07-25 added the Tauri development shell and self-contained backend publish workflow. This is still foundation work only; scheduled backups, Cloudflare R2, restore UI, final installer, updater, and Windows packaging verification remain out of scope.
+Batch 3 desktop-foundation verification on 2026-07-25 added the Tauri development shell and self-contained backend publish workflow. This is still foundation work only; scheduled backups, Cloudflare R2, final installer, updater, and Windows packaging verification remain out of scope.
 
 Batch 3.1 desktop-foundation verification on 2026-07-25 fixed observed WSLg readiness and lifecycle defects. It remains foundation work only; final approval requires a normal desktop-session verification matrix and Windows remains unverified.
 
 Batch 3.2 desktop-foundation verification on 2026-07-25 kept automated checks green and made the documented desktop Cargo checks runnable from `src/desktop`; it did not complete the required normal Linux/Windows desktop approval matrix.
 
 Pre-commit security hardening on 2026-07-25 confirmed committed defaults no longer include the old SQL Server `sa` credential or the unsafe JWT fallback. Public password-reset and email-verification requests now return generic acceptance responses; the generated one-time tokens are delivered only through the internal delivery abstraction, which is currently a no-op outside tests until a real email provider is selected.
+
+Batch 5 desktop backup/restore verification on 2026-07-25 added the `/settings/backup-restore` page and hardened restore execution with server-issued preflight operation IDs, operation serialization, fresh preflight validation, safety backup creation, and replay/expiry/user/backup binding checks. Scheduled/cloud backups, backup deletion, final installer/updater, Windows packaging, and normal-desktop interactive approval remain pending.
 
 ### Create Or Apply Migrations
 

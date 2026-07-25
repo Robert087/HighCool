@@ -4793,6 +4793,122 @@ body[data-theme="dark"] .hc-erp-dashboard-panel--critical .hc-erp-alert-card {
   color: var(--hc-color-text-muted);
 }
 
+.hc-backup-page,
+.hc-backup-section,
+.hc-backup-restore-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.hc-backup-summary-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.hc-backup-summary-card {
+  display: grid;
+  gap: 0.45rem;
+  min-height: 7rem;
+}
+
+.hc-backup-summary-card span:first-child,
+.hc-backup-selected span,
+.hc-backup-detail-row span {
+  color: var(--hc-color-text-secondary);
+  font-size: var(--hc-font-size-small);
+}
+
+.hc-backup-summary-card strong,
+.hc-backup-selected strong,
+.hc-backup-detail-row strong {
+  color: var(--hc-color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.hc-backup-health-reasons,
+.hc-backup-section__header,
+.hc-backup-selected,
+.hc-restore-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.hc-backup-section__header,
+.hc-backup-selected {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.hc-backup-section__header h2,
+.hc-backup-warning-card h3 {
+  margin: 0;
+}
+
+.hc-backup-section__header p,
+.hc-backup-warning-card p,
+.hc-backup-restart-note {
+  color: var(--hc-color-text-secondary);
+  margin: 0.35rem 0 0;
+}
+
+.hc-backup-dialog {
+  max-height: min(86vh, 58rem);
+  overflow: auto;
+  width: min(48rem, 100%);
+}
+
+.hc-backup-dialog--wide {
+  width: min(62rem, 100%);
+}
+
+.hc-backup-detail-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+.hc-backup-detail-row {
+  background: var(--hc-color-surface-muted);
+  border: 1px solid var(--hc-color-border-subtle);
+  border-radius: 0.65rem;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+}
+
+.hc-backup-hash-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.hc-restore-steps span {
+  background: var(--hc-color-surface-muted);
+  border: 1px solid var(--hc-color-border-subtle);
+  border-radius: 999px;
+  color: var(--hc-color-text-secondary);
+  font-size: var(--hc-font-size-small);
+  padding: 0.45rem 0.75rem;
+}
+
+.hc-backup-warning-card {
+  border-color: color-mix(in srgb, var(--hc-color-warning) 36%, var(--hc-color-border-subtle));
+}
+
+.hc-backup-operation-stage {
+  color: var(--hc-color-primary);
+  font-weight: var(--hc-font-weight-semibold);
+  margin: 0;
+}
+
+.hc-backup-retention-grid {
+  align-items: end;
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
 .hc-setup-page {
   display: grid;
   gap: 1.25rem;

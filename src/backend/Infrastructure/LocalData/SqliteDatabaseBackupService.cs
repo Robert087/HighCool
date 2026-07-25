@@ -9,7 +9,8 @@ public sealed class SqliteDatabaseBackupService(
     ILocalStoragePathService localStoragePathService,
     IApplicationDatabaseMetadataService metadataService,
     IBackupEncryptionKeyProvider encryptionKeyProvider,
-    BackupManifestService manifestService) : IDatabaseBackupService
+    BackupManifestService manifestService,
+    ILocalDatabaseOperationCoordinator operationCoordinator) : IDatabaseBackupService
 {
     public async Task<BackupResult> CreateBackupAsync(
         BackupReason reason,
@@ -22,92 +23,109 @@ public sealed class SqliteDatabaseBackupService(
         string? finalEncryptedPath = null;
         string? finalManifestPath = null;
 
-        try
+        if (cancellationToken.IsCancellationRequested)
         {
-            var databaseConfiguration = databaseConfigurationService.GetConfiguration();
-            if (!string.Equals(databaseConfiguration.Provider, DatabaseProviderNames.Sqlite, StringComparison.OrdinalIgnoreCase) ||
-                string.IsNullOrWhiteSpace(databaseConfiguration.SqliteDatabasePath))
+            return new BackupResult(BackupStatus.Canceled, backupId, timestamp, 0, null, reason, "Backup was canceled before completion.");
+        }
+
+        var lease = await operationCoordinator.TryAcquireExclusiveAsync(
+            LocalDatabaseOperationKind.Backup,
+            null,
+            cancellationToken);
+        if (lease is null)
+        {
+            return Failure(backupId, timestamp, reason, "A local database operation is already in progress.");
+        }
+
+        await using (lease)
+        {
+            try
             {
-                return Failure(backupId, timestamp, reason, "Local SQLite backup is available only when Database:Provider is Sqlite.");
+                var databaseConfiguration = databaseConfigurationService.GetConfiguration();
+                if (!string.Equals(databaseConfiguration.Provider, DatabaseProviderNames.Sqlite, StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(databaseConfiguration.SqliteDatabasePath))
+                {
+                    return Failure(backupId, timestamp, reason, "Local SQLite backup is available only when Database:Provider is Sqlite.");
+                }
+
+                if (!File.Exists(databaseConfiguration.SqliteDatabasePath))
+                {
+                    return Failure(backupId, timestamp, reason, "The local SQLite database does not exist.");
+                }
+
+                localStoragePathService.EnsureRequiredDirectories();
+                EnsureBackupDirectoryIsOutsideDataDirectory();
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                finalEncryptedPath = CreateUniqueFinalPath(timestamp, reason, backupId);
+                finalManifestPath = manifestService.GetManifestPathForBackupFile(finalEncryptedPath);
+                plainTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{Path.GetFileName(finalEncryptedPath)}.{backupId}.plain.tmp");
+                encryptedTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{Path.GetFileName(finalEncryptedPath)}.{backupId}.enc.tmp");
+
+                await BackupSqliteDatabaseAsync(databaseConfiguration.ConnectionString, plainTempPath, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var integrityCheck = await RunIntegrityCheckAsync(plainTempPath, cancellationToken);
+                if (!string.Equals(integrityCheck, "ok", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteTemporaryBackupFiles(plainTempPath);
+                    DeleteTemporaryBackupFiles(encryptedTempPath);
+                    return Failure(backupId, timestamp, reason, "The created SQLite backup failed integrity validation.");
+                }
+
+                var metadata = await metadataService.EnsureInitializedAsync(cancellationToken);
+                var plainChecksum = await CalculateChecksumAsync(plainTempPath, cancellationToken);
+                var plainSizeBytes = new FileInfo(plainTempPath).Length;
+                var encryption = await EncryptAsync(plainTempPath, encryptedTempPath, cancellationToken);
+                var encryptedChecksum = await CalculateChecksumAsync(encryptedTempPath, cancellationToken);
+
+                var manifest = new BackupManifest(
+                    BackupManifestService.CurrentManifestVersion,
+                    backupId,
+                    metadata.InstallationId,
+                    metadata.ApplicationVersion,
+                    metadata.DatabaseSchemaVersion,
+                    timestamp,
+                    reason,
+                    Path.GetFileName(finalEncryptedPath),
+                    plainSizeBytes,
+                    plainChecksum,
+                    encryptedChecksum,
+                    encryption);
+
+                await manifestService.WriteAsync(finalManifestPath, manifest, cancellationToken);
+
+                File.Move(encryptedTempPath, finalEncryptedPath, overwrite: false);
+                DeleteTemporaryBackupFiles(plainTempPath);
+                DeleteTemporaryBackupFiles(encryptedTempPath);
+
+                return new BackupResult(
+                    BackupStatus.Succeeded,
+                    backupId,
+                    timestamp,
+                    plainSizeBytes,
+                    encryptedChecksum,
+                    reason,
+                    "Backup created successfully.",
+                    Path.GetFileName(finalEncryptedPath),
+                    Path.GetFileName(finalManifestPath));
             }
-
-            if (!File.Exists(databaseConfiguration.SqliteDatabasePath))
-            {
-                return Failure(backupId, timestamp, reason, "The local SQLite database does not exist.");
-            }
-
-            localStoragePathService.EnsureRequiredDirectories();
-            EnsureBackupDirectoryIsOutsideDataDirectory();
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            finalEncryptedPath = CreateUniqueFinalPath(timestamp, reason, backupId);
-            finalManifestPath = manifestService.GetManifestPathForBackupFile(finalEncryptedPath);
-            plainTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{Path.GetFileName(finalEncryptedPath)}.{backupId}.plain.tmp");
-            encryptedTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{Path.GetFileName(finalEncryptedPath)}.{backupId}.enc.tmp");
-
-            await BackupSqliteDatabaseAsync(databaseConfiguration.ConnectionString, plainTempPath, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var integrityCheck = await RunIntegrityCheckAsync(plainTempPath, cancellationToken);
-            if (!string.Equals(integrityCheck, "ok", StringComparison.OrdinalIgnoreCase))
+            catch (OperationCanceledException)
             {
                 DeleteTemporaryBackupFiles(plainTempPath);
                 DeleteTemporaryBackupFiles(encryptedTempPath);
-                return Failure(backupId, timestamp, reason, "The created SQLite backup failed integrity validation.");
+                DeleteIfExists(finalManifestPath);
+                return new BackupResult(BackupStatus.Canceled, backupId, timestamp, 0, null, reason, "Backup was canceled before completion.");
             }
-
-            var metadata = await metadataService.EnsureInitializedAsync(cancellationToken);
-            var plainChecksum = await CalculateChecksumAsync(plainTempPath, cancellationToken);
-            var plainSizeBytes = new FileInfo(plainTempPath).Length;
-            var encryption = await EncryptAsync(plainTempPath, encryptedTempPath, cancellationToken);
-            var encryptedChecksum = await CalculateChecksumAsync(encryptedTempPath, cancellationToken);
-
-            var manifest = new BackupManifest(
-                BackupManifestService.CurrentManifestVersion,
-                backupId,
-                metadata.InstallationId,
-                metadata.ApplicationVersion,
-                metadata.DatabaseSchemaVersion,
-                timestamp,
-                reason,
-                Path.GetFileName(finalEncryptedPath),
-                plainSizeBytes,
-                plainChecksum,
-                encryptedChecksum,
-                encryption);
-
-            await manifestService.WriteAsync(finalManifestPath, manifest, cancellationToken);
-
-            File.Move(encryptedTempPath, finalEncryptedPath, overwrite: false);
-            DeleteTemporaryBackupFiles(plainTempPath);
-            DeleteTemporaryBackupFiles(encryptedTempPath);
-
-            return new BackupResult(
-                BackupStatus.Succeeded,
-                backupId,
-                timestamp,
-                plainSizeBytes,
-                encryptedChecksum,
-                reason,
-                "Backup created successfully.",
-                Path.GetFileName(finalEncryptedPath),
-                Path.GetFileName(finalManifestPath));
-        }
-        catch (OperationCanceledException)
-        {
-            DeleteTemporaryBackupFiles(plainTempPath);
-            DeleteTemporaryBackupFiles(encryptedTempPath);
-            DeleteIfExists(finalManifestPath);
-            return new BackupResult(BackupStatus.Canceled, backupId, timestamp, 0, null, reason, "Backup was canceled before completion.");
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException or InvalidOperationException or CryptographicException)
-        {
-            DeleteTemporaryBackupFiles(plainTempPath);
-            DeleteTemporaryBackupFiles(encryptedTempPath);
-            DeleteIfExists(finalManifestPath);
-            DeleteIfExists(finalEncryptedPath);
-            return Failure(backupId, timestamp, reason, "Backup failed. Check local storage configuration and application logs.");
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SqliteException or InvalidOperationException or CryptographicException)
+            {
+                DeleteTemporaryBackupFiles(plainTempPath);
+                DeleteTemporaryBackupFiles(encryptedTempPath);
+                DeleteIfExists(finalManifestPath);
+                DeleteIfExists(finalEncryptedPath);
+                return Failure(backupId, timestamp, reason, "Backup failed. Check local storage configuration and application logs.");
+            }
         }
     }
 

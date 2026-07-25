@@ -43,13 +43,18 @@ public enum RestorePreflightStatus
     DestinationUnavailable
 }
 
-public sealed record RestoreRequest(string BackupId, string? Confirmation = null);
+public sealed record RestoreRequest(
+    string BackupId,
+    string? Confirmation = null,
+    string? OperationId = null);
 
 public sealed record RestorePreflightResult(
     RestorePreflightStatus Status,
     string Message,
     string? BackupId = null,
-    int? SchemaVersion = null);
+    int? SchemaVersion = null,
+    string? OperationId = null,
+    DateTime? OperationExpiresAtUtc = null);
 
 public enum RestoreStatus
 {
@@ -68,7 +73,84 @@ public interface IDatabaseRestoreService
 {
     Task<RestorePreflightResult> ValidateAsync(RestoreRequest request, CancellationToken cancellationToken);
 
+    Task<RestorePreflightResult> CreatePreflightOperationAsync(RestoreRequest request, CancellationToken cancellationToken);
+
     Task<RestoreResult> RestoreAsync(RestoreRequest request, CancellationToken cancellationToken);
+}
+
+public enum LocalDatabaseOperationKind
+{
+    Backup,
+    Restore,
+    Retention
+}
+
+public interface ILocalDatabaseOperationLease : IAsyncDisposable
+{
+    LocalDatabaseOperationKind Kind { get; }
+
+    string? BackupId { get; }
+}
+
+public interface ILocalDatabaseOperationCoordinator
+{
+    IReadOnlyCollection<string> ActiveBackupIds { get; }
+
+    Task<ILocalDatabaseOperationLease?> TryAcquireExclusiveAsync(
+        LocalDatabaseOperationKind kind,
+        string? backupId,
+        CancellationToken cancellationToken);
+}
+
+public sealed record RestorePreflightOperation(
+    string OperationId,
+    string BackupId,
+    Guid UserId,
+    string? InstallationId,
+    string BindingHash,
+    DateTime ExpiresAtUtc,
+    DateTime CreatedAtUtc);
+
+public interface IRestorePreflightOperationStore
+{
+    TimeSpan Lifetime { get; }
+
+    RestorePreflightOperation Create(
+        string backupId,
+        Guid userId,
+        string? installationId,
+        string bindingHash);
+
+    RestorePreflightOperationConsumeResult ValidateAvailable(string? operationId);
+
+    RestorePreflightOperationConsumeResult Consume(
+        string? operationId,
+        string backupId,
+        Guid userId,
+        string? installationId,
+        string bindingHash);
+}
+
+public enum RestorePreflightOperationConsumeStatus
+{
+    Consumed,
+    Missing,
+    NotFound,
+    Expired,
+    BackupMismatch,
+    UserMismatch,
+    BindingMismatch
+}
+
+public sealed record RestorePreflightOperationConsumeResult(
+    RestorePreflightOperationConsumeStatus Status,
+    string Message);
+
+public sealed class RestorePreflightOperationOptions
+{
+    public const string SectionName = "RestorePreflightOperation";
+
+    public int LifetimeSeconds { get; set; } = 600;
 }
 
 public sealed record DatabaseUpgradeRequest(bool Force = false);

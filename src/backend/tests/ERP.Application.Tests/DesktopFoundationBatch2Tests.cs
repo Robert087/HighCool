@@ -120,8 +120,9 @@ public sealed class DesktopFoundationBatch2Tests
 
             await using var dbContext = CreateDbContext(databasePath);
             var restoreService = CreateRestoreService(databasePath, storage, dbContext);
+            var preflight = await restoreService.CreatePreflightOperationAsync(new RestoreRequest(backup.BackupId), CancellationToken.None);
             var result = await restoreService.RestoreAsync(
-                new RestoreRequest(backup.BackupId, DatabaseRestoreService.RequiredConfirmation),
+                new RestoreRequest(backup.BackupId, DatabaseRestoreService.RequiredConfirmation, preflight.OperationId),
                 CancellationToken.None);
 
             Assert.Equal(RestoreStatus.Completed, result.Status);
@@ -173,12 +174,16 @@ public sealed class DesktopFoundationBatch2Tests
             var retention = new BackupRetentionService(
                 storage,
                 manifestService,
-                Options.Create(new BackupRetentionOptions
-                {
-                    Enabled = true,
-                    ManualCount = 1,
-                    MinimumAgeHoursBeforeDeletion = 0
-                }));
+                CreateCatalogService(
+                    databasePath,
+                    storage,
+                    Options.Create(new BackupRetentionOptions
+                    {
+                        Enabled = true,
+                        ManualCount = 1,
+                        MinimumAgeHoursBeforeDeletion = 0
+                    })),
+                new LocalDatabaseOperationCoordinator());
 
             var result = await retention.ApplyAsync([], CancellationToken.None);
 
@@ -191,6 +196,83 @@ public sealed class DesktopFoundationBatch2Tests
             Assert.Single(remainingManifests);
             var remaining = await manifestService.ReadAndValidateAsync(remainingManifests.Single(), CancellationToken.None);
             Assert.Equal(newer.BackupId, remaining.BackupId);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(rootDirectory);
+        }
+    }
+
+    [Fact]
+    public async Task BackupCatalog_ListsDetailsAndPersistsVerificationStatus()
+    {
+        var databasePath = CreateDatabasePath();
+        var rootDirectory = Path.GetDirectoryName(databasePath)!;
+        var storage = CreateStorage(rootDirectory);
+        databasePath = Path.Combine(storage.DataDirectory, "highcool.db");
+
+        try
+        {
+            storage.EnsureRequiredDirectories();
+            await CreateHighCoolDatabaseAsync(databasePath);
+            var backup = await CreateBackupService(databasePath, storage).CreateBackupAsync(BackupReason.Manual, CancellationToken.None);
+
+            var catalog = CreateCatalogService(databasePath, storage, Options.Create(new BackupRetentionOptions()));
+
+            var initialList = await catalog.ListAsync(CancellationToken.None);
+            var initialItem = Assert.Single(initialList);
+            Assert.Equal(backup.BackupId, initialItem.BackupId);
+            Assert.Equal(BackupIntegrityStatus.Unknown, initialItem.IntegrityStatus);
+
+            var verification = await catalog.VerifyAsync(backup.BackupId, CancellationToken.None);
+            Assert.Equal(BackupIntegrityStatus.Verified, verification.Status);
+
+            var refreshedList = await catalog.ListAsync(CancellationToken.None);
+            Assert.Equal(BackupIntegrityStatus.Verified, Assert.Single(refreshedList).IntegrityStatus);
+
+            var details = await catalog.GetDetailsAsync(backup.BackupId, CancellationToken.None);
+            Assert.Equal(backup.BackupId, details.BackupId);
+            Assert.Equal("AES-256-GCM", details.EncryptionAlgorithm);
+            Assert.Equal(RestorePreflightStatus.Valid, details.RestoreCompatibilityStatus);
+            Assert.DoesNotContain(storage.BackupDirectory, details.DatabaseFileName, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(rootDirectory);
+        }
+    }
+
+    [Fact]
+    public async Task BackupCatalog_SaveRetentionSettings_ClampsAndPersistsSafeValues()
+    {
+        var databasePath = CreateDatabasePath();
+        var rootDirectory = Path.GetDirectoryName(databasePath)!;
+        var storage = CreateStorage(rootDirectory);
+        databasePath = Path.Combine(storage.DataDirectory, "highcool.db");
+
+        try
+        {
+            storage.EnsureRequiredDirectories();
+            await CreateHighCoolDatabaseAsync(databasePath);
+            var catalog = CreateCatalogService(databasePath, storage, Options.Create(new BackupRetentionOptions()));
+
+            var saved = await catalog.SaveRetentionSettingsAsync(
+                new BackupRetentionSettingsDto(
+                    true,
+                    ManualCount: 0,
+                    ScheduledCount: 500,
+                    BeforeMigrationCount: 2,
+                    BeforeRestoreCount: 3,
+                    BeforeApplicationUpdateCount: 4,
+                    MinimumAgeHoursBeforeDeletion: 9000),
+                CancellationToken.None);
+
+            Assert.Equal(1, saved.ManualCount);
+            Assert.Equal(365, saved.ScheduledCount);
+            Assert.Equal(8760, saved.MinimumAgeHoursBeforeDeletion);
+
+            var reloaded = await catalog.GetRetentionSettingsAsync(CancellationToken.None);
+            Assert.Equal(saved, reloaded);
         }
         finally
         {
@@ -278,6 +360,8 @@ public sealed class DesktopFoundationBatch2Tests
         var configurationService = CreateDatabaseConfigurationService(databasePath, storage);
         var metadataService = new ApplicationDatabaseMetadataService(dbContext);
         var backupService = CreateBackupService(databasePath, storage);
+        var operationCoordinator = new LocalDatabaseOperationCoordinator();
+        var executionContext = new TestRequestExecutionContext { UserId = Guid.NewGuid(), OrganizationId = Guid.NewGuid(), MembershipId = Guid.NewGuid(), SessionId = Guid.NewGuid() };
         return new DatabaseRestoreService(
             dbContext,
             configurationService,
@@ -286,7 +370,24 @@ public sealed class DesktopFoundationBatch2Tests
             backupService,
             backupService,
             new BackupManifestService(),
-            new DatabaseHealthService(dbContext, configurationService, metadataService));
+            operationCoordinator,
+            new InMemoryRestorePreflightOperationStore(Options.Create(new RestorePreflightOperationOptions())),
+            executionContext);
+    }
+
+    private static BackupCatalogService CreateCatalogService(
+        string databasePath,
+        ILocalStoragePathService storage,
+        IOptions<BackupRetentionOptions> retentionOptions)
+    {
+        var dbContext = CreateDbContext(databasePath);
+        return new BackupCatalogService(
+            CreateDatabaseConfigurationService(databasePath, storage),
+            storage,
+            CreateBackupService(databasePath, storage),
+            new BackupManifestService(),
+            CreateRestoreService(databasePath, storage, dbContext),
+            retentionOptions);
     }
 
     private static SqliteDatabaseBackupService CreateBackupService(
@@ -299,7 +400,8 @@ public sealed class DesktopFoundationBatch2Tests
             storage,
             new ApplicationDatabaseMetadataService(dbContext),
             new DevelopmentFileBackupEncryptionKeyProvider(storage),
-            new BackupManifestService());
+            new BackupManifestService(),
+            new LocalDatabaseOperationCoordinator());
     }
 
     private static TestLocalStoragePathService CreateStorage(string rootDirectory)

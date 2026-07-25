@@ -452,7 +452,8 @@ public sealed class DesktopFoundationBatch1Tests
             storage,
             metadataService,
             new DevelopmentFileBackupEncryptionKeyProvider(storage),
-            new BackupManifestService());
+            new BackupManifestService(),
+            new LocalDatabaseOperationCoordinator());
     }
 
     private static async Task CreateHighCoolSentinelDatabaseAsync(string databasePath)

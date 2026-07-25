@@ -1,7 +1,10 @@
 using ERP.Application.LocalData;
+using ERP.Application.Security;
 using ERP.Domain.System;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ERP.Infrastructure.LocalData;
 
@@ -13,12 +16,197 @@ public sealed class DatabaseRestoreService(
     IDatabaseBackupService backupService,
     SqliteDatabaseBackupService sqliteBackupService,
     BackupManifestService manifestService,
-    IDatabaseHealthService healthService) : IDatabaseRestoreService
+    ILocalDatabaseOperationCoordinator operationCoordinator,
+    IRestorePreflightOperationStore preflightOperationStore,
+    IRequestExecutionContext requestExecutionContext) : IDatabaseRestoreService
 {
     public const string RequiredConfirmation = "RESTORE_LOCAL_DATABASE";
-    private static readonly SemaphoreSlim RestoreLock = new(1, 1);
 
     public async Task<RestorePreflightResult> ValidateAsync(
+        RestoreRequest request,
+        CancellationToken cancellationToken)
+        => (await ValidateFreshPreflightAsync(request, cancellationToken)).Result;
+
+    public async Task<RestorePreflightResult> CreatePreflightOperationAsync(
+        RestoreRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await ValidateFreshPreflightAsync(request, cancellationToken);
+        if (validation.Result.Status != RestorePreflightStatus.Valid)
+        {
+            return validation.Result;
+        }
+
+        if (!requestExecutionContext.UserId.HasValue)
+        {
+            return new RestorePreflightResult(
+                RestorePreflightStatus.DestinationUnavailable,
+                "Authenticated restore context is required.",
+                request.BackupId,
+                validation.Manifest?.DatabaseSchemaVersion);
+        }
+
+        var operation = preflightOperationStore.Create(
+            validation.Manifest!.BackupId,
+            requestExecutionContext.UserId.Value,
+            validation.Metadata!.InstallationId,
+            validation.BindingHash!);
+
+        return validation.Result with
+        {
+            OperationId = operation.OperationId,
+            OperationExpiresAtUtc = operation.ExpiresAtUtc
+        };
+    }
+
+    public async Task<RestoreResult> RestoreAsync(
+        RestoreRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(request.Confirmation, RequiredConfirmation, StringComparison.Ordinal))
+        {
+            return new RestoreResult(RestoreStatus.Rejected, "Restore confirmation value is required.", request.BackupId);
+        }
+
+        if (!requestExecutionContext.UserId.HasValue)
+        {
+            return new RestoreResult(RestoreStatus.Rejected, "Authenticated restore context is required.", request.BackupId);
+        }
+
+        var lease = await operationCoordinator.TryAcquireExclusiveAsync(
+            LocalDatabaseOperationKind.Restore,
+            request.BackupId,
+            cancellationToken);
+        if (lease is null)
+        {
+            return new RestoreResult(RestoreStatus.Rejected, "A local database operation is already in progress.", request.BackupId);
+        }
+
+        ApplicationDatabaseRestoreJournal? journal = null;
+        string? restoreTempPath = null;
+        string? rollbackPath = null;
+
+        await using (lease)
+        {
+            try
+            {
+                var availableOperation = preflightOperationStore.ValidateAvailable(request.OperationId);
+                if (availableOperation.Status != RestorePreflightOperationConsumeStatus.Consumed)
+                {
+                    return new RestoreResult(RestoreStatus.Rejected, availableOperation.Message, request.BackupId);
+                }
+
+                var preflight = await ValidateFreshPreflightAsync(request, cancellationToken);
+                if (preflight.Result.Status != RestorePreflightStatus.Valid)
+                {
+                    return new RestoreResult(RestoreStatus.Rejected, preflight.Result.Message, request.BackupId);
+                }
+
+                var consumeResult = preflightOperationStore.Consume(
+                    request.OperationId,
+                    request.BackupId,
+                    requestExecutionContext.UserId.Value,
+                    preflight.Metadata!.InstallationId,
+                    preflight.BindingHash!);
+                if (consumeResult.Status != RestorePreflightOperationConsumeStatus.Consumed)
+                {
+                    return new RestoreResult(RestoreStatus.Rejected, consumeResult.Message, request.BackupId);
+                }
+
+                var configuration = databaseConfigurationService.GetConfiguration();
+                if (string.IsNullOrWhiteSpace(configuration.SqliteDatabasePath))
+                {
+                    return new RestoreResult(RestoreStatus.Failed, "Restore is available only for local SQLite.", request.BackupId);
+                }
+
+                var originalMetadata = await metadataService.EnsureInitializedAsync(cancellationToken);
+                journal = new ApplicationDatabaseRestoreJournal
+                {
+                    StartedAtUtc = DateTime.UtcNow,
+                    SelectedBackupId = request.BackupId,
+                    OriginalSchemaVersion = originalMetadata.DatabaseSchemaVersion,
+                    Status = DatabaseRestoreJournalStatus.Started,
+                    ApplicationVersion = originalMetadata.ApplicationVersion,
+                    InstallationId = originalMetadata.InstallationId,
+                    CreatedBy = "system"
+                };
+                dbContext.ApplicationDatabaseRestoreJournal.Add(journal);
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                await dbContext.Database.CloseConnectionAsync();
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+                var safetyBackup = await backupService.CreateBackupAsync(BackupReason.BeforeRestore, cancellationToken);
+                if (safetyBackup.Status != BackupStatus.Succeeded)
+                {
+                    await MarkFailedAsync(journal, "SafetyBackupFailed", "BeforeRestore safety backup failed.", cancellationToken);
+                    return new RestoreResult(RestoreStatus.Failed, "Restore stopped because safety backup failed.", request.BackupId);
+                }
+
+                journal.SafetyBackupId = safetyBackup.BackupId;
+                journal.Status = DatabaseRestoreJournalStatus.SafetyBackupCreated;
+                await dbContext.SaveChangesAsync(cancellationToken);
+
+                var selectedManifest = await LoadManifestByBackupIdAsync(request.BackupId, cancellationToken);
+                restoreTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{request.BackupId}.restore.tmp");
+                await sqliteBackupService.DecryptBackupToTemporaryFileAsync(selectedManifest, restoreTempPath, cancellationToken);
+                var secondValidation = await ValidatePlainDatabaseAsync(restoreTempPath, selectedManifest.DatabaseSchemaVersion, cancellationToken);
+                if (secondValidation != RestorePreflightStatus.Valid)
+                {
+                    await MarkFailedAsync(journal, "SelectedBackupInvalid", "Selected backup failed second validation.", cancellationToken);
+                    return new RestoreResult(RestoreStatus.Failed, "Selected backup failed restore validation.", request.BackupId, safetyBackup.BackupId);
+                }
+
+                await dbContext.Database.CloseConnectionAsync();
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+                rollbackPath = $"{configuration.SqliteDatabasePath}.rollback-{Guid.NewGuid():N}";
+                File.Move(configuration.SqliteDatabasePath, rollbackPath);
+                File.Move(restoreTempPath, configuration.SqliteDatabasePath);
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+                journal.Status = DatabaseRestoreJournalStatus.DatabaseReplaced;
+                journal.RestoredSchemaVersion = selectedManifest.DatabaseSchemaVersion;
+                await UpsertRestoreJournalSnapshotAsync(configuration.SqliteDatabasePath, journal, cancellationToken);
+
+                var postRestoreValidation = await ValidatePlainDatabaseAsync(
+                    configuration.SqliteDatabasePath,
+                    selectedManifest.DatabaseSchemaVersion,
+                    cancellationToken);
+                if (postRestoreValidation != RestorePreflightStatus.Valid ||
+                    !await IsSqliteDatabaseWritableAsync(configuration.SqliteDatabasePath, cancellationToken))
+                {
+                    await RollbackAsync(configuration.SqliteDatabasePath, rollbackPath, cancellationToken);
+                    journal.Status = DatabaseRestoreJournalStatus.RolledBack;
+                    await MarkFailedAsync(journal, "PostRestoreHealthFailed", "Post-restore health validation failed and rollback was attempted.", cancellationToken);
+                    return new RestoreResult(RestoreStatus.Failed, "Post-restore health validation failed; rollback was attempted.", request.BackupId, safetyBackup.BackupId);
+                }
+
+                journal.Status = DatabaseRestoreJournalStatus.Completed;
+                journal.CompletedAtUtc = DateTime.UtcNow;
+                await UpsertRestoreJournalSnapshotAsync(configuration.SqliteDatabasePath, journal, cancellationToken);
+
+                DeleteIfExists(rollbackPath);
+
+                return new RestoreResult(RestoreStatus.Completed, "Database restore completed successfully.", request.BackupId, safetyBackup.BackupId);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
+            {
+                if (journal is not null)
+                {
+                    await MarkFailedAsync(journal, "RestoreFailed", Sanitize(exception.Message), CancellationToken.None);
+                }
+
+                return new RestoreResult(RestoreStatus.Failed, "Database restore failed. Check support diagnostics.", request.BackupId);
+            }
+            finally
+            {
+                DeleteTemporaryFiles(restoreTempPath);
+            }
+        }
+    }
+
+    private async Task<RestorePreflightValidation> ValidateFreshPreflightAsync(
         RestoreRequest request,
         CancellationToken cancellationToken)
     {
@@ -28,12 +216,12 @@ public sealed class DatabaseRestoreService(
             var metadata = await metadataService.EnsureInitializedAsync(cancellationToken);
             if (!string.Equals(manifest.InstallationId, metadata.InstallationId, StringComparison.Ordinal))
             {
-                return new RestorePreflightResult(RestorePreflightStatus.WrongInstallation, "Backup belongs to a different installation.", request.BackupId);
+                return Invalid(RestorePreflightStatus.WrongInstallation, "Backup belongs to a different installation.", request.BackupId, manifest, metadata);
             }
 
             if (manifest.DatabaseSchemaVersion > DatabaseSchemaInfo.CurrentSchemaVersion)
             {
-                return new RestorePreflightResult(RestorePreflightStatus.NewerSchema, "Backup schema is newer than this application supports.", request.BackupId, manifest.DatabaseSchemaVersion);
+                return Invalid(RestorePreflightStatus.NewerSchema, "Backup schema is newer than this application supports.", request.BackupId, manifest, metadata);
             }
 
             var tempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{manifest.BackupId}.restore-preflight.tmp");
@@ -42,9 +230,14 @@ public sealed class DatabaseRestoreService(
                 localStoragePathService.EnsureRequiredDirectories();
                 await sqliteBackupService.DecryptBackupToTemporaryFileAsync(manifest, tempPath, cancellationToken);
                 var validation = await ValidatePlainDatabaseAsync(tempPath, manifest.DatabaseSchemaVersion, cancellationToken);
+                var bindingHash = ComputePreflightBindingHash(manifest, metadata);
                 return validation == RestorePreflightStatus.Valid
-                    ? new RestorePreflightResult(RestorePreflightStatus.Valid, "Backup is valid for restore.", request.BackupId, manifest.DatabaseSchemaVersion)
-                    : new RestorePreflightResult(validation, "Backup failed restore preflight validation.", request.BackupId, manifest.DatabaseSchemaVersion);
+                    ? new RestorePreflightValidation(
+                        new RestorePreflightResult(RestorePreflightStatus.Valid, "Backup is valid for restore.", request.BackupId, manifest.DatabaseSchemaVersion),
+                        manifest,
+                        metadata,
+                        bindingHash)
+                    : Invalid(validation, "Backup failed restore preflight validation.", request.BackupId, manifest, metadata);
             }
             finally
             {
@@ -57,124 +250,51 @@ public sealed class DatabaseRestoreService(
                 ? RestorePreflightStatus.ChecksumMismatch
                 : exception.Message.Contains("decrypt", StringComparison.OrdinalIgnoreCase)
                     ? RestorePreflightStatus.DecryptionFailed
-                    : RestorePreflightStatus.ManifestInvalid;
-            return new RestorePreflightResult(status, Sanitize(exception.Message), request.BackupId);
+                    : exception.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                        ? RestorePreflightStatus.BackupNotFound
+                        : RestorePreflightStatus.ManifestInvalid;
+            return new RestorePreflightValidation(new RestorePreflightResult(status, Sanitize(exception.Message), request.BackupId), null, null, null);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or System.Security.Cryptography.CryptographicException)
         {
-            return new RestorePreflightResult(RestorePreflightStatus.CorruptDatabase, "Backup could not be validated safely.", request.BackupId);
+            return new RestorePreflightValidation(
+                new RestorePreflightResult(RestorePreflightStatus.CorruptDatabase, "Backup could not be validated safely.", request.BackupId),
+                null,
+                null,
+                null);
         }
     }
 
-    public async Task<RestoreResult> RestoreAsync(
-        RestoreRequest request,
-        CancellationToken cancellationToken)
+    private static RestorePreflightValidation Invalid(
+        RestorePreflightStatus status,
+        string message,
+        string backupId,
+        BackupManifest manifest,
+        DatabaseMetadataDto metadata)
+        => new(
+            new RestorePreflightResult(status, message, backupId, manifest.DatabaseSchemaVersion),
+            manifest,
+            metadata,
+            ComputePreflightBindingHash(manifest, metadata));
+
+    private static string ComputePreflightBindingHash(BackupManifest manifest, DatabaseMetadataDto metadata)
     {
-        if (!string.Equals(request.Confirmation, RequiredConfirmation, StringComparison.Ordinal))
-        {
-            return new RestoreResult(RestoreStatus.Rejected, "Restore confirmation value is required.", request.BackupId);
-        }
+        var value = string.Join(
+            "|",
+            manifest.BackupId,
+            manifest.InstallationId,
+            manifest.ApplicationVersion,
+            manifest.DatabaseSchemaVersion,
+            manifest.CreatedAtUtc.Ticks,
+            manifest.PlainSha256,
+            manifest.EncryptedSha256,
+            manifest.Encryption.Algorithm,
+            manifest.Encryption.KeyId,
+            metadata.InstallationId,
+            metadata.DatabaseSchemaVersion,
+            metadata.ApplicationVersion);
 
-        if (!await RestoreLock.WaitAsync(0, cancellationToken))
-        {
-            return new RestoreResult(RestoreStatus.Rejected, "A database restore is already in progress.", request.BackupId);
-        }
-
-        ApplicationDatabaseRestoreJournal? journal = null;
-        string? restoreTempPath = null;
-        string? rollbackPath = null;
-
-        try
-        {
-            var preflight = await ValidateAsync(request, cancellationToken);
-            if (preflight.Status != RestorePreflightStatus.Valid)
-            {
-                return new RestoreResult(RestoreStatus.Rejected, preflight.Message, request.BackupId);
-            }
-
-            var configuration = databaseConfigurationService.GetConfiguration();
-            if (string.IsNullOrWhiteSpace(configuration.SqliteDatabasePath))
-            {
-                return new RestoreResult(RestoreStatus.Failed, "Restore is available only for local SQLite.", request.BackupId);
-            }
-
-            var originalMetadata = await metadataService.EnsureInitializedAsync(cancellationToken);
-            journal = new ApplicationDatabaseRestoreJournal
-            {
-                StartedAtUtc = DateTime.UtcNow,
-                SelectedBackupId = request.BackupId,
-                OriginalSchemaVersion = originalMetadata.DatabaseSchemaVersion,
-                Status = DatabaseRestoreJournalStatus.Started,
-                ApplicationVersion = originalMetadata.ApplicationVersion,
-                InstallationId = originalMetadata.InstallationId,
-                CreatedBy = "system"
-            };
-            dbContext.ApplicationDatabaseRestoreJournal.Add(journal);
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            var safetyBackup = await backupService.CreateBackupAsync(BackupReason.BeforeRestore, cancellationToken);
-            if (safetyBackup.Status != BackupStatus.Succeeded)
-            {
-                await MarkFailedAsync(journal, "SafetyBackupFailed", "BeforeRestore safety backup failed.", cancellationToken);
-                return new RestoreResult(RestoreStatus.Failed, "Restore stopped because safety backup failed.", request.BackupId);
-            }
-
-            journal.SafetyBackupId = safetyBackup.BackupId;
-            journal.Status = DatabaseRestoreJournalStatus.SafetyBackupCreated;
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            var selectedManifest = await LoadManifestByBackupIdAsync(request.BackupId, cancellationToken);
-            restoreTempPath = Path.Combine(localStoragePathService.PendingBackupDirectory, $"{request.BackupId}.restore.tmp");
-            await sqliteBackupService.DecryptBackupToTemporaryFileAsync(selectedManifest, restoreTempPath, cancellationToken);
-            var secondValidation = await ValidatePlainDatabaseAsync(restoreTempPath, selectedManifest.DatabaseSchemaVersion, cancellationToken);
-            if (secondValidation != RestorePreflightStatus.Valid)
-            {
-                await MarkFailedAsync(journal, "SelectedBackupInvalid", "Selected backup failed second validation.", cancellationToken);
-                return new RestoreResult(RestoreStatus.Failed, "Selected backup failed restore validation.", request.BackupId, safetyBackup.BackupId);
-            }
-
-            await dbContext.Database.CloseConnectionAsync();
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-
-            rollbackPath = $"{configuration.SqliteDatabasePath}.rollback-{Guid.NewGuid():N}";
-            File.Move(configuration.SqliteDatabasePath, rollbackPath);
-            File.Move(restoreTempPath, configuration.SqliteDatabasePath);
-
-            journal.Status = DatabaseRestoreJournalStatus.DatabaseReplaced;
-            journal.RestoredSchemaVersion = selectedManifest.DatabaseSchemaVersion;
-            await UpsertRestoreJournalSnapshotAsync(configuration.SqliteDatabasePath, journal, cancellationToken);
-
-            var health = await healthService.CheckAsync(requireWritable: true, cancellationToken);
-            if (health.Status != DatabaseHealthStatus.Healthy)
-            {
-                await RollbackAsync(configuration.SqliteDatabasePath, rollbackPath, cancellationToken);
-                journal.Status = DatabaseRestoreJournalStatus.RolledBack;
-                await MarkFailedAsync(journal, "PostRestoreHealthFailed", "Post-restore health validation failed and rollback was attempted.", cancellationToken);
-                return new RestoreResult(RestoreStatus.Failed, "Post-restore health validation failed; rollback was attempted.", request.BackupId, safetyBackup.BackupId);
-            }
-
-            journal.Status = DatabaseRestoreJournalStatus.Completed;
-            journal.CompletedAtUtc = DateTime.UtcNow;
-            await UpsertRestoreJournalSnapshotAsync(configuration.SqliteDatabasePath, journal, cancellationToken);
-
-            DeleteIfExists(rollbackPath);
-
-            return new RestoreResult(RestoreStatus.Completed, "Database restore completed successfully.", request.BackupId, safetyBackup.BackupId);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
-        {
-            if (journal is not null)
-            {
-                await MarkFailedAsync(journal, "RestoreFailed", Sanitize(exception.Message), CancellationToken.None);
-            }
-
-            return new RestoreResult(RestoreStatus.Failed, "Database restore failed. Check support diagnostics.", request.BackupId);
-        }
-        finally
-        {
-            DeleteTemporaryFiles(restoreTempPath);
-            RestoreLock.Release();
-        }
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     }
 
     private async Task<BackupManifest> LoadManifestByBackupIdAsync(string backupId, CancellationToken cancellationToken)
@@ -227,6 +347,29 @@ public sealed class DatabaseRestoreService(
         }
 
         return RestorePreflightStatus.Valid;
+    }
+
+    private static async Task<bool> IsSqliteDatabaseWritableAsync(string databasePath, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath}");
+            await connection.OpenAsync(cancellationToken);
+            await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                CREATE TABLE "__highcool_restore_write_probe" ("id" INTEGER NOT NULL PRIMARY KEY);
+                INSERT INTO "__highcool_restore_write_probe" ("id") VALUES (1);
+                """;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.RollbackAsync(cancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            return false;
+        }
     }
 
     private async Task MarkFailedAsync(
@@ -354,4 +497,10 @@ public sealed class DatabaseRestoreService(
             File.Delete(filePath);
         }
     }
+
+    private sealed record RestorePreflightValidation(
+        RestorePreflightResult Result,
+        BackupManifest? Manifest,
+        DatabaseMetadataDto? Metadata,
+        string? BindingHash);
 }
