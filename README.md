@@ -81,6 +81,8 @@ Pre-commit security hardening on 2026-07-25 removed the unsafe JWT fallback secr
 
 Batch 5 on 2026-07-25 added the authenticated `/settings/backup-restore` experience for managed local backups. The UI supports summary, history, details, manual backup, verification, restore preflight, restore execution, and retention settings. Restore now requires a server-issued, expiring, single-use preflight operation ID bound to the selected backup, authenticated user, installation, and compatibility metadata, plus the existing typed confirmation phrase. Local database endpoints are Desktop-only, with a Testing-only capability used by automated tests.
 
+Desktop runtime connection fix on 2026-07-26 changed the main Tauri WebView to load bundled frontend assets and resolve the selected backend origin through a safe runtime command. The desktop backend still binds only to `127.0.0.1:<dynamic-port>`, the frontend no longer guesses the port, and the generated app-data JWT secret is passed to `ERP.Api` through environment variables without requiring a manual `Authentication__JwtSecret` export. Windows verification remains pending.
+
 ### Health Check
 
 ```bash
@@ -166,6 +168,8 @@ Batch 3.2 desktop-foundation verification on 2026-07-25 kept automated checks gr
 Pre-commit security hardening on 2026-07-25 confirmed committed defaults no longer include the old SQL Server `sa` credential or the unsafe JWT fallback. Public password-reset and email-verification requests now return generic acceptance responses; the generated one-time tokens are delivered only through the internal delivery abstraction, which is currently a no-op outside tests until a real email provider is selected.
 
 Batch 5 desktop backup/restore verification on 2026-07-25 added the `/settings/backup-restore` page and hardened restore execution with server-issued preflight operation IDs, operation serialization, fresh preflight validation, safety backup creation, and replay/expiry/user/backup binding checks. Scheduled/cloud backups, backup deletion, final installer/updater, Windows packaging, and normal-desktop interactive approval remain pending.
+
+Desktop runtime connection fix on 2026-07-26 resolved the WSLg connection-refused path by loading bundled frontend assets, adding a runtime backend-origin handshake, and keeping the Linux backend supervisor thread alive while the child process exists. No manual JWT secret export is required for desktop startup.
 
 ### Create Or Apply Migrations
 

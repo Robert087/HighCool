@@ -6,24 +6,25 @@ Scope: basic Tauri desktop development shell around the existing React frontend 
 
 ## Summary
 
-Batch 3 adds a separated desktop workspace under `src/desktop` using Tauri 2. The shell reuses the existing React app and ASP.NET Core API, starts one tracked local backend process with the `Desktop` profile, waits for token-protected startup diagnostics, and then opens the React UI from the local ASP.NET host.
+Batch 3 adds a separated desktop workspace under `src/desktop` using Tauri 2. The shell reuses the existing React app and ASP.NET Core API, starts one tracked local backend process with the `Desktop` profile, waits for token-protected startup diagnostics, and opens the React UI.
 
 No ERP posting, procurement, inventory, payment, supplier balance, stock, shortage, reversal, or accounting calculations were changed. No cloud backup provider, final customer installer, or automatic updater was added.
 
 ## Selected architecture
 
-Selected architecture: **Option A - ASP.NET serves the React production build**.
+Selected architecture after the 2026-07-26 runtime fix: **Tauri serves bundled React assets; ASP.NET is the loopback API and safety backend**.
 
 ```text
 HighCool Desktop Process
   -> Tauri startup window
   -> tracked ASP.NET Core backend child process
-  -> http://127.0.0.1:<selected-port>/index.html
-  -> React UI and /api on the same local origin
+  -> bundled Tauri React frontend assets
+  -> safe runtime command returns http://127.0.0.1:<selected-port>
+  -> React API clients call the selected loopback backend origin
   -> local SQLite database and existing local backup/restore services
 ```
 
-This was selected because it keeps React and API traffic same-origin in desktop production mode, avoids broad CORS changes, and keeps the desktop shell out of ERP business logic.
+The original Batch 3 implementation opened the main WebView at `http://127.0.0.1:<selected-port>/index.html`. The 2026-07-26 runtime fix moved the frontend shell back into bundled Tauri assets so backend HTTP is used for API traffic only.
 
 ## Why Tauri
 
@@ -91,7 +92,7 @@ dotnet publish src/backend/Api/ERP.Api.csproj \
   --self-contained true
 ```
 
-The script first builds the React frontend and copies `src/frontend/dist` into `src/backend/Api/wwwroot`, then publishes the API into `src/desktop/backend-publish/<runtime>`. The Linux verification used `linux-x64`. `HIGHCOOL_DESKTOP_RUNTIME` can override runtime selection.
+The script first builds the React frontend and copies `src/frontend/dist` into both `src/backend/Api/wwwroot` and `src/desktop/src-tauri/assets`, then publishes the API into `src/desktop/backend-publish/<runtime>`. The Linux verification used `linux-x64`. `HIGHCOOL_DESKTOP_RUNTIME` can override runtime selection.
 
 The published backend includes `appsettings.Desktop.json` and static React assets. It does not include development databases, customer data, backups, cloud credentials, or a final installer.
 
@@ -133,15 +134,38 @@ Desktop shutdown:
 
 ## Frontend serving and API URL strategy
 
-Desktop production mode uses same-origin ASP.NET static hosting. Tauri opens:
+Desktop mode now uses bundled Tauri frontend assets. Tauri opens:
 
 ```text
-http://127.0.0.1:<selected-port>/index.html
+index.html from the Tauri asset bundle
 ```
 
-The React API helper keeps browser/web behavior unchanged. In desktop mode, it rejects non-loopback API origins when `VITE_HIGHCOOL_DESKTOP=true`, so desktop API calls cannot be pointed at arbitrary external origins through frontend configuration.
+Rust exposes `get_backend_runtime_info`, which returns only the selected `apiOrigin`, `healthUrl`, and `desktopMode`. The React API helper resolves that origin before requests, rejects non-loopback/portless origins, does not persist the origin, and keeps browser/web behavior unchanged.
 
-Existing user authentication remains required. The startup token is only for local process coordination and diagnostics; it is not a user authentication mechanism.
+Existing user authentication remains required. The startup token is only for local process coordination and diagnostics; it is not a user authentication mechanism and is never returned to the frontend.
+
+## 2026-07-26 Runtime Connection Fix
+
+The observed WSLg failure was:
+
+```text
+Could not connect to 127.0.0.1
+Connection refused
+```
+
+Root cause:
+
+- The main WebView depended on backend HTTP navigation.
+- The Linux backend child used `PR_SET_PDEATHSIG` but was spawned from a short-lived startup thread. When that thread exited after readiness, `ERP.Api` received the parent-death signal and exited.
+
+Fix:
+
+- Main WebView loads bundled frontend assets.
+- Frontend uses a runtime command to obtain the dynamic backend origin.
+- The startup thread remains alive as backend supervisor while the child exists.
+- Desktop CORS is limited to Tauri/loopback origins.
+
+WSLg verification on 2026-07-26 confirmed startup without manual `Authentication__JwtSecret`, one live backend child, loopback-only binding, `/health` = `OK`, unauthenticated `/api/auth/me` = `401`, cleanup after close, and dynamic fallback to `17601` when `17600` was occupied.
 
 ## Single-instance strategy
 

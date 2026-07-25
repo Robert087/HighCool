@@ -3231,6 +3231,73 @@
   }
 }
 
+.hc-runtime-state {
+  align-items: center;
+  background: var(--hc-color-bg);
+  color: var(--hc-color-text);
+  display: flex;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.hc-runtime-state__panel {
+  background: var(--hc-color-surface);
+  border: 1px solid var(--hc-color-border-subtle);
+  border-radius: 8px;
+  box-shadow: var(--hc-shadow-soft);
+  margin: 0 auto;
+  max-width: 36rem;
+  padding: 2rem;
+  width: 100%;
+}
+
+.hc-runtime-state__eyebrow {
+  color: var(--hc-color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
+.hc-runtime-state h1 {
+  font-size: 1.5rem;
+  margin: 0 0 0.75rem;
+}
+
+.hc-runtime-state p {
+  color: var(--hc-color-text-muted);
+  margin: 0 0 1rem;
+}
+
+.hc-runtime-state__diagnostics {
+  background: var(--hc-color-surface-muted);
+  border: 1px solid var(--hc-color-border-subtle);
+  border-radius: 8px;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.hc-runtime-state__diagnostics div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.hc-runtime-state__diagnostics dt {
+  color: var(--hc-color-text-muted);
+  font-size: 0.75rem;
+}
+
+.hc-runtime-state__diagnostics dd {
+  font-family: monospace;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.hc-runtime-state__error {
+  color: var(--hc-color-danger);
+}
+
 .hc-erp-dashboard {
   display: grid;
   gap: 1.5rem;

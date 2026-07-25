@@ -16,10 +16,20 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendDev", policy =>
     {
-        policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+        if (builder.Environment.IsEnvironment("Desktop"))
+        {
+            policy
+                .SetIsOriginAllowed(IsAllowedDesktopCorsOrigin)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+        else
+        {
+            policy
+                .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
     });
 });
 builder.Services.AddEndpointsApiExplorer();
@@ -74,5 +84,26 @@ if (app.Environment.IsEnvironment("Desktop"))
 }
 
 app.Run();
+
+static bool IsAllowedDesktopCorsOrigin(string origin)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    if (uri.Scheme is "http" or "https" &&
+        string.Equals(uri.Host, "tauri.localhost", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    return uri.Scheme == "http" &&
+        !uri.IsDefaultPort &&
+        uri.Port > 0 &&
+        (string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(uri.Host, "::1", StringComparison.OrdinalIgnoreCase));
+}
 
 public partial class Program;

@@ -9,6 +9,7 @@
     "frontendDist": "assets"
   },
   "app": {
+    "withGlobalTauri": true,
     "security": {
       "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
     },

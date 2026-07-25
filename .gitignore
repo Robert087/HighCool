@@ -32,6 +32,8 @@ src/backend/Api/wwwroot/
 src/desktop/backend-publish/
 src/desktop/target/
 src/desktop/src-tauri/target/
+src/desktop/src-tauri/assets/index.html
+src/desktop/src-tauri/assets/assets/
 src/desktop/Data/
 src/desktop/Logs/
 src/desktop/Backups/

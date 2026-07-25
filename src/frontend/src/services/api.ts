@@ -1,4 +1,5 @@
 import { getStoredAccessToken, storeAccessToken } from "../features/auth/authStorage";
+import { isAllowedLoopbackApiOrigin, resolveDesktopRuntimeInfo } from "./apiRuntime";
 
 export type ValidationErrors = Record<string, string[]>;
 export type SortDirection = "Asc" | "Desc";
@@ -35,11 +36,16 @@ export class ApiError extends Error {
   }
 }
 
-function getApiBaseUrl() {
+async function getApiBaseUrl() {
+  const desktopRuntime = await resolveDesktopRuntimeInfo();
+  if (desktopRuntime) {
+    return desktopRuntime.apiOrigin;
+  }
+
   const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL;
   if (configuredBaseUrl && configuredBaseUrl.trim().length > 0) {
     const normalized = configuredBaseUrl.replace(/\/$/, "");
-    if (import.meta.env.VITE_HIGHCOOL_DESKTOP === "true" && !isAllowedDesktopApiBaseUrl(normalized)) {
+    if (import.meta.env.VITE_HIGHCOOL_DESKTOP === "true" && !isAllowedLoopbackApiOrigin(normalized)) {
       throw new ApiError("Desktop API URL must use an explicit loopback HTTP origin.", 0);
     }
 
@@ -49,23 +55,11 @@ function getApiBaseUrl() {
   return "";
 }
 
-function isAllowedDesktopApiBaseUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" &&
-      (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]") &&
-      url.port.length > 0;
-  } catch {
-    return false;
-  }
-}
-
-function resolveRequestUrl(input: string) {
+function resolveRequestUrl(input: string, baseUrl: string) {
   if (/^https?:\/\//i.test(input)) {
     return input;
   }
 
-  const baseUrl = getApiBaseUrl();
   if (!input.startsWith("/")) {
     return baseUrl ? `${baseUrl}/${input}` : input;
   }
@@ -73,8 +67,8 @@ function resolveRequestUrl(input: string) {
   return baseUrl ? `${baseUrl}${input}` : input;
 }
 
-function getFallbackRequestUrls(input: string) {
-  if (!import.meta.env.DEV || getApiBaseUrl() || !input.startsWith("/api")) {
+function getFallbackRequestUrls(input: string, baseUrl: string) {
+  if (!import.meta.env.DEV || baseUrl || !input.startsWith("/api")) {
     return [];
   }
 
@@ -107,8 +101,9 @@ function normalizeValidationErrors(errors: ValidationErrors | undefined): Valida
 
 export async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const accessToken = getStoredAccessToken();
-  const url = resolveRequestUrl(input);
-  const fallbackUrls = getFallbackRequestUrls(input).filter((candidate) => candidate !== url);
+  const baseUrl = await getApiBaseUrl();
+  const url = resolveRequestUrl(input, baseUrl);
+  const fallbackUrls = getFallbackRequestUrls(input, baseUrl).filter((candidate) => candidate !== url);
 
   if (import.meta.env.DEV) {
     console.info(`[api] ${init?.method ?? "GET"} ${url}`);

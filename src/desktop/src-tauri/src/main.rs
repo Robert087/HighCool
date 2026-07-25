@@ -56,6 +56,14 @@ struct StartupStatusPayload {
     failed: bool,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackendRuntimeInfo {
+    api_origin: String,
+    health_url: String,
+    desktop_mode: bool,
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -71,7 +79,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             retry_startup,
             copy_support_information,
-            exit_app
+            exit_app,
+            get_backend_runtime_info
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -141,6 +150,17 @@ fn exit_app(app: AppHandle, state: State<DesktopState>) {
     log_desktop_event(&state.inner, "desktop exit requested");
     stop_backend(state.inner.clone());
     app.exit(0);
+}
+
+#[tauri::command]
+fn get_backend_runtime_info(state: State<DesktopState>) -> Result<BackendRuntimeInfo, String> {
+    let runtime = state.inner.lock().expect("desktop state poisoned");
+    let backend_url = runtime
+        .backend_url
+        .as_deref()
+        .ok_or_else(|| "Local backend is not ready.".to_string())?;
+
+    build_backend_runtime_info(backend_url)
 }
 
 fn start_backend_and_open_window(app: AppHandle, state: Arc<Mutex<DesktopRuntime>>) {
@@ -267,6 +287,7 @@ fn start_backend_and_open_window(app: AppHandle, state: Arc<Mutex<DesktopRuntime
                             );
                             let _ = startup.hide();
                         }
+                        supervise_backend_parent_thread(&state);
                         return;
                     }
                     ReadinessOutcome::EarlyExit(code) => {
@@ -454,13 +475,64 @@ fn extract_support_code(response: &str) -> Option<String> {
 }
 
 fn open_main_window(app: &AppHandle, port: u16) {
-    let url = format!("http://127.0.0.1:{port}/index.html");
-    let parsed = url.parse().expect("loopback backend URL should parse");
-    let _ = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(parsed))
+    if let Some(state) = app.try_state::<DesktopState>() {
+        log_desktop_event(
+            &state.inner,
+            &format!(
+                "opening main window from bundled assets with backend origin http://127.0.0.1:{port}"
+            ),
+        );
+    }
+
+    let _ = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("HighCool")
         .maximized(true)
         .visible(true)
         .build();
+}
+
+fn supervise_backend_parent_thread(state: &Arc<Mutex<DesktopRuntime>>) {
+    loop {
+        thread::sleep(Duration::from_secs(1));
+
+        let (status, app_data_dir) = {
+            let mut runtime = state.lock().expect("desktop state poisoned");
+            let app_data_dir = runtime.app_data_dir.clone();
+            let status = runtime
+                .child
+                .as_mut()
+                .and_then(|child| child.try_wait().ok())
+                .flatten();
+
+            if let Some(status) = status {
+                runtime.last_support.backend_exit_code = status.code();
+                runtime.child = None;
+                runtime.backend_url = None;
+                runtime.startup_token = None;
+            }
+
+            (status, app_data_dir)
+        };
+
+        if let Some(status) = status {
+            if let Some(directory) = app_data_dir.as_deref() {
+                let _ = write_desktop_log(
+                    directory,
+                    &format!("backend exited while desktop shell was running: {status}"),
+                );
+            }
+            break;
+        }
+
+        let has_child = {
+            let runtime = state.lock().expect("desktop state poisoned");
+            runtime.child.is_some()
+        };
+
+        if !has_child {
+            break;
+        }
+    }
 }
 
 fn stop_backend(state: Arc<Mutex<DesktopRuntime>>) {
@@ -541,6 +613,19 @@ fn parse_loopback_port(url: &str) -> Option<u16> {
     url.strip_prefix("http://127.0.0.1:")
         .or_else(|| url.strip_prefix("http://localhost:"))
         .and_then(|port| port.parse::<u16>().ok())
+}
+
+fn build_backend_runtime_info(backend_url: &str) -> Result<BackendRuntimeInfo, String> {
+    if parse_loopback_port(backend_url).is_none() {
+        return Err("Local backend origin is invalid.".to_string());
+    }
+
+    let api_origin = backend_url.trim_end_matches('/').to_string();
+    Ok(BackendRuntimeInfo {
+        health_url: format!("{api_origin}/health"),
+        api_origin,
+        desktop_mode: true,
+    })
 }
 
 fn request_backend_shutdown(port: u16, startup_token: &str) -> Result<(), std::io::Error> {
@@ -789,5 +874,28 @@ mod tests {
         }
 
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn runtime_info_returns_selected_loopback_origin_without_secrets() {
+        let info =
+            super::build_backend_runtime_info("http://127.0.0.1:17642").expect("runtime info");
+
+        assert_eq!(info.api_origin, "http://127.0.0.1:17642");
+        assert_eq!(info.health_url, "http://127.0.0.1:17642/health");
+        assert!(info.desktop_mode);
+
+        let payload = serde_json::to_string(&info).expect("json");
+        assert!(payload.contains("apiOrigin"));
+        assert!(!payload.contains("JwtSecret"));
+        assert!(!payload.contains("StartupToken"));
+        assert!(!payload.contains("Authentication__JwtSecret"));
+    }
+
+    #[test]
+    fn runtime_info_rejects_non_loopback_or_portless_origins() {
+        assert!(super::build_backend_runtime_info("http://127.0.0.1").is_err());
+        assert!(super::build_backend_runtime_info("https://127.0.0.1:17600").is_err());
+        assert!(super::build_backend_runtime_info("http://example.com:17600").is_err());
     }
 }

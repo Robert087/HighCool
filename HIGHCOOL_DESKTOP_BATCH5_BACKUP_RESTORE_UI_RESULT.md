@@ -41,6 +41,8 @@ Automated verification was run locally as part of Batch 5.1 after the final bloc
 
 Interactive browser verification could not be completed inside this workspace because no usable browser, Playwright, jsdom, happy-dom, or React test renderer was installed. The feature-unavailable non-Desktop behavior is covered by backend endpoint tests.
 
+Runtime follow-up on 2026-07-26: the desktop connection-refused failure was fixed outside Batch 5 backup/restore scope. The Backup & Restore page now uses the shared runtime API origin provider, so desktop requests go to the dynamically selected loopback backend instead of a guessed or build-time port.
+
 ## Git Notes
 
 No files were staged or committed by Codex for this batch. Existing unrelated package-lock changes remain outside the Batch 5 implementation.

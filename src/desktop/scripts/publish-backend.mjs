@@ -10,6 +10,7 @@ const repoRoot = resolve(desktopRoot, "../..");
 const frontendDist = resolve(repoRoot, "src/frontend/dist");
 const apiProject = resolve(repoRoot, "src/backend/Api/ERP.Api.csproj");
 const apiWwwroot = resolve(repoRoot, "src/backend/Api/wwwroot");
+const tauriAssets = resolve(desktopRoot, "src-tauri/assets");
 const runtime = process.env.HIGHCOOL_DESKTOP_RUNTIME ?? detectRuntime();
 const publishRoot = resolve(desktopRoot, "backend-publish", runtime);
 
@@ -20,6 +21,11 @@ if (!existsSync(frontendDist)) {
 await rm(apiWwwroot, { recursive: true, force: true });
 await mkdir(apiWwwroot, { recursive: true });
 await cp(frontendDist, apiWwwroot, { recursive: true });
+
+await rm(resolve(tauriAssets, "index.html"), { force: true });
+await rm(resolve(tauriAssets, "assets"), { recursive: true, force: true });
+await cp(resolve(frontendDist, "index.html"), resolve(tauriAssets, "index.html"));
+await cp(resolve(frontendDist, "assets"), resolve(tauriAssets, "assets"), { recursive: true });
 
 await rm(publishRoot, { recursive: true, force: true });
 await mkdir(publishRoot, { recursive: true });
