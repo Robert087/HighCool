@@ -27,6 +27,8 @@ public sealed record RequestEmailVerificationRequest(string Email);
 
 public sealed record ConfirmEmailVerificationRequest(string Token);
 
+public sealed record AuthRequestAcceptedResponse(string Message);
+
 public sealed record InviteUserRequest(
     string Email,
     string? FullName,
@@ -125,9 +127,7 @@ public sealed record AuditLogQuery(
 public sealed record AuthResponse(
     string AccessToken,
     DateTime ExpiresAt,
-    CurrentWorkspaceDto Workspace,
-    string? EmailVerificationToken,
-    string? PasswordResetToken);
+    CurrentWorkspaceDto Workspace);
 
 public sealed record CurrentWorkspaceDto(
     Guid UserId,

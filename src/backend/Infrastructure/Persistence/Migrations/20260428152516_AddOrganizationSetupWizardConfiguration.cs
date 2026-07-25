@@ -11,6 +11,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            var unboundedStringType = migrationBuilder.ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite"
+                ? "TEXT"
+                : "nvarchar(max)";
+
             migrationBuilder.AddColumn<bool>(
                 name: "AllowDirectPurchaseReceipt",
                 table: "Organizations",
@@ -223,19 +227,19 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "SetupCompletedBy",
                 table: "Organizations",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "SetupStep",
                 table: "Organizations",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "SetupVersion",
                 table: "Organizations",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
         }
 

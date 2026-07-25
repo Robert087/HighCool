@@ -12,11 +12,11 @@ public interface IIdentityService
 
     Task<AuthResponse> SwitchOrganizationAsync(SwitchOrganizationRequest request, CancellationToken cancellationToken);
 
-    Task<string?> RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken);
+    Task RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken);
 
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken);
 
-    Task<string?> RequestEmailVerificationAsync(RequestEmailVerificationRequest request, CancellationToken cancellationToken);
+    Task RequestEmailVerificationAsync(RequestEmailVerificationRequest request, CancellationToken cancellationToken);
 
     Task ConfirmEmailVerificationAsync(ConfirmEmailVerificationRequest request, CancellationToken cancellationToken);
 

@@ -12,6 +12,10 @@ public static class Permissions
     public const string SettingsProfilesManage = "settings.profiles.manage";
     public const string SettingsInvitationsManage = "settings.invitations.manage";
     public const string SettingsSessionsManage = "settings.sessions.manage";
+    public const string SettingsDatabaseBackupCreate = "settings.database_backup.create";
+    public const string SettingsDatabaseRestoreValidate = "settings.database_restore.validate";
+    public const string SettingsDatabaseRestoreExecute = "settings.database_restore.execute";
+    public const string SettingsDatabaseDiagnosticsRead = "settings.database_diagnostics.read";
     public const string ProcurementPurchaseOrderView = "procurement.purchase_order.view";
     public const string ProcurementPurchaseOrderCreate = "procurement.purchase_order.create";
     public const string ProcurementPurchaseOrderEdit = "procurement.purchase_order.edit";
@@ -65,6 +69,10 @@ public static class Permissions
         SettingsProfilesManage,
         SettingsInvitationsManage,
         SettingsSessionsManage,
+        SettingsDatabaseBackupCreate,
+        SettingsDatabaseRestoreValidate,
+        SettingsDatabaseRestoreExecute,
+        SettingsDatabaseDiagnosticsRead,
         ProcurementPurchaseOrderView,
         ProcurementPurchaseOrderCreate,
         ProcurementPurchaseOrderEdit,

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError, requestJson } from "./api";
 import { signup, verifyEmail } from "./authApi";
 
 describe("authApi", () => {
@@ -172,5 +173,39 @@ describe("authApi", () => {
         token: "verification-token",
       }),
     });
+  });
+
+  it("allows an explicit loopback API base URL in desktop mode", async () => {
+    vi.stubEnv("VITE_HIGHCOOL_DESKTOP", "true");
+    vi.stubEnv("VITE_API_BASE_URL", "http://127.0.0.1:17600");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ ok: true }),
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    await requestJson<{ ok: boolean }>("/api/desktop/startup-diagnostics");
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:17600/api/desktop/startup-diagnostics");
+  });
+
+  it("rejects external API base URLs in desktop mode", async () => {
+    vi.stubEnv("VITE_HIGHCOOL_DESKTOP", "true");
+    vi.stubEnv("VITE_API_BASE_URL", "https://example.com");
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    });
+
+    await expect(requestJson("/api/auth/me")).rejects.toThrow(ApiError);
   });
 });

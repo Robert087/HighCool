@@ -3,14 +3,13 @@ using System.Security.Claims;
 using System.Text;
 using ERP.Application.Security;
 using ERP.Domain.Identity;
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
 namespace ERP.Infrastructure.Security;
 
-public sealed class JwtTokenService(IConfiguration configuration)
+public sealed class JwtTokenService(JwtSigningOptions signingOptions)
 {
-    private readonly IConfiguration _configuration = configuration;
+    private readonly JwtSigningOptions _signingOptions = signingOptions;
 
     public (string AccessToken, DateTime ExpiresAt) CreateAccessToken(
         UserAccount user,
@@ -18,9 +17,9 @@ public sealed class JwtTokenService(IConfiguration configuration)
         OrganizationMembership membership,
         UserSession session)
     {
-        var issuer = _configuration["Authentication:Issuer"] ?? "HighCool";
-        var audience = _configuration["Authentication:Audience"] ?? "HighCool.Client";
-        var secret = _configuration["Authentication:JwtSecret"] ?? "highcool-dev-secret-change-me-immediately";
+        var issuer = _signingOptions.Issuer;
+        var audience = _signingOptions.Audience;
+        var secret = _signingOptions.Secret;
         var expiresAt = session.ExpiresAt;
 
         var claims = new List<Claim>

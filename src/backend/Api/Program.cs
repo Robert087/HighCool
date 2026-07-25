@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -26,6 +26,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+if (app.Environment.IsEnvironment("Desktop"))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
 
 app.UseCors("FrontendDev");
 app.UseAuthentication();
@@ -59,6 +65,13 @@ app.MapPaymentEndpoints();
 app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
 app.MapReversalEndpoints();
+app.MapLocalDatabaseEndpoints();
+app.MapDesktopEndpoints();
+
+if (app.Environment.IsEnvironment("Desktop"))
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

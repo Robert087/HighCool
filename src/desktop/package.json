@@ -1,0 +1,17 @@
+{
+  "name": "highcool-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:frontend": "npm --prefix ../frontend run build",
+    "publish:backend": "node scripts/publish-backend.mjs",
+    "prepare:desktop": "npm run build:frontend && npm run publish:backend",
+    "desktop:dev": "npm run prepare:desktop && tauri dev",
+    "desktop:build": "npm run prepare:desktop && tauri build",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
+  }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "highcool-desktop"
+version = "0.1.0"
+description = "HighCool desktop development shell"
+edition = "2021"
+license = "UNLICENSED"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+libc = "0.2"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"

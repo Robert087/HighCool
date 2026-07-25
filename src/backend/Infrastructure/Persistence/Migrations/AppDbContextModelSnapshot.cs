@@ -1933,16 +1933,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,6)")
                         .HasColumnName("ordered_qty");
 
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("decimal(18,6)")
-                        .HasColumnName("unit_price");
-
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("PurchaseOrderId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("purchase_order_id");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("unit_price");
 
                     b.Property<Guid>("UomId")
                         .HasColumnType("uniqueidentifier")
@@ -2949,6 +2949,235 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasFilter("[source_line_id] IS NOT NULL");
 
                     b.ToTable("supplier_statement_entries", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.System.ApplicationDatabaseMetadata", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ApplicationVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("application_version");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("DatabaseCreatedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("database_created_at_utc");
+
+                    b.Property<int>("DatabaseSchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("database_schema_version");
+
+                    b.Property<string>("InstallationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("installation_id");
+
+                    b.Property<DateTime>("LastSuccessfulSchemaUpgradeAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("last_successful_schema_upgrade_at_utc");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("application_database_metadata", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.System.ApplicationDatabaseRestoreJournal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ApplicationVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("application_version");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
+                        .HasColumnName("failure_message");
+
+                    b.Property<string>("InstallationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("installation_id");
+
+                    b.Property<int?>("OriginalSchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("original_schema_version");
+
+                    b.Property<int?>("RestoredSchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("restored_schema_version");
+
+                    b.Property<string>("SafetyBackupId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("safety_backup_id");
+
+                    b.Property<string>("SelectedBackupId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("selected_backup_id");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SafetyBackupId");
+
+                    b.HasIndex("SelectedBackupId");
+
+                    b.HasIndex("StartedAtUtc");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("application_database_restore_journal", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.System.ApplicationDatabaseUpgradeJournal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ApplicationVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("application_version");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<string>("FailureMessage")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
+                        .HasColumnName("failure_message");
+
+                    b.Property<int>("FromSchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("from_schema_version");
+
+                    b.Property<string>("InstallationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("installation_id");
+
+                    b.Property<string>("PreUpgradeBackupId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("pre_upgrade_backup_id");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TargetSchemaVersion")
+                        .HasColumnType("int")
+                        .HasColumnName("target_schema_version");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PreUpgradeBackupId");
+
+                    b.HasIndex("StartedAtUtc");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("application_database_upgrade_journal", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Identity.MembershipBranchAccess", b =>

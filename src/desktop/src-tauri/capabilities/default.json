@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal HighCool desktop shell permissions.",
+  "windows": ["startup", "main"],
+  "permissions": ["core:default"]
+}

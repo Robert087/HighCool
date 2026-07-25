@@ -11,7 +11,8 @@ public sealed class IdentityService(
     IRequestExecutionContext executionContext,
     JwtTokenService jwtTokenService,
     IPasswordHasher<UserAccount> passwordHasher,
-    IAuditLogService auditLogService) : IIdentityService
+    IAuditLogService auditLogService,
+    IAuthMessageDeliveryService authMessageDeliveryService) : IIdentityService
 {
     private const int DefaultLoginAttemptLimit = 5;
     private static readonly TimeSpan DefaultSessionTimeout = TimeSpan.FromHours(8);
@@ -24,6 +25,7 @@ public sealed class IdentityService(
     private readonly JwtTokenService _jwtTokenService = jwtTokenService;
     private readonly IPasswordHasher<UserAccount> _passwordHasher = passwordHasher;
     private readonly IAuditLogService _auditLogService = auditLogService;
+    private readonly IAuthMessageDeliveryService _authMessageDeliveryService = authMessageDeliveryService;
 
     public async Task<AuthResponse> SignupAsync(SignupRequest request, CancellationToken cancellationToken)
     {
@@ -305,14 +307,14 @@ public sealed class IdentityService(
         return await CreateAuthResponseAsync(user, organization, membership, request.RememberMe, "Organization switch", cancellationToken);
     }
 
-    public async Task<string?> RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken)
+    public async Task RequestPasswordResetAsync(ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
         var user = await _dbContext.UserAccounts.IgnoreQueryFilters().SingleOrDefaultAsync(entity => entity.Email == email, cancellationToken);
 
         if (user is null || user.IsDeleted)
         {
-            return null;
+            return;
         }
 
         var rawToken = SecurityTokenTools.CreateToken();
@@ -324,8 +326,8 @@ public sealed class IdentityService(
             CreatedBy = user.Email
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _authMessageDeliveryService.SendPasswordResetAsync(user.Email, rawToken, cancellationToken);
         await _auditLogService.WriteAsync("password_reset_requested", "auth", nameof(UserAccount), user.Id.ToString(), null, new { user.Email }, null, user.Id, cancellationToken);
-        return rawToken;
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken)
@@ -350,18 +352,18 @@ public sealed class IdentityService(
         await _auditLogService.WriteAsync("password_reset", "auth", nameof(UserAccount), user.Id.ToString(), null, new { user.Email }, null, user.Id, cancellationToken);
     }
 
-    public async Task<string?> RequestEmailVerificationAsync(RequestEmailVerificationRequest request, CancellationToken cancellationToken)
+    public async Task RequestEmailVerificationAsync(RequestEmailVerificationRequest request, CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
         var user = await _dbContext.UserAccounts.IgnoreQueryFilters().SingleOrDefaultAsync(entity => entity.Email == email, cancellationToken);
         if (user is null || user.EmailVerified)
         {
-            return null;
+            return;
         }
 
         var token = await CreateEmailVerificationTokenAsync(user, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return token;
+        await _authMessageDeliveryService.SendEmailVerificationAsync(user.Email, token, cancellationToken);
     }
 
     public async Task ConfirmEmailVerificationAsync(ConfirmEmailVerificationRequest request, CancellationToken cancellationToken)
@@ -518,7 +520,7 @@ public sealed class IdentityService(
         var workspace = await BuildWorkspaceAsync(user, organization, membership, cancellationToken);
         var token = _jwtTokenService.CreateAccessToken(user, organization, membership, session);
 
-        return new AuthResponse(token.AccessToken, token.ExpiresAt, workspace, null, null);
+        return new AuthResponse(token.AccessToken, token.ExpiresAt, workspace);
     }
 
     private async Task<CurrentWorkspaceDto> BuildWorkspaceAsync(

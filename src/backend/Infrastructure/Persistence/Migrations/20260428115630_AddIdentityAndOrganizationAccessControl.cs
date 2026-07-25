@@ -11,6 +11,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            var unboundedStringType = migrationBuilder.ActiveProvider == "Microsoft.EntityFrameworkCore.Sqlite"
+                ? "TEXT"
+                : "nvarchar(max)";
+
             migrationBuilder.AddColumn<Guid>(
                 name: "OrganizationId",
                 table: "warehouses",
@@ -62,7 +66,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CanceledBy",
                 table: "shortage_resolutions",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -81,7 +85,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PostedBy",
                 table: "shortage_resolutions",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -114,7 +118,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CanceledBy",
                 table: "purchase_returns",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -133,7 +137,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PostedBy",
                 table: "purchase_returns",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -152,7 +156,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CanceledBy",
                 table: "purchase_receipts",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -171,7 +175,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PostedBy",
                 table: "purchase_receipts",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -197,7 +201,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CanceledBy",
                 table: "purchase_orders",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -216,7 +220,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PostedBy",
                 table: "purchase_orders",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -235,7 +239,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "CanceledBy",
                 table: "payments",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -254,7 +258,7 @@ namespace ERP.Infrastructure.Persistence.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "PostedBy",
                 table: "payments",
-                type: "nvarchar(max)",
+                type: unboundedStringType,
                 nullable: true);
 
             migrationBuilder.AddColumn<Guid>(
@@ -299,18 +303,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Action = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Module = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ResourceType = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    ResourceId = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    BeforeData = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    AfterData = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    IpAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    UserAgent = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Action = table.Column<string>(type: unboundedStringType, nullable: false),
+                    Module = table.Column<string>(type: unboundedStringType, nullable: false),
+                    ResourceType = table.Column<string>(type: unboundedStringType, nullable: false),
+                    ResourceId = table.Column<string>(type: unboundedStringType, nullable: true),
+                    BeforeData = table.Column<string>(type: unboundedStringType, nullable: true),
+                    AfterData = table.Column<string>(type: unboundedStringType, nullable: true),
+                    IpAddress = table.Column<string>(type: unboundedStringType, nullable: true),
+                    UserAgent = table.Column<string>(type: unboundedStringType, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -327,9 +331,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UsedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -342,26 +346,26 @@ namespace ERP.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Logo = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Address = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Phone = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    TaxId = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CommercialRegistry = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    DefaultCurrency = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Timezone = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DefaultLanguage = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Logo = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Address = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Phone = table.Column<string>(type: unboundedStringType, nullable: true),
+                    TaxId = table.Column<string>(type: unboundedStringType, nullable: true),
+                    CommercialRegistry = table.Column<string>(type: unboundedStringType, nullable: true),
+                    DefaultCurrency = table.Column<string>(type: unboundedStringType, nullable: false),
+                    Timezone = table.Column<string>(type: unboundedStringType, nullable: false),
+                    DefaultLanguage = table.Column<string>(type: unboundedStringType, nullable: false),
                     RtlEnabled = table.Column<bool>(type: "bit", nullable: false),
                     FiscalYearStartMonth = table.Column<int>(type: "int", nullable: false),
-                    PurchaseOrderPrefix = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    PurchaseReceiptPrefix = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    PurchaseReturnPrefix = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    PaymentPrefix = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    PurchaseOrderPrefix = table.Column<string>(type: unboundedStringType, nullable: false),
+                    PurchaseReceiptPrefix = table.Column<string>(type: unboundedStringType, nullable: false),
+                    PurchaseReturnPrefix = table.Column<string>(type: unboundedStringType, nullable: false),
+                    PaymentPrefix = table.Column<string>(type: unboundedStringType, nullable: false),
                     DefaultWarehouseId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     AutoPostDrafts = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -382,14 +386,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     SessionTimeoutMinutes = table.Column<int>(type: "int", nullable: false),
                     ForceTwoFactor = table.Column<bool>(type: "bit", nullable: false),
                     InviteExpiryDays = table.Column<int>(type: "int", nullable: false),
-                    AllowedEmailDomains = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    AllowedEmailDomains = table.Column<string>(type: unboundedStringType, nullable: true),
                     LoginAttemptLimit = table.Column<int>(type: "int", nullable: false),
                     AuditRetentionDays = table.Column<int>(type: "int", nullable: false),
                     EnableEmailOtp = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -406,9 +410,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     UsedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -422,14 +426,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    TemplateKey = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    TemplateKey = table.Column<string>(type: unboundedStringType, nullable: true),
                     IsSystemRole = table.Column<bool>(type: "bit", nullable: false),
                     IsProtected = table.Column<bool>(type: "bit", nullable: false),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -441,20 +445,20 @@ namespace ERP.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FullName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FullName = table.Column<string>(type: unboundedStringType, nullable: false),
                     Email = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    PasswordHash = table.Column<string>(type: unboundedStringType, nullable: false),
                     EmailVerified = table.Column<bool>(type: "bit", nullable: false),
                     Status = table.Column<int>(type: "int", nullable: false),
                     LastLoginAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    LastLoginIpAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    LastLoginIpAddress = table.Column<string>(type: unboundedStringType, nullable: true),
                     FailedLoginAttempts = table.Column<int>(type: "int", nullable: false),
                     LockedUntil = table.Column<DateTime>(type: "datetime2", nullable: true),
                     IsDeleted = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -468,20 +472,20 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Email = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    FullName = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    FullName = table.Column<string>(type: unboundedStringType, nullable: true),
                     ProfileId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
                     Status = table.Column<int>(type: "int", nullable: false),
-                    TokenHash = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    TokenHash = table.Column<string>(type: unboundedStringType, nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     AcceptedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
                     RevokedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    RevokedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    RevokedBy = table.Column<string>(type: unboundedStringType, nullable: true),
                     BranchAccessMode = table.Column<int>(type: "int", nullable: false),
                     WarehouseAccessMode = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -494,19 +498,19 @@ namespace ERP.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    JobTitle = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Department = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Phone = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    DefaultBranchCode = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    JobTitle = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Department = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Phone = table.Column<string>(type: unboundedStringType, nullable: true),
+                    DefaultBranchCode = table.Column<string>(type: unboundedStringType, nullable: true),
                     DefaultWarehouseId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    LanguagePreference = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DashboardPreference = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    SignaturePlaceholder = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Avatar = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    LanguagePreference = table.Column<string>(type: unboundedStringType, nullable: false),
+                    DashboardPreference = table.Column<string>(type: unboundedStringType, nullable: true),
+                    SignaturePlaceholder = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Avatar = table.Column<string>(type: unboundedStringType, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -522,18 +526,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     OrganizationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MembershipId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     SessionTokenHash = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    DeviceName = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Browser = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    IpAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    DeviceName = table.Column<string>(type: unboundedStringType, nullable: true),
+                    Browser = table.Column<string>(type: unboundedStringType, nullable: true),
+                    IpAddress = table.Column<string>(type: unboundedStringType, nullable: true),
                     RememberMe = table.Column<bool>(type: "bit", nullable: false),
                     ExpiresAt = table.Column<DateTime>(type: "datetime2", nullable: false),
                     RevokedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    RevokedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    RevokedBy = table.Column<string>(type: unboundedStringType, nullable: true),
                     IsActive = table.Column<bool>(type: "bit", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -549,9 +553,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     RoleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     PermissionKey = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -573,9 +577,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     InvitationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     BranchCode = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -597,9 +601,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     InvitationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     RoleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -627,9 +631,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     InvitationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     WarehouseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -655,9 +659,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     BranchAccessMode = table.Column<int>(type: "int", nullable: false),
                     WarehouseAccessMode = table.Column<int>(type: "int", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -690,9 +694,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     MembershipId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     BranchCode = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -714,9 +718,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     MembershipId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     RoleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -744,9 +748,9 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     MembershipId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     WarehouseId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedBy = table.Column<string>(type: unboundedStringType, nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                    UpdatedBy = table.Column<string>(type: unboundedStringType, nullable: true)
                 },
                 constraints: table =>
                 {

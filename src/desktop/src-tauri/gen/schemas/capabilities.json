@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Minimal HighCool desktop shell permissions.","local":true,"windows":["startup","main"],"permissions":["core:default"]}}

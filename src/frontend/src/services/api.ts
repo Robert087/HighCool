@@ -38,10 +38,26 @@ export class ApiError extends Error {
 function getApiBaseUrl() {
   const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL;
   if (configuredBaseUrl && configuredBaseUrl.trim().length > 0) {
-    return configuredBaseUrl.replace(/\/$/, "");
+    const normalized = configuredBaseUrl.replace(/\/$/, "");
+    if (import.meta.env.VITE_HIGHCOOL_DESKTOP === "true" && !isAllowedDesktopApiBaseUrl(normalized)) {
+      throw new ApiError("Desktop API URL must use an explicit loopback HTTP origin.", 0);
+    }
+
+    return normalized;
   }
 
   return "";
+}
+
+function isAllowedDesktopApiBaseUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]") &&
+      url.port.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function resolveRequestUrl(input: string) {

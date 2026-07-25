@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HighCool</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f5f7fb;
+        color: #172033;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        padding: 28px;
+        box-sizing: border-box;
+      }
+
+      section {
+        width: min(420px, 100%);
+        border: 1px solid #d9e0ef;
+        border-radius: 20px;
+        background: #ffffff;
+        box-shadow: 0 20px 50px rgba(23, 32, 51, 0.12);
+        padding: 28px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0;
+        color: #516079;
+        line-height: 1.5;
+      }
+
+      .status {
+        margin-top: 22px;
+        border-radius: 14px;
+        background: #eef4ff;
+        padding: 14px;
+        color: #214b8f;
+        font-weight: 600;
+      }
+
+      .support {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #6b768a;
+      }
+
+      .actions {
+        display: none;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .primary {
+        background: #1f5eff;
+        color: white;
+      }
+
+      .secondary {
+        background: #e8edf7;
+        color: #243047;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Starting HighCool</h1>
+        <p id="message">Preparing the local desktop environment.</p>
+        <div id="status" class="status">Starting backend</div>
+        <div id="support" class="support"></div>
+        <div id="actions" class="actions">
+          <button class="primary" id="retry">Retry</button>
+          <button class="secondary" id="copy">Copy support information</button>
+          <button class="secondary" id="exit">Exit</button>
+        </div>
+      </section>
+    </main>
+    <script>
+      const { listen } = window.__TAURI__.event;
+      const { invoke } = window.__TAURI__.core;
+      const statusEl = document.getElementById("status");
+      const messageEl = document.getElementById("message");
+      const supportEl = document.getElementById("support");
+      const actionsEl = document.getElementById("actions");
+
+      listen("startup-status", ({ payload }) => {
+        statusEl.textContent = payload.title;
+        messageEl.textContent = payload.message;
+        supportEl.textContent = payload.supportCode ? `Support code: ${payload.supportCode}` : "";
+        actionsEl.style.display = payload.failed ? "flex" : "none";
+      });
+
+      document.getElementById("retry").addEventListener("click", () => invoke("retry_startup"));
+      document.getElementById("copy").addEventListener("click", async () => {
+        const text = await invoke("copy_support_information");
+        await navigator.clipboard.writeText(text);
+      });
+      document.getElementById("exit").addEventListener("click", () => invoke("exit_app"));
+    </script>
+  </body>
+</html>

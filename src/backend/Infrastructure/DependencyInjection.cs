@@ -1,3 +1,4 @@
+using ERP.Application.LocalData;
 using ERP.Application.MasterData.Items;
 using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
@@ -16,6 +17,7 @@ using ERP.Application.Shortages;
 using ERP.Application.Statements;
 using ERP.Domain.Identity;
 using ERP.Infrastructure.Inventory;
+using ERP.Infrastructure.LocalData;
 using ERP.Infrastructure.MasterData.Items;
 using ERP.Infrastructure.MasterData.Customers;
 using ERP.Infrastructure.MasterData.Suppliers;
@@ -38,6 +40,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Text;
@@ -48,33 +51,56 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment hostEnvironment)
     {
-        var provider = configuration["DatabaseProvider"] ?? "SqlServer";
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DefaultConnection is not configured.");
-
-        services.AddDbContext<AppDbContext>(options =>
-        {
-            if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        services.AddSingleton<ILocalStoragePathService>(serviceProvider => new LocalStoragePathService(
+            Options.Create(new LocalStorageOptions
             {
-                options.UseSqlite(connectionString);
-                return;
+                DataDirectory = configuration[$"{LocalStorageOptions.SectionName}:DataDirectory"],
+                BackupDirectory = configuration[$"{LocalStorageOptions.SectionName}:BackupDirectory"],
+                PendingBackupDirectory = configuration[$"{LocalStorageOptions.SectionName}:PendingBackupDirectory"],
+                LogDirectory = configuration[$"{LocalStorageOptions.SectionName}:LogDirectory"]
+            }),
+            serviceProvider.GetRequiredService<IHostEnvironment>()));
+        services.AddSingleton<IDatabaseConfigurationService, DatabaseConfigurationService>();
+        services.Configure<BackupRetentionOptions>(configuration.GetSection(BackupRetentionOptions.SectionName));
+
+        services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+        {
+            var localStoragePathService = serviceProvider.GetRequiredService<ILocalStoragePathService>();
+            var databaseConfiguration = serviceProvider.GetRequiredService<IDatabaseConfigurationService>().GetConfiguration();
+
+            if (string.Equals(databaseConfiguration.Provider, DatabaseProviderNames.Sqlite, StringComparison.OrdinalIgnoreCase))
+            {
+                localStoragePathService.EnsureRequiredDirectories();
             }
 
-            options.UseSqlServer(connectionString, sqlOptions =>
-                sqlOptions.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName));
+            DbContextOptionsConfiguration.Configure(options, databaseConfiguration);
         });
 
-        var jwtSecret = configuration["Authentication:JwtSecret"] ?? "highcool-dev-secret-change-me-immediately";
-        var issuer = configuration["Authentication:Issuer"] ?? "HighCool";
-        var audience = configuration["Authentication:Audience"] ?? "HighCool.Client";
+        var jwtOptions = JwtSigningConfiguration.Resolve(configuration, hostEnvironment);
+        var jwtSecret = jwtOptions.Secret;
+        var issuer = jwtOptions.Issuer;
+        var audience = jwtOptions.Audience;
 
         services.AddHttpContextAccessor();
         services.AddScoped<IRequestExecutionContext, HttpRequestExecutionContext>();
+        services.AddSingleton(jwtOptions);
         services.AddScoped<JwtTokenService>();
+        services.AddScoped<IAuthMessageDeliveryService, NoOpAuthMessageDeliveryService>();
         services.AddScoped<IPasswordHasher<UserAccount>, PasswordHasher<UserAccount>>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+        services.AddScoped<IApplicationDatabaseMetadataService, ApplicationDatabaseMetadataService>();
+        services.AddScoped<IDatabaseHealthService, DatabaseHealthService>();
+        services.AddSingleton<BackupManifestService>();
+        services.AddScoped<IBackupEncryptionKeyProvider, DevelopmentFileBackupEncryptionKeyProvider>();
+        services.AddScoped<SqliteDatabaseBackupService>();
+        services.AddScoped<IDatabaseBackupService>(serviceProvider => serviceProvider.GetRequiredService<SqliteDatabaseBackupService>());
+        services.AddScoped<IDatabaseUpgradeService, DatabaseUpgradeService>();
+        services.AddScoped<IDatabaseRestoreService, DatabaseRestoreService>();
+        services.AddScoped<IBackupRetentionService, BackupRetentionService>();
+        services.AddScoped<IStartupDiagnosticsService, StartupDiagnosticsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<IOrganizationAdministrationService, OrganizationAdministrationService>();

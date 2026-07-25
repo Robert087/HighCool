@@ -7,6 +7,7 @@ using ERP.Domain.Purchasing;
 using ERP.Domain.Reversals;
 using ERP.Domain.Shortages;
 using ERP.Domain.Statements;
+using ERP.Domain.System;
 using ERP.Application.Security;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
@@ -102,6 +103,12 @@ public sealed class AppDbContext(
     public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
 
     public DbSet<DocumentReversal> DocumentReversals => Set<DocumentReversal>();
+
+    public DbSet<ApplicationDatabaseMetadata> ApplicationDatabaseMetadata => Set<ApplicationDatabaseMetadata>();
+
+    public DbSet<ApplicationDatabaseUpgradeJournal> ApplicationDatabaseUpgradeJournal => Set<ApplicationDatabaseUpgradeJournal>();
+
+    public DbSet<ApplicationDatabaseRestoreJournal> ApplicationDatabaseRestoreJournal => Set<ApplicationDatabaseRestoreJournal>();
 
     public override int SaveChanges()
     {

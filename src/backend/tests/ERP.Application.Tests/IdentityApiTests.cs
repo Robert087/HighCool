@@ -6,6 +6,7 @@ using System.Text;
 using ERP.Application.Security;
 using ERP.Domain.Identity;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -14,6 +15,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -22,6 +25,10 @@ namespace ERP.Application.Tests;
 
 public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory>
 {
+    private const string TestJwtSecret = "test-signing-key-for-highcool-identity-api-tests";
+    private const string TestJwtIssuer = "HighCool.Tests";
+    private const string TestJwtAudience = "HighCool.Tests.Client";
+
     private readonly ApiFactory _factory;
 
     public IdentityApiTests(ApiFactory factory)
@@ -85,9 +92,9 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
                 ValidateAudience = true,
                 ValidateIssuerSigningKey = true,
                 ValidateLifetime = true,
-                ValidIssuer = "HighCool.Tests",
-                ValidAudience = "HighCool.Tests.Client",
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-secret-that-is-long-enough-for-jwt-signing"))
+                ValidIssuer = TestJwtIssuer,
+                ValidAudience = TestJwtAudience,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret))
             },
             out _);
         Assert.True(signup.Workspace.EmailVerified);
@@ -244,6 +251,163 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
     }
 
     [Fact]
+    public async Task ForgotPassword_ShouldReturnGenericResponse_AndDeliverTokenInternally()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+        await SignupAsync(client, "reset-owner@highcool.test", "Reset Org");
+
+        var missingResponse = await client.PostAsJsonAsync("/api/auth/forgot-password", new
+        {
+            email = "missing-reset@highcool.test"
+        });
+        var existingResponse = await client.PostAsJsonAsync("/api/auth/forgot-password", new
+        {
+            email = "reset-owner@highcool.test"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, existingResponse.StatusCode);
+
+        var missingPayload = await missingResponse.Content.ReadAsStringAsync();
+        var existingPayload = await existingResponse.Content.ReadAsStringAsync();
+        Assert.Equal(missingPayload, existingPayload);
+        Assert.DoesNotContain("token", existingPayload, StringComparison.OrdinalIgnoreCase);
+
+        var delivery = _factory.Services.GetRequiredService<TestAuthMessageDeliveryService>();
+        var reset = Assert.Single(delivery.PasswordResetMessages);
+        Assert.Equal("reset-owner@highcool.test", reset.Email);
+        Assert.False(string.IsNullOrWhiteSpace(reset.Token));
+
+        var resetResponse = await client.PostAsJsonAsync("/api/auth/reset-password", new
+        {
+            token = reset.Token,
+            password = "NewStrongPass!123"
+        });
+        Assert.Equal(HttpStatusCode.NoContent, resetResponse.StatusCode);
+
+        var oldLoginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = "reset-owner@highcool.test",
+            password = "StrongPass!123",
+            rememberMe = false
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, oldLoginResponse.StatusCode);
+
+        var newLoginResponse = await client.PostAsJsonAsync("/api/auth/login", new
+        {
+            email = "reset-owner@highcool.test",
+            password = "NewStrongPass!123",
+            rememberMe = false
+        });
+        Assert.Equal(HttpStatusCode.OK, newLoginResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task RequestEmailVerification_ShouldReturnGenericResponse_AndDeliverTokenInternally()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+        await SeedUnverifiedUserAsync(_factory, "verify-owner@highcool.test");
+
+        var missingResponse = await client.PostAsJsonAsync("/api/auth/request-email-verification", new
+        {
+            email = "missing-verify@highcool.test"
+        });
+        var existingResponse = await client.PostAsJsonAsync("/api/auth/request-email-verification", new
+        {
+            email = "verify-owner@highcool.test"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, missingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, existingResponse.StatusCode);
+
+        var missingPayload = await missingResponse.Content.ReadAsStringAsync();
+        var existingPayload = await existingResponse.Content.ReadAsStringAsync();
+        Assert.Equal(missingPayload, existingPayload);
+        Assert.DoesNotContain("token", existingPayload, StringComparison.OrdinalIgnoreCase);
+
+        var delivery = _factory.Services.GetRequiredService<TestAuthMessageDeliveryService>();
+        var verification = Assert.Single(delivery.EmailVerificationMessages);
+        Assert.Equal("verify-owner@highcool.test", verification.Email);
+        Assert.False(string.IsNullOrWhiteSpace(verification.Token));
+
+        var verifyResponse = await client.PostAsJsonAsync("/api/auth/verify-email", new
+        {
+            token = verification.Token
+        });
+        Assert.Equal(HttpStatusCode.NoContent, verifyResponse.StatusCode);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await dbContext.UserAccounts.IgnoreQueryFilters().SingleAsync(entity => entity.Email == "verify-owner@highcool.test");
+        Assert.True(user.EmailVerified);
+    }
+
+    [Fact]
+    public async Task AuthResponses_ShouldNotExposeVerificationOrResetTokens()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+
+        var signupResponse = await client.PostAsJsonAsync("/api/auth/signup", new
+        {
+            fullName = "No Token Owner",
+            email = "no-token-owner@highcool.test",
+            password = "StrongPass!123",
+            organizationName = "No Token Org"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, signupResponse.StatusCode);
+        var payload = await signupResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("verificationToken", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("resetToken", payload, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_ShouldFailClosedOutsideDevelopment()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var environment = new TestHostEnvironment("Production");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.Resolve(configuration, environment));
+        Assert.Contains("JwtSecret", exception.Message);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_ShouldRejectPlaceholderSecrets()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:JwtSecret"] = "this-is-a-change-me-placeholder-secret",
+            })
+            .Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.Resolve(configuration, new TestHostEnvironment("Production")));
+        Assert.Contains("placeholder", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_ShouldAcceptValidSecret()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:JwtSecret"] = "valid-highcool-signing-key-with-48-characters-minimum",
+                ["Authentication:Issuer"] = "Issuer",
+                ["Authentication:Audience"] = "Audience"
+            })
+            .Build();
+
+        var options = JwtSigningConfiguration.Resolve(configuration, new TestHostEnvironment("Production"));
+
+        Assert.Equal("valid-highcool-signing-key-with-48-characters-minimum", options.Secret);
+        Assert.Equal("Issuer", options.Issuer);
+        Assert.Equal("Audience", options.Audience);
+    }
+
+    [Fact]
     public async Task Owner_ShouldAccessWorkspaceSettingsAndAuditEndpoints()
     {
         await _factory.ResetDatabaseAsync();
@@ -263,7 +427,8 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
         var login = await loginResponse.Content.ReadFromJsonAsync<AuthApiResponse>();
         Assert.NotNull(login);
 
-        var organizationResponse = await WithAuth(client, login!.AccessToken).GetAsync("/api/settings/organization");
+        Assert.False(string.IsNullOrWhiteSpace(login!.AccessToken));
+        var organizationResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/settings/organization");
         Assert.Equal(HttpStatusCode.OK, organizationResponse.StatusCode);
 
         var securityResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/settings/security");
@@ -600,6 +765,66 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
         return new TestMember(user.Id, membership.Id);
     }
 
+    private static async Task SeedUnverifiedUserAsync(ApiFactory factory, string email)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<UserAccount>>();
+
+        var organization = new Organization
+        {
+            Name = "Verification Org",
+            DefaultCurrency = "EGP",
+            Timezone = "Africa/Cairo",
+            DefaultLanguage = "en",
+            PurchaseOrderPrefix = "PO",
+            PurchaseReceiptPrefix = "PR",
+            PurchaseReturnPrefix = "RTN",
+            PaymentPrefix = "PAY",
+            CreatedBy = email
+        };
+        var user = new UserAccount
+        {
+            FullName = "Verification Owner",
+            Email = email,
+            EmailVerified = false,
+            Status = UserAccountStatus.Active,
+            CreatedBy = email
+        };
+        user.PasswordHash = passwordHasher.HashPassword(user, "StrongPass!123");
+
+        dbContext.Organizations.Add(organization);
+        dbContext.UserAccounts.Add(user);
+        await dbContext.SaveChangesAsync();
+
+        var profile = new UserProfile
+        {
+            OrganizationId = organization.Id,
+            LanguagePreference = "en",
+            CreatedBy = email
+        };
+        dbContext.UserProfiles.Add(profile);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.OrganizationSecuritySettings.Add(new OrganizationSecuritySettings
+        {
+            OrganizationId = organization.Id,
+            CreatedBy = email
+        });
+        dbContext.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrganizationId = organization.Id,
+            UserId = user.Id,
+            ProfileId = profile.Id,
+            Status = MembershipStatus.Active,
+            IsOwner = true,
+            BranchAccessMode = AccessScopeMode.All,
+            WarehouseAccessMode = AccessScopeMode.All,
+            CreatedBy = email
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
     private static async Task<TestRole> GetRoleAsync(ApiFactory factory, Guid organizationId, string roleTemplateKey)
     {
         await using var scope = factory.Services.CreateAsyncScope();
@@ -706,21 +931,26 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
                 {
                     ["DatabaseProvider"] = "Sqlite",
                     ["ConnectionStrings:DefaultConnection"] = $"Data Source={_databasePath}",
-                    ["Authentication:JwtSecret"] = "test-secret-that-is-long-enough-for-jwt-signing",
-                    ["Authentication:Issuer"] = "HighCool.Tests",
-                    ["Authentication:Audience"] = "HighCool.Tests.Client"
+                    ["Authentication:JwtSecret"] = TestJwtSecret,
+                    ["Authentication:Issuer"] = TestJwtIssuer,
+                    ["Authentication:Audience"] = TestJwtAudience
                 });
             });
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
+                services.RemoveAll<IAuthMessageDeliveryService>();
+                services.RemoveAll<JwtSigningOptions>();
                 services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                services.AddSingleton(new JwtSigningOptions(TestJwtSecret, TestJwtIssuer, TestJwtAudience));
+                services.AddSingleton<TestAuthMessageDeliveryService>();
+                services.AddScoped<IAuthMessageDeliveryService>(provider => provider.GetRequiredService<TestAuthMessageDeliveryService>());
                 services.PostConfigureAll<JwtBearerOptions>(options =>
                 {
-                    options.TokenValidationParameters.ValidIssuer = "HighCool.Tests";
-                    options.TokenValidationParameters.ValidAudience = "HighCool.Tests.Client";
-                    options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-secret-that-is-long-enough-for-jwt-signing"));
+                    options.TokenValidationParameters.ValidIssuer = TestJwtIssuer;
+                    options.TokenValidationParameters.ValidAudience = TestJwtAudience;
+                    options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSecret));
                 });
             });
         }
@@ -742,6 +972,7 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
 
         public async Task ResetDatabaseAsync()
         {
+            Services.GetRequiredService<TestAuthMessageDeliveryService>().Clear();
             await using var scope = Services.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await dbContext.Database.EnsureDeletedAsync();
@@ -770,6 +1001,43 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
     public sealed record AuthApiResponse(
         string AccessToken,
         DateTime ExpiresAt,
-        WorkspaceApiResponse Workspace,
-        string? EmailVerificationToken);
+        WorkspaceApiResponse Workspace);
+
+    public sealed class TestAuthMessageDeliveryService : IAuthMessageDeliveryService
+    {
+        public List<DeliveredToken> PasswordResetMessages { get; } = [];
+
+        public List<DeliveredToken> EmailVerificationMessages { get; } = [];
+
+        public Task SendPasswordResetAsync(string email, string resetToken, CancellationToken cancellationToken)
+        {
+            PasswordResetMessages.Add(new DeliveredToken(email, resetToken));
+            return Task.CompletedTask;
+        }
+
+        public Task SendEmailVerificationAsync(string email, string verificationToken, CancellationToken cancellationToken)
+        {
+            EmailVerificationMessages.Add(new DeliveredToken(email, verificationToken));
+            return Task.CompletedTask;
+        }
+
+        public void Clear()
+        {
+            PasswordResetMessages.Clear();
+            EmailVerificationMessages.Clear();
+        }
+    }
+
+    public sealed record DeliveredToken(string Email, string Token);
+
+    private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+
+        public string ApplicationName { get; set; } = "HighCool.Tests";
+
+        public string ContentRootPath { get; set; } = Path.GetTempPath();
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
 }

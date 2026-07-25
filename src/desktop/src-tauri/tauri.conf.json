@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "HighCool Desktop",
+  "version": "0.1.0",
+  "identifier": "com.highcool.desktop",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "frontendDist": "assets"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    },
+    "windows": [
+      {
+        "label": "startup",
+        "title": "HighCool",
+        "url": "startup.html",
+        "width": 520,
+        "height": 420,
+        "resizable": false,
+        "center": true,
+        "visible": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "resources": [
+      "../backend-publish/linux-x64"
+    ]
+  }
+}

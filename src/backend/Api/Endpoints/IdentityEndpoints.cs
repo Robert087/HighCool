@@ -43,10 +43,11 @@ public static class IdentityEndpoints
         => ExecuteAsync(() => service.SwitchOrganizationAsync(request, cancellationToken));
 
     private static Task<IResult> ForgotPasswordAsync(ForgotPasswordRequest request, IIdentityService service, CancellationToken cancellationToken)
-        => ExecuteAsync(async () => Results.Ok(new
+        => ExecuteAsync(async () =>
         {
-            token = await service.RequestPasswordResetAsync(request, cancellationToken)
-        }));
+            await service.RequestPasswordResetAsync(request, cancellationToken);
+            return Results.Ok(new AuthRequestAcceptedResponse("If the account can receive password reset instructions, they will be sent."));
+        });
 
     private static Task<IResult> ResetPasswordAsync(ResetPasswordRequest request, IIdentityService service, CancellationToken cancellationToken)
         => ExecuteAsync(async () =>
@@ -56,10 +57,11 @@ public static class IdentityEndpoints
         });
 
     private static Task<IResult> RequestEmailVerificationAsync(RequestEmailVerificationRequest request, IIdentityService service, CancellationToken cancellationToken)
-        => ExecuteAsync(async () => Results.Ok(new
+        => ExecuteAsync(async () =>
         {
-            token = await service.RequestEmailVerificationAsync(request, cancellationToken)
-        }));
+            await service.RequestEmailVerificationAsync(request, cancellationToken);
+            return Results.Ok(new AuthRequestAcceptedResponse("If the account requires email verification, instructions will be sent."));
+        });
 
     private static Task<IResult> VerifyEmailAsync(ConfirmEmailVerificationRequest request, IIdentityService service, CancellationToken cancellationToken)
         => ExecuteAsync(async () =>
