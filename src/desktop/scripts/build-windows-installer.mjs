@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { formatSpawnFailure, resolveExecutable } from "./command-utils.mjs";
+import { formatSpawnFailure, LaunchResolutionError, resolveLaunchSpec } from "./command-utils.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDirectory, "..");
@@ -91,17 +91,40 @@ function collectExeFiles(root) {
 
 function run(command, args, options = {}) {
   const label = options.label ?? command;
-  const executable = resolveExecutable(command);
-  const result = spawnSync(executable, args, {
-    cwd: options.cwd ?? repoRoot,
+  const cwd = options.cwd ?? repoRoot;
+  let launch;
+
+  try {
+    launch = resolveLaunchSpec(command, args, { cwd, env: process.env });
+  } catch (error) {
+    if (error instanceof LaunchResolutionError) {
+      throw error;
+    }
+
+    throw new Error(`${label} launch resolution failed: ${error.message}`);
+  }
+
+  const result = spawnSync(launch.executable, launch.args, {
+    cwd,
     stdio: options.validateOutput ? "pipe" : "inherit",
     encoding: options.validateOutput ? "utf8" : undefined,
     env: process.env,
+    shell: false,
   });
 
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  if (result.status !== 0) {
-    throw new Error(formatSpawnFailure({ label, command, executable, args, result }));
+  if (result.status !== 0 || result.error) {
+    throw new Error(
+      formatSpawnFailure({
+        label,
+        command,
+        executable: launch.executable,
+        args: launch.args,
+        result,
+        cwd,
+        npmExecPathPresent: launch.npmExecPathPresent,
+      }),
+    );
   }
 
   if (options.validateOutput && !options.validateOutput(output)) {
