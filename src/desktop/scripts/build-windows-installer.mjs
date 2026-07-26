@@ -8,8 +8,12 @@ import { formatSpawnFailure, LaunchResolutionError, resolveLaunchSpec } from "./
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDirectory, "..");
 const repoRoot = resolve(desktopRoot, "../..");
+const frontendRoot = resolve(desktopRoot, "../frontend");
+const backendRoot = resolve(desktopRoot, "../backend");
+const srcTauriRoot = resolve(desktopRoot, "src-tauri");
+const artifactsRoot = resolve(repoRoot, "artifacts");
 const windowsTarget = "x86_64-pc-windows-msvc";
-const bundleConfig = resolve(desktopRoot, "src-tauri", "tauri.bundle.conf.json");
+const bundleConfig = resolve(srcTauriRoot, "tauri.bundle.conf.json");
 
 if (process.platform !== "win32") {
   console.error("HighCool Windows installer builds must run on native Windows with the MSVC Rust target.");
@@ -21,24 +25,25 @@ if (process.platform !== "win32") {
   process.exit(1);
 }
 
-run("node", ["--version"], { label: "Node.js" });
-run("npm", ["--version"], { label: "npm" });
-run("dotnet", ["--info"], { label: ".NET SDK" });
-run("rustc", ["--version"], { label: "rustc" });
-run("cargo", ["--version"], { label: "cargo" });
+run("node", ["--version"], { cwd: desktopRoot, label: "Node.js" });
+run("npm", ["--version"], { cwd: desktopRoot, label: "npm" });
+run("dotnet", ["--info"], { cwd: backendRoot, label: ".NET SDK" });
+run("rustc", ["--version"], { cwd: desktopRoot, label: "rustc" });
+run("cargo", ["--version"], { cwd: desktopRoot, label: "cargo" });
 run("rustup", ["target", "list", "--installed"], {
+  cwd: desktopRoot,
   label: "Rust installed targets",
   validateOutput: (output) => output.includes(windowsTarget),
   failureMessage: `Rust target ${windowsTarget} is not installed. Run: rustup target add ${windowsTarget}`,
 });
-run("npx", ["tauri", "--version"], { label: "Tauri CLI" });
+run("tauri", ["--version"], { cwd: desktopRoot, label: "Tauri CLI" });
 run("npm", ["run", "check:versions"], { cwd: desktopRoot, label: "desktop version check" });
 
 await cleanGeneratedWindowsBundles();
 
 run("npm", ["run", "build:frontend"], { cwd: desktopRoot, label: "frontend production build" });
 run("npm", ["run", "publish:backend:windows"], { cwd: desktopRoot, label: "win-x64 backend publish" });
-run("npx", ["tauri", "build", "--config", bundleConfig, "--target", windowsTarget, "--bundles", "nsis"], {
+run("tauri", ["build", "--config", bundleConfig, "--target", windowsTarget, "--bundles", "nsis"], {
   cwd: desktopRoot,
   label: "Tauri NSIS bundle",
 });
@@ -57,7 +62,7 @@ async function cleanGeneratedWindowsBundles() {
   const candidates = [
     resolve(desktopRoot, "backend-publish"),
     resolve(desktopRoot, "target", windowsTarget, "release", "bundle", "nsis"),
-    resolve(desktopRoot, "src-tauri", "target", windowsTarget, "release", "bundle", "nsis"),
+    resolve(srcTauriRoot, "target", windowsTarget, "release", "bundle", "nsis"),
   ];
 
   for (const candidate of candidates) {
@@ -68,7 +73,7 @@ async function cleanGeneratedWindowsBundles() {
 function findNsisInstallers() {
   const roots = [
     resolve(desktopRoot, "target", windowsTarget, "release", "bundle", "nsis"),
-    resolve(desktopRoot, "src-tauri", "target", windowsTarget, "release", "bundle", "nsis"),
+    resolve(srcTauriRoot, "target", windowsTarget, "release", "bundle", "nsis"),
   ];
 
   return roots.flatMap((root) => collectExeFiles(root));
@@ -91,11 +96,15 @@ function collectExeFiles(root) {
 
 function run(command, args, options = {}) {
   const label = options.label ?? command;
-  const cwd = options.cwd ?? repoRoot;
+  const cwd = options.cwd ?? desktopRoot;
   let launch;
 
   try {
-    launch = resolveLaunchSpec(command, args, { cwd, env: process.env });
+    launch = resolveLaunchSpec(command, args, {
+      cwd,
+      env: process.env,
+      desktopRoot,
+    });
   } catch (error) {
     if (error instanceof LaunchResolutionError) {
       throw error;

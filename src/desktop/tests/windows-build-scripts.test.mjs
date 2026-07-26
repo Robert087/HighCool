@@ -1,25 +1,30 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  defaultDesktopRoot,
   formatSpawnFailure,
   LaunchResolutionError,
   resolveLaunchSpec,
+  resolveTauriCliPath,
+  resolveTauriLaunchSpec,
 } from "../scripts/command-utils.mjs";
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(desktopRoot, "../..");
 const fakeNodeExecPath = process.execPath;
 const fakeNpmExecPath = resolve(desktopRoot, "node_modules", "npm", "bin", "npm-cli.js");
-const fakeNpxExecPath = resolve(desktopRoot, "node_modules", "npm", "bin", "npx-cli.js");
 const tauriCliEntry = resolve(desktopRoot, "node_modules", "@tauri-apps/cli", "tauri.js");
 
 function win32LaunchEnv(overrides = {}) {
   return {
     platform: "win32",
     execPath: fakeNodeExecPath,
-    cwd: desktopRoot,
+    cwd: repoRoot,
+    desktopRoot,
     env: {
       npm_execpath: fakeNpmExecPath,
       ...overrides.env,
@@ -41,10 +46,10 @@ test("windows installer script fails early outside native Windows with PowerShel
   assert.match(script, /Set-Location C:\\\\Path\\\\To\\\\HighCool\\\\src\\\\desktop/);
   assert.match(script, /x86_64-pc-windows-msvc/);
   assert.match(script, /tauri\.bundle\.conf\.json/);
-  assert.match(script, /"--config", bundleConfig/);
-  assert.match(script, /--bundles", "nsis"/);
+  assert.match(script, /run\("tauri", \["build", "--config", bundleConfig/);
   assert.match(script, /resolveLaunchSpec\(command, args/);
   assert.match(script, /shell: false/);
+  assert.doesNotMatch(script, /\bnpx\b/);
 });
 
 test("desktop package exposes repeatable Windows build scripts", async () => {
@@ -53,6 +58,7 @@ test("desktop package exposes repeatable Windows build scripts", async () => {
   assert.equal(packageJson.scripts["publish:backend:windows"], "node scripts/publish-backend.mjs --runtime win-x64");
   assert.equal(packageJson.scripts["prepare:desktop:windows"], "npm run build:frontend && npm run publish:backend:windows");
   assert.equal(packageJson.scripts["desktop:build:windows"], "node scripts/build-windows-installer.mjs");
+  assert.equal(packageJson.devDependencies["@tauri-apps/cli"], "2.11.4");
 });
 
 test("backend publish resource is only configured for bundle packaging", async () => {
@@ -76,6 +82,111 @@ test("windows resource generation has a real ico and package metadata", async ()
   assert.match(cargoToml, /OriginalFilename = "HighCool\.exe"/);
 });
 
+test("tauri resolves through @tauri-apps/cli/tauri.js", () => {
+  const launch = resolveTauriLaunchSpec(["--version"], {
+    desktopRoot,
+    execPath: fakeNodeExecPath,
+  });
+
+  assert.equal(launch.executable, fakeNodeExecPath);
+  assert.equal(launch.args[0], tauriCliEntry);
+  assert.deepEqual(launch.args, [tauriCliEntry, "--version"]);
+  assert.equal(launch.resolution, "tauri-cli");
+});
+
+test("tauri resolution is independent of process.cwd()", () => {
+  const originalCwd = process.cwd();
+
+  try {
+    process.chdir(repoRoot);
+    const launch = resolveTauriLaunchSpec(["--version"], {
+      desktopRoot,
+      execPath: fakeNodeExecPath,
+    });
+
+    assert.equal(launch.args[0], tauriCliEntry);
+    assert.notEqual(launch.args[0], resolve(repoRoot, "node_modules", "@tauri-apps", "cli", "tauri.js"));
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
+test("tauri resolution works when cwd is the repository root", () => {
+  const launch = resolveLaunchSpec("tauri", ["--version"], win32LaunchEnv({ cwd: repoRoot }));
+
+  assert.equal(launch.args[0], tauriCliEntry);
+  assert.equal(launch.executable, fakeNodeExecPath);
+});
+
+test("tauri preserves arguments containing spaces as separate argv entries", () => {
+  const spacedConfig = "C:\\Program Files\\HighCool\\tauri.bundle.conf.json";
+  const launch = resolveTauriLaunchSpec(
+    ["build", "--config", spacedConfig, "--target", "x86_64-pc-windows-msvc", "--bundles", "nsis"],
+    { desktopRoot, execPath: fakeNodeExecPath },
+  );
+
+  assert.deepEqual(launch.args, [
+    tauriCliEntry,
+    "build",
+    "--config",
+    spacedConfig,
+    "--target",
+    "x86_64-pc-windows-msvc",
+    "--bundles",
+    "nsis",
+  ]);
+});
+
+test("tauri never invokes npx.cmd or npx-cli.js", () => {
+  const launch = resolveLaunchSpec(
+    "tauri",
+    ["build", "--bundles", "nsis"],
+    win32LaunchEnv({ cwd: repoRoot }),
+  );
+
+  assert.notEqual(launch.executable, "npx.cmd");
+  assert.notEqual(launch.args[0], "npx.cmd");
+  assert.doesNotMatch(launch.args[0], /npx-cli\.js$/);
+  assert.match(launch.args[0], /[\\/]@tauri-apps[\\/]cli[\\/]tauri\.js$/);
+});
+
+test("missing @tauri-apps/cli throws a deterministic error", async () => {
+  const tempDesktopRoot = await mkdtemp(join(tmpdir(), "highcool-desktop-missing-tauri-"));
+  await writeFile(
+    join(tempDesktopRoot, "package.json"),
+    JSON.stringify({ name: "highcool-desktop-test", private: true }),
+  );
+
+  try {
+    assert.throws(
+      () => resolveTauriCliPath(tempDesktopRoot),
+      (error) => {
+        assert.equal(error instanceof LaunchResolutionError, true);
+        assert.match(error.message, /command: tauri/);
+        assert.match(error.message, /desktop root:/);
+        assert.match(error.message, /expected package: @tauri-apps\/cli/);
+        assert.match(error.message, /package resolution error:/);
+        assert.doesNotMatch(error.message, /npm_execpath/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(tempDesktopRoot, { recursive: true, force: true });
+  }
+});
+
+test("resolveLaunchSpec rejects npx without falling back to npx-cli.js", () => {
+  assert.throws(
+    () => resolveLaunchSpec("npx", ["tauri", "--version"], win32LaunchEnv({ cwd: repoRoot })),
+    (error) => {
+      assert.equal(error instanceof LaunchResolutionError, true);
+      assert.match(error.message, /npx is not supported/);
+      assert.doesNotMatch(error.message, /npx-cli\.js/);
+      return true;
+    },
+  );
+});
+
 test("npm resolves to node executable plus npm_execpath on Windows", () => {
   const launch = resolveLaunchSpec("npm", ["--version"], win32LaunchEnv());
 
@@ -89,28 +200,6 @@ test("npm preserves original arguments in order on Windows", () => {
   const launch = resolveLaunchSpec("npm", ["run", "build:frontend"], win32LaunchEnv());
 
   assert.deepEqual(launch.args, [fakeNpmExecPath, "run", "build:frontend"]);
-});
-
-test("npm preserves arguments containing spaces as separate argv entries", () => {
-  const spacedConfig = "C:\\Program Files\\HighCool\\tauri.bundle.conf.json";
-  const launch = resolveLaunchSpec(
-    "npm",
-    ["run", "build:frontend", "--", "--config", spacedConfig],
-    win32LaunchEnv(),
-  );
-
-  assert.deepEqual(launch.args, [fakeNpmExecPath, "run", "build:frontend", "--", "--config", spacedConfig]);
-  assert.notEqual(launch.args.at(-1), launch.args.slice(-2).join(" "));
-});
-
-test("npx resolves through local package CLI JS entry instead of npx.cmd", () => {
-  const launch = resolveLaunchSpec("npx", ["tauri", "--version"], win32LaunchEnv());
-
-  assert.equal(launch.executable, fakeNodeExecPath);
-  assert.deepEqual(launch.args, [tauriCliEntry, "--version"]);
-  assert.notEqual(launch.executable, "npx.cmd");
-  assert.notEqual(launch.args[0], "npx.cmd");
-  assert.equal(launch.resolution, "local-package-cli");
 });
 
 test("native commands remain unchanged on Windows", () => {
@@ -165,6 +254,10 @@ test("installer runner launch resolution does not require shell execution", asyn
 
   assert.doesNotMatch(script, /shell:\s*true/);
   assert.match(script, /shell:\s*false/);
+});
+
+test("defaultDesktopRoot matches the desktop package beside command-utils.mjs", () => {
+  assert.equal(defaultDesktopRoot, desktopRoot);
 });
 
 function packageJsonScript(packageJsonContents, scriptName) {

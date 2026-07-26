@@ -1,5 +1,10 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const commandUtilsDirectory = dirname(fileURLToPath(import.meta.url));
+export const defaultDesktopRoot = resolve(commandUtilsDirectory, "..");
 
 export class LaunchResolutionError extends Error {
   constructor(message) {
@@ -12,14 +17,20 @@ export function resolveLaunchSpec(command, args, options = {}) {
   const platform = options.platform ?? process.platform;
   const env = options.env ?? process.env;
   const execPath = options.execPath ?? process.execPath;
-  const cwd = options.cwd ?? process.cwd();
+  const desktopRoot = options.desktopRoot ?? defaultDesktopRoot;
 
   if (command === "npm") {
     return resolveNpmLaunchSpec(command, args, execPath, env);
   }
 
+  if (command === "tauri") {
+    return resolveTauriLaunchSpec(args, { execPath, desktopRoot });
+  }
+
   if (command === "npx") {
-    return resolveNpxLaunchSpec(command, args, execPath, env, cwd);
+    throw new LaunchResolutionError(
+      "npx is not supported. Resolve local CLI packages directly, for example @tauri-apps/cli/tauri.js.",
+    );
   }
 
   if (platform === "win32") {
@@ -34,6 +45,56 @@ export function resolveLaunchSpec(command, args, options = {}) {
     command,
     executable: command,
     args: [...args],
+  };
+}
+
+export function resolveTauriCliPath(desktopRoot = defaultDesktopRoot) {
+  const packageName = "@tauri-apps/cli";
+  const requireFromDesktop = createRequire(resolve(desktopRoot, "package.json"));
+
+  let packageJsonPath;
+  try {
+    packageJsonPath = requireFromDesktop.resolve(`${packageName}/package.json`);
+  } catch (error) {
+    throw new LaunchResolutionError(
+      [
+        "tauri launch failed: could not resolve @tauri-apps/cli from the desktop package dependency tree.",
+        "command: tauri",
+        `desktop root: ${desktopRoot}`,
+        `expected package: ${packageName}`,
+        `package resolution error: ${error.message}`,
+      ].join("\n"),
+    );
+  }
+
+  const packageDirectory = dirname(packageJsonPath);
+  const tauriCliPath = join(packageDirectory, "tauri.js");
+  if (!existsSync(tauriCliPath)) {
+    throw new LaunchResolutionError(
+      [
+        "tauri launch failed: @tauri-apps/cli resolved but tauri.js was not found.",
+        "command: tauri",
+        `desktop root: ${desktopRoot}`,
+        `expected package: ${packageName}`,
+        `resolved package directory: ${packageDirectory}`,
+        `expected cli entry: ${tauriCliPath}`,
+      ].join("\n"),
+    );
+  }
+
+  return tauriCliPath;
+}
+
+export function resolveTauriLaunchSpec(args, options = {}) {
+  const execPath = options.execPath ?? process.execPath;
+  const desktopRoot = options.desktopRoot ?? defaultDesktopRoot;
+  const tauriCliPath = resolveTauriCliPath(desktopRoot);
+
+  return {
+    command: "tauri",
+    executable: execPath,
+    args: [tauriCliPath, ...args],
+    resolution: "tauri-cli",
   };
 }
 
@@ -52,113 +113,6 @@ function resolveNpmLaunchSpec(command, args, execPath, env) {
     npmExecPathPresent: true,
     resolution: "npm-cli",
   };
-}
-
-function resolveNpxLaunchSpec(command, args, execPath, env, cwd) {
-  const [toolName, ...toolArgs] = args;
-  if (!toolName) {
-    throw new LaunchResolutionError("npx launch failed: a tool name is required.");
-  }
-
-  const localCliEntry = findLocalPackageBinJs(toolName, cwd);
-  if (localCliEntry) {
-    return {
-      command,
-      executable: execPath,
-      args: [localCliEntry, ...toolArgs],
-      npmExecPathPresent: Boolean(env.npm_execpath?.trim()),
-      resolution: "local-package-cli",
-    };
-  }
-
-  const npmExecPath = env.npm_execpath;
-  if (!npmExecPath || npmExecPath.trim() === "") {
-    throw new LaunchResolutionError(
-      "npx launch failed: process.env.npm_execpath is missing or empty and no local package CLI entry was found.",
-    );
-  }
-
-  const npxCliEntry = join(dirname(npmExecPath), "npx-cli.js");
-  if (!existsSync(npxCliEntry)) {
-    throw new LaunchResolutionError(
-      `npx launch failed: npx-cli.js was not found next to npm_execpath at ${npxCliEntry}.`,
-    );
-  }
-
-  return {
-    command,
-    executable: execPath,
-    args: [npxCliEntry, ...args],
-    npmExecPathPresent: true,
-    resolution: "npx-cli",
-  };
-}
-
-function findLocalPackageBinJs(toolName, cwd) {
-  const nodeModules = resolve(cwd, "node_modules");
-  if (!existsSync(nodeModules)) {
-    return null;
-  }
-
-  const directPackageBin = readPackageBinEntry(resolve(nodeModules, toolName), toolName);
-  if (directPackageBin) {
-    return directPackageBin;
-  }
-
-  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) {
-      continue;
-    }
-
-    const packageDirectory = resolve(nodeModules, entry.name);
-    if (entry.isDirectory() && entry.name.startsWith("@")) {
-      for (const scopedEntry of readdirSync(packageDirectory, { withFileTypes: true })) {
-        if (!scopedEntry.isDirectory()) {
-          continue;
-        }
-
-        const scopedBin = readPackageBinEntry(resolve(packageDirectory, scopedEntry.name), toolName);
-        if (scopedBin) {
-          return scopedBin;
-        }
-      }
-      continue;
-    }
-
-    if (entry.isDirectory()) {
-      const packageBin = readPackageBinEntry(packageDirectory, toolName);
-      if (packageBin) {
-        return packageBin;
-      }
-    }
-  }
-
-  return null;
-}
-
-function readPackageBinEntry(packageDirectory, toolName) {
-  const packageJsonPath = join(packageDirectory, "package.json");
-  if (!existsSync(packageJsonPath)) {
-    return null;
-  }
-
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-  const binField = packageJson.bin;
-  if (!binField) {
-    return null;
-  }
-
-  let relativeBinPath;
-  if (typeof binField === "string") {
-    relativeBinPath = binField;
-  } else if (typeof binField === "object" && binField[toolName]) {
-    relativeBinPath = binField[toolName];
-  } else {
-    return null;
-  }
-
-  const absoluteBinPath = resolve(packageDirectory, relativeBinPath);
-  return existsSync(absoluteBinPath) ? absoluteBinPath : null;
 }
 
 export function formatSpawnFailure({ label, command, executable, args, result, cwd, npmExecPathPresent }) {
