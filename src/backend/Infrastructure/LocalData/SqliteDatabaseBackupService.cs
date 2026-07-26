@@ -10,6 +10,7 @@ public sealed class SqliteDatabaseBackupService(
     IApplicationDatabaseMetadataService metadataService,
     IBackupEncryptionKeyProvider encryptionKeyProvider,
     BackupManifestService manifestService,
+    IBackupManifestAuthenticationService manifestAuthenticationService,
     ILocalDatabaseOperationCoordinator operationCoordinator) : IDatabaseBackupService
 {
     public async Task<BackupResult> CreateBackupAsync(
@@ -79,6 +80,7 @@ public sealed class SqliteDatabaseBackupService(
                 var plainSizeBytes = new FileInfo(plainTempPath).Length;
                 var encryption = await EncryptAsync(plainTempPath, encryptedTempPath, cancellationToken);
                 var encryptedChecksum = await CalculateChecksumAsync(encryptedTempPath, cancellationToken);
+                var encryptedSizeBytes = new FileInfo(encryptedTempPath).Length;
 
                 var manifest = new BackupManifest(
                     BackupManifestService.CurrentManifestVersion,
@@ -92,7 +94,13 @@ public sealed class SqliteDatabaseBackupService(
                     plainSizeBytes,
                     plainChecksum,
                     encryptedChecksum,
-                    encryption);
+                    encryption,
+                    encryptedSizeBytes);
+                manifest = await manifestAuthenticationService.SignAsync(
+                    manifest,
+                    CloudflareR2BackupProvider.BuildExpectedPayloadKey("", backupId, manifest.DatabaseFileName),
+                    CloudflareR2BackupProvider.BuildExpectedManifestKey("", backupId, Path.GetFileName(finalManifestPath)),
+                    cancellationToken);
 
                 await manifestService.WriteAsync(finalManifestPath, manifest, cancellationToken);
 

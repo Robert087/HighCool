@@ -4976,6 +4976,24 @@ body[data-theme="dark"] .hc-erp-dashboard-panel--critical .hc-erp-alert-card {
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 }
 
+.hc-backup-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.hc-backup-cloud-status-grid,
+.hc-backup-cloud-settings-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.hc-backup-cloud-settings-grid .hc-checkbox {
+  align-self: center;
+}
+
 .hc-setup-page {
   display: grid;
   gap: 1.25rem;

@@ -1,4 +1,5 @@
 using ERP.Application.LocalData;
+using ERP.Application.Common.Pagination;
 using ERP.Application.Security;
 using System.Text.Json;
 
@@ -44,6 +45,39 @@ public static class LocalDatabaseEndpoints
 
         group.MapGet("/diagnostics", DiagnosticsAsync)
             .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapGet("/cloud/status", CloudStatusAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapGet("/cloud/configuration", GetCloudConfigurationAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapPut("/cloud/configuration", SaveCloudConfigurationAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapPost("/cloud/test-connection", TestCloudConnectionAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapGet("/cloud/backups", ListCloudBackupsAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapGet("/cloud/sync", ListCombinedCloudBackupsAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseDiagnosticsRead));
+
+        group.MapPost("/cloud/backups/{backupId}/upload", UploadCloudBackupAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapPost("/cloud/uploads/{queueId}/retry", RetryCloudUploadAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapPost("/cloud/uploads/{queueId}/cancel", CancelCloudUploadAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
+
+        group.MapPost("/cloud/backups/{backupId}/download", DownloadCloudBackupAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseRestoreValidate));
+
+        group.MapDelete("/cloud/backups/{backupId}", DeleteCloudBackupAsync)
+            .AddEndpointFilter(new PermissionEndpointFilter(Permissions.SettingsDatabaseBackupCreate));
 
         return app;
     }
@@ -160,6 +194,86 @@ public static class LocalDatabaseEndpoints
         IStartupDiagnosticsService diagnosticsService,
         CancellationToken cancellationToken)
         => ExecuteAsync(async () => await diagnosticsService.GetAsync(cancellationToken));
+
+    private static Task<IResult> CloudStatusAsync(
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.GetStatusAsync(cancellationToken));
+
+    private static Task<IResult> GetCloudConfigurationAsync(
+        ICloudBackupConfigurationStore configurationStore,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await configurationStore.GetConfigurationAsync(cancellationToken));
+
+    private static Task<IResult> SaveCloudConfigurationAsync(
+        CloudBackupConfigurationRequest request,
+        ICloudBackupConfigurationStore configurationStore,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await configurationStore.SaveConfigurationAsync(request, cancellationToken));
+
+    private static Task<IResult> TestCloudConnectionAsync(
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.TestConnectionAsync(cancellationToken));
+
+    private static Task<IResult> ListCloudBackupsAsync(
+        int? page,
+        int? pageSize,
+        string? search,
+        string? sortBy,
+        SortDirection? sortDirection,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.ListCloudBackupsAsync(
+            new CloudBackupListQuery(page ?? 1, pageSize ?? 20, search, sortBy, sortDirection ?? SortDirection.Desc),
+            cancellationToken));
+
+    private static Task<IResult> ListCombinedCloudBackupsAsync(
+        int? page,
+        int? pageSize,
+        string? search,
+        string? sortBy,
+        SortDirection? sortDirection,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.ListCombinedBackupsAsync(
+            new CloudBackupListQuery(page ?? 1, pageSize ?? 20, search, sortBy, sortDirection ?? SortDirection.Desc),
+            cancellationToken));
+
+    private static Task<IResult> UploadCloudBackupAsync(
+        string backupId,
+        CloudBackupUploadRequest? request,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.EnqueueUploadAsync(backupId, request?.Force ?? false, cancellationToken));
+
+    private static Task<IResult> RetryCloudUploadAsync(
+        string queueId,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.RetryUploadAsync(queueId, cancellationToken));
+
+    private static Task<IResult> CancelCloudUploadAsync(
+        string queueId,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.CancelUploadAsync(queueId, cancellationToken));
+
+    private static Task<IResult> DownloadCloudBackupAsync(
+        string backupId,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () => await cloudBackupService.DownloadAsync(backupId, cancellationToken));
+
+    private static Task<IResult> DeleteCloudBackupAsync(
+        string backupId,
+        ICloudBackupWorkflowService cloudBackupService,
+        CancellationToken cancellationToken)
+        => ExecuteAsync(async () =>
+        {
+            await cloudBackupService.DeleteCloudBackupAsync(backupId, cancellationToken);
+            return new { message = "Cloud backup deleted." };
+        });
 
     private static async Task<IResult> ExecuteAsync<T>(Func<Task<T>> action)
     {

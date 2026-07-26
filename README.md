@@ -83,6 +83,130 @@ Batch 5 on 2026-07-25 added the authenticated `/settings/backup-restore` experie
 
 Desktop runtime connection fix on 2026-07-26 changed the main Tauri WebView to load bundled frontend assets and resolve the selected backend origin through a safe runtime command. The desktop backend still binds only to `127.0.0.1:<dynamic-port>`, the frontend no longer guesses the port, and the generated app-data JWT secret is passed to `ERP.Api` through environment variables without requiring a manual `Authentication__JwtSecret` export. Windows verification remains pending.
 
+Batch 6 on 2026-07-26 added Cloudflare R2 cloud backup support for the desktop backup/restore screen. The backend owns all R2 communication through S3-compatible APIs, stores R2 credentials encrypted in the desktop local data directory, queues automatic/manual uploads with retry state, lists local/cloud/combined backup history, downloads cloud backups through manifest/checksum verification before existing restore flow use, and applies cloud retention. The UI is localized in English and Arabic and keeps local backup/restore usable when cloud backup is disabled or unavailable. Live R2 credential verification still needs to be run in a real environment.
+
+Batch 6.1 on 2026-07-26 hardened the R2 integration with strict Cloudflare R2 endpoint validation, DNS safety checks, HMAC-authenticated backup manifests, atomic queue writes with recovery, explicit retry categories, checksum-based sync status, safer retention pagination/ownership rules, cloud delete confirmation, and explicit credential replace/clear behavior. It still requires a disposable live R2 smoke test before staging approval.
+
+### Organization Test Data Tooling
+
+The restore-smoke organization test-data tool is intended only for Development, Testing, and Desktop environments. Do not run it against production data. The tool uses GUID organization IDs, deterministic seed-run IDs, JSON manifests, and verification snapshots.
+
+List organizations from the local desktop SQLite database without writing to it:
+
+```bash
+python3 - <<'PY'
+import sqlite3
+
+path = "/root/.local/share/com.highcool.desktop/Data/highcool.db"
+con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+rows = con.execute("""
+    SELECT
+        Id AS OrganizationId,
+        Name,
+        SetupCompleted,
+        CreatedAt,
+        UpdatedAt
+    FROM Organizations
+    ORDER BY Name
+""").fetchall()
+
+for row in rows:
+    print(row)
+
+con.close()
+PY
+```
+
+Use this environment block when running the tooling against the desktop local database. The JWT value is a local tooling value used to boot the Desktop-profile host; do not commit real JWT secrets, R2 credentials, SQLite databases, manifests, snapshots, backups, or logs.
+
+```bash
+export DOTNET_ENVIRONMENT=Desktop
+export Database__Provider=Sqlite
+export Database__SqliteFileName=highcool.db
+export LocalStorage__DataDirectory=/root/.local/share/com.highcool.desktop/Data
+export LocalStorage__BackupDirectory=/root/.local/share/com.highcool.desktop/Backups
+export LocalStorage__PendingBackupDirectory=/root/.local/share/com.highcool.desktop/PendingBackups
+export LocalStorage__LogDirectory=/root/.local/share/com.highcool.desktop/Logs
+export Authentication__JwtSecret=<LOCAL_TOOLING_JWT_SECRET_AT_LEAST_32_CHARS>
+```
+
+Preview a deterministic medium restore-smoke seed:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- seed-org-test-data \
+  --organization-id <ORGANIZATION_ID> \
+  --profile restore-smoke \
+  --scale medium \
+  --seed 20260726 \
+  --dry-run
+```
+
+Create the seed data for real:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- seed-org-test-data \
+  --organization-id <ORGANIZATION_ID> \
+  --profile restore-smoke \
+  --scale medium \
+  --seed 20260726
+```
+
+If the same deterministic seed run already exists, add `--force` to delete and recreate only that manifest-scoped seed run. The seed command prints the `runId`, `manifestPath`, `snapshotPath`, and entity `counts`. The seed-run ID format is `restore-smoke-<first-8-lowercase-organization-guid-hex>-<seed>`.
+
+Preview a test-data-only reset:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- reset-org-data \
+  --organization-id <ORGANIZATION_ID> \
+  --test-data-only \
+  --seed-run-id <SEED_RUN_ID> \
+  --dry-run \
+  --skip-safety-backup
+```
+
+Execute a test-data-only reset:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- reset-org-data \
+  --organization-id <ORGANIZATION_ID> \
+  --test-data-only \
+  --seed-run-id <SEED_RUN_ID> \
+  --execute \
+  --confirmation RESET-ORG-<organization-guid-lowercase> \
+  --skip-safety-backup
+```
+
+The reset confirmation is case-sensitive and must use the lowercase organization GUID. Keep full organization reset as a dry-run-only operator workflow unless you have a fresh verified backup and an explicit recovery plan:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- reset-org-data \
+  --organization-id <ORGANIZATION_ID> \
+  --dry-run
+```
+
+Compare current organization data against a generated snapshot:
+
+```bash
+dotnet run --no-build \
+  --project src/backend/Tools/ERP.Tools/ERP.Tools.csproj \
+  -- verify-org-restore \
+  --organization-id <ORGANIZATION_ID> \
+  --snapshot <SNAPSHOT_PATH>
+```
+
+Expected restore drill sequence: verification passes before reset, fails after the seeded data is removed, and passes again after restoring the backup that contains the seed run.
+
 ### Health Check
 
 ```bash
@@ -123,7 +247,7 @@ npm run build
 
 * The backend includes active ERP business logic and data models.
 * SQLite local storage and a basic Tauri shell are foundation work for a future single-PC desktop distribution.
-* Local encrypted backup/restore safety services and the authenticated restore UI exist, but scheduled backups, cloud backups, updater, and final installer are not implemented yet.
+* Local encrypted backup/restore safety services, Cloudflare R2 backup integration, and the authenticated restore UI exist, but scheduled backups, updater, and final installer are not implemented yet.
 * The desktop shell is not yet customer-ready because the full interactive/failure/security matrix still needs a normal Linux/Windows desktop environment.
 
 ## Database Baseline
@@ -170,6 +294,8 @@ Pre-commit security hardening on 2026-07-25 confirmed committed defaults no long
 Batch 5 desktop backup/restore verification on 2026-07-25 added the `/settings/backup-restore` page and hardened restore execution with server-issued preflight operation IDs, operation serialization, fresh preflight validation, safety backup creation, and replay/expiry/user/backup binding checks. Scheduled/cloud backups, backup deletion, final installer/updater, Windows packaging, and normal-desktop interactive approval remain pending.
 
 Desktop runtime connection fix on 2026-07-26 resolved the WSLg connection-refused path by loading bundled frontend assets, adding a runtime backend-origin handshake, and keeping the Linux backend supervisor thread alive while the child process exists. No manual JWT secret export is required for desktop startup.
+
+Batch 6 desktop cloud-backup verification on 2026-07-26 added encrypted Cloudflare R2 configuration, cloud connection testing, bounded cloud/combined history endpoints, upload queue retry/cancel operations, download-and-verify flow into the local backup catalog, cloud retention, localized UI tabs, and service tests. Batch 6.1 hardened endpoint validation, authenticated manifests, queue durability, retry categories, sync comparison, retention ownership, delete confirmation, and credential editing. Scheduled backups, final installer/updater, Windows packaging, live R2 smoke, and normal-desktop interactive approval remain pending.
 
 ### Create Or Apply Migrations
 

@@ -25,11 +25,24 @@ import {
   validateRestoreBackup,
   verifyBackup,
   type BackupCenterSummary,
+  type CloudBackupConfiguration,
+  type CloudBackupConnectionTestResult,
+  type CloudBackupListItem,
+  type CloudBackupStatusSummary,
   type BackupDetails,
   type BackupListItem,
   type BackupRetentionSettings,
   type RestorePreflightResult,
   type RestoreResult,
+  deleteCloudBackup,
+  downloadCloudBackup,
+  getCloudBackupConfiguration,
+  getCloudBackupStatus,
+  listCloudBackups,
+  listCombinedCloudBackups,
+  saveCloudBackupConfiguration,
+  testCloudBackupConnection,
+  uploadCloudBackup,
 } from "../../services/backupApi";
 import {
   backupHealthTone,
@@ -38,6 +51,15 @@ import {
   backupReasonLabelKey,
   backupStatusLabelKey,
   backupStatusTone,
+  cloudObjectLabelKey,
+  cloudObjectTone,
+  cloudConnectionCategoryDescriptionKey,
+  cloudConnectionCategoryTitleKey,
+  cloudConnectionStageLabelKey,
+  cloudSyncLabelKey,
+  cloudSyncTone,
+  cloudUploadLabelKey,
+  cloudUploadTone,
   formatBytes,
   restorePreflightLabelKey,
   restorePreflightTone,
@@ -46,6 +68,11 @@ import { SettingsScaffold } from "./SettingsScaffold";
 import {
   backupOperation,
   canSubmitRestore,
+  cloudDeleteOperation,
+  cloudDownloadOperation,
+  cloudSettingsOperation,
+  cloudTestOperation,
+  cloudUploadOperation,
   normalizeRetentionNumber,
   retentionOperation,
   restoreOperation,
@@ -54,6 +81,7 @@ import {
 } from "./backupRestorePageState";
 
 type Operation = BackupRestoreOperation;
+type BackupTab = "local" | "cloud" | "combined";
 
 interface RestoreWizardState {
   backup: BackupListItem;
@@ -67,6 +95,11 @@ interface RestoreWizardState {
   stageKey: string;
 }
 
+interface CloudDeleteState {
+  backup: CloudBackupListItem;
+  confirmationText: string;
+}
+
 const EMPTY_RETENTION: BackupRetentionSettings = {
   enabled: true,
   manualCount: 10,
@@ -75,6 +108,20 @@ const EMPTY_RETENTION: BackupRetentionSettings = {
   beforeRestoreCount: 10,
   beforeApplicationUpdateCount: 10,
   minimumAgeHoursBeforeDeletion: 24,
+};
+
+const EMPTY_CLOUD_CONFIGURATION: CloudBackupConfiguration = {
+  enabled: false,
+  autoUploadAfterBackup: false,
+  bucketName: "",
+  endpoint: "",
+  accessKey: "",
+  hasAccessKey: false,
+  hasSecretKey: false,
+  prefix: "",
+  retentionCount: 30,
+  connectionTimeoutSeconds: 30,
+  retryCount: 3,
 };
 
 function valueOrUnavailable(value: string | number | null | undefined) {
@@ -267,12 +314,115 @@ function RestoreWizard({
   );
 }
 
+function CloudDeleteDialog({
+  state,
+  loading,
+  onChange,
+  onClose,
+  onConfirm,
+}: {
+  state: CloudDeleteState | null;
+  loading: boolean;
+  onChange: (confirmationText: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { formatDate, t } = useI18n();
+
+  if (!state) {
+    return null;
+  }
+
+  const confirmationMatches = state.confirmationText.trim() === state.backup.backupId;
+
+  return (
+    <div className="hc-access-dialog" role="dialog" aria-modal="true" aria-labelledby="hc-cloud-delete-title">
+      <button className="hc-access-dialog__backdrop" type="button" aria-label={t("app.close")} onClick={loading ? undefined : onClose} />
+      <div className="hc-access-dialog__panel hc-backup-dialog">
+        <div className="hc-access-dialog__header">
+          <div>
+            <p className="hc-access-dialog__eyebrow">{t("settings.backup.cloud.deleteConfirmEyebrow")}</p>
+            <h2 className="hc-access-dialog__title" id="hc-cloud-delete-title">{t("settings.backup.cloud.deleteConfirmTitle")}</h2>
+          </div>
+          <Button size="sm" variant="ghost" disabled={loading} onClick={onClose}>app.close</Button>
+        </div>
+        <div className="hc-backup-restore-body">
+          <Card muted padding="md">
+            <DetailRow label="settings.backup.fields.backupId" value={state.backup.backupId} />
+            <DetailRow label="settings.backup.fields.createdAt" value={formatDate(state.backup.createdAtUtc, { dateStyle: "medium", timeStyle: "short" })} />
+            <DetailRow label="settings.backup.columns.size" value={formatBytes(state.backup.sizeBytes)} />
+          </Card>
+          <p className="hc-form-help">{t("settings.backup.cloud.deleteConfirmDescription")}</p>
+          <Field label="settings.backup.cloud.deleteConfirmField" hint="settings.backup.cloud.deleteConfirmHint">
+            <Input value={state.confirmationText} disabled={loading} onChange={(event) => onChange(event.target.value)} />
+          </Field>
+          <div className="hc-access-dialog__actions">
+            <Button variant="secondary" disabled={loading} onClick={onClose}>common.cancel</Button>
+            <Button variant="danger" disabled={!confirmationMatches || loading} isLoading={loading} onClick={onConfirm}>
+              settings.backup.cloud.actions.deleteCloud
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CloudCredentialsClearDialog({
+  open,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useI18n();
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="hc-access-dialog" role="dialog" aria-modal="true" aria-labelledby="hc-cloud-clear-credentials-title">
+      <button className="hc-access-dialog__backdrop" type="button" aria-label={t("app.close")} onClick={loading ? undefined : onClose} />
+      <div className="hc-access-dialog__panel hc-backup-dialog">
+        <div className="hc-access-dialog__header">
+          <div>
+            <p className="hc-access-dialog__eyebrow">{t("settings.backup.cloud.clearCredentialsEyebrow")}</p>
+            <h2 className="hc-access-dialog__title" id="hc-cloud-clear-credentials-title">{t("settings.backup.cloud.clearCredentialsTitle")}</h2>
+          </div>
+          <Button size="sm" variant="ghost" disabled={loading} onClick={onClose}>app.close</Button>
+        </div>
+        <p className="hc-form-help">{t("settings.backup.cloud.clearCredentialsDescription")}</p>
+        <div className="hc-access-dialog__actions">
+          <Button variant="secondary" disabled={loading} onClick={onClose}>common.cancel</Button>
+          <Button variant="danger" disabled={loading} isLoading={loading} onClick={onConfirm}>
+            settings.backup.cloud.actions.clearCredentials
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsBackupRestorePage() {
   const { hasPermission } = useAuth();
   const { formatDate, t } = useI18n();
   const { showToast } = useToast();
   const [summary, setSummary] = useState<BackupCenterSummary | null>(null);
   const [backups, setBackups] = useState<BackupListItem[]>([]);
+  const [cloudStatus, setCloudStatus] = useState<CloudBackupStatusSummary | null>(null);
+  const [cloudConfiguration, setCloudConfiguration] = useState<CloudBackupConfiguration>(EMPTY_CLOUD_CONFIGURATION);
+  const [cloudAccessKey, setCloudAccessKey] = useState("");
+  const [cloudSecretKey, setCloudSecretKey] = useState("");
+  const [replaceCloudCredentials, setReplaceCloudCredentials] = useState(false);
+  const [clearCloudCredentialsOpen, setClearCloudCredentialsOpen] = useState(false);
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupListItem[]>([]);
+  const [combinedBackups, setCombinedBackups] = useState<CloudBackupListItem[]>([]);
+  const [activeTab, setActiveTab] = useState<BackupTab>("local");
   const [retention, setRetention] = useState<BackupRetentionSettings>(EMPTY_RETENTION);
   const [details, setDetails] = useState<BackupDetails | null>(null);
   const [restoreWizard, setRestoreWizard] = useState<RestoreWizardState | null>(null);
@@ -280,6 +430,9 @@ export function SettingsBackupRestorePage() {
   const [error, setError] = useState("");
   const [operation, setOperation] = useState<Operation>(null);
   const [verifyingBackupId, setVerifyingBackupId] = useState<string | null>(null);
+  const [cloudDelete, setCloudDelete] = useState<CloudDeleteState | null>(null);
+  const [cloudConnectionResult, setCloudConnectionResult] = useState<CloudBackupConnectionTestResult | null>(null);
+  const [cloudSettingsDirty, setCloudSettingsDirty] = useState(false);
 
   const canCreateBackup = hasPermission(Permissions.SettingsDatabaseBackupCreate);
   const canValidateRestore = hasPermission(Permissions.SettingsDatabaseRestoreValidate);
@@ -289,12 +442,32 @@ export function SettingsBackupRestorePage() {
   async function load() {
     try {
       setLoading(true);
-      const [summaryResponse, backupsResponse] = await Promise.all([
+      const [
+        summaryResponse,
+        backupsResponse,
+        cloudStatusResponse,
+        cloudConfigurationResponse,
+        cloudBackupsResponse,
+        combinedBackupsResponse,
+      ] = await Promise.all([
         getBackupSummary(),
         listBackups(),
+        getCloudBackupStatus(),
+        getCloudBackupConfiguration(),
+        listCloudBackups(),
+        listCombinedCloudBackups(),
       ]);
       setSummary(summaryResponse);
       setBackups(backupsResponse);
+      setCloudStatus(cloudStatusResponse);
+      setCloudConfiguration(cloudConfigurationResponse);
+      setCloudAccessKey("");
+      setCloudSecretKey("");
+      setReplaceCloudCredentials(false);
+      setCloudBackups(cloudBackupsResponse.items);
+      setCombinedBackups(combinedBackupsResponse.items);
+      setCloudConnectionResult(null);
+      setCloudSettingsDirty(false);
       setRetention(summaryResponse.retentionSettings);
       setError("");
     } catch (loadError) {
@@ -336,7 +509,6 @@ export function SettingsBackupRestorePage() {
         title: result.status === "Succeeded" ? t("settings.backup.backupCreatedTitle") : t("settings.backup.backupFailedTitle"),
         description: result.message,
       });
-      await load();
     } catch (requestError) {
       showToast({
         tone: "danger",
@@ -473,6 +645,176 @@ export function SettingsBackupRestorePage() {
     }));
   }
 
+  function updateCloudConfiguration(field: keyof CloudBackupConfiguration, value: string | number | boolean) {
+    setCloudConnectionResult(null);
+    setCloudSettingsDirty(true);
+    setCloudConfiguration((current) => ({
+      ...current,
+      [field]: typeof value === "number" ? Math.max(1, Math.trunc(value)) : value,
+    }));
+  }
+
+  async function saveCloudSettings() {
+    try {
+      setOperation(cloudSettingsOperation());
+      const saved = await saveCloudBackupConfiguration({
+        enabled: cloudConfiguration.enabled,
+        autoUploadAfterBackup: cloudConfiguration.autoUploadAfterBackup,
+        bucketName: cloudConfiguration.bucketName,
+        endpoint: cloudConfiguration.endpoint,
+        accessKey: replaceCloudCredentials ? cloudAccessKey.trim() : null,
+        secretKey: replaceCloudCredentials ? cloudSecretKey.trim() : null,
+        prefix: cloudConfiguration.prefix,
+        retentionCount: cloudConfiguration.retentionCount,
+        connectionTimeoutSeconds: cloudConfiguration.connectionTimeoutSeconds,
+        retryCount: cloudConfiguration.retryCount,
+        credentialUpdateMode: replaceCloudCredentials ? "Replace" : "Preserve",
+      });
+      setCloudConfiguration(saved);
+      setCloudAccessKey("");
+      setCloudSecretKey("");
+      setReplaceCloudCredentials(false);
+      setCloudConnectionResult(null);
+      setCloudSettingsDirty(false);
+      showToast({ tone: "success", title: t("settings.backup.cloud.settingsSavedTitle") });
+      await load();
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.settingsFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function clearCloudCredentials() {
+    try {
+      setOperation(cloudSettingsOperation());
+      const saved = await saveCloudBackupConfiguration({
+        enabled: cloudConfiguration.enabled,
+        autoUploadAfterBackup: cloudConfiguration.autoUploadAfterBackup,
+        bucketName: cloudConfiguration.bucketName,
+        endpoint: cloudConfiguration.endpoint,
+        accessKey: null,
+        secretKey: null,
+        prefix: cloudConfiguration.prefix,
+        retentionCount: cloudConfiguration.retentionCount,
+        connectionTimeoutSeconds: cloudConfiguration.connectionTimeoutSeconds,
+        retryCount: cloudConfiguration.retryCount,
+        credentialUpdateMode: "Clear",
+      });
+      setCloudConfiguration(saved);
+      setCloudAccessKey("");
+      setCloudSecretKey("");
+      setReplaceCloudCredentials(false);
+      setCloudConnectionResult(null);
+      setCloudSettingsDirty(false);
+      setClearCloudCredentialsOpen(false);
+      showToast({ tone: "success", title: t("settings.backup.cloud.credentialsClearedTitle") });
+      await load();
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.settingsFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function testCloudConnection() {
+    if (operationActive) {
+      return;
+    }
+
+    if (cloudSettingsDirty || replaceCloudCredentials || cloudAccessKey.trim().length > 0 || cloudSecretKey.trim().length > 0) {
+      showToast({
+        tone: "warning",
+        title: t("settings.backup.cloud.connectionSaveRequiredTitle"),
+        description: t("settings.backup.cloud.connectionSaveRequiredDescription"),
+      });
+      return;
+    }
+
+    try {
+      setOperation(cloudTestOperation());
+      const result = await testCloudBackupConnection();
+      setCloudConnectionResult(result);
+      showToast({
+        tone: result.succeeded ? "success" : "danger",
+        title: result.succeeded ? t("settings.backup.cloud.connectionSucceededTitle") : t(cloudConnectionCategoryTitleKey(result.category)),
+        description: result.succeeded ? result.message : t(cloudConnectionCategoryDescriptionKey(result.category)),
+      });
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.connectionFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function queueCloudUpload(backupId: string) {
+    try {
+      setOperation(cloudUploadOperation());
+      const item = await uploadCloudBackup(backupId, true);
+      showToast({ tone: "success", title: t("settings.backup.cloud.uploadQueuedTitle"), description: item.backupId });
+      await load();
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.uploadFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function downloadFromCloud(backupId: string) {
+    try {
+      setOperation(cloudDownloadOperation());
+      const result = await downloadCloudBackup(backupId);
+      showToast({
+        tone: result.integrityStatus === "Verified" ? "success" : "warning",
+        title: t("settings.backup.cloud.downloadedTitle"),
+        description: result.message,
+      });
+      await load();
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.downloadFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
+  async function deleteFromCloud(backupId: string) {
+    try {
+      setOperation(cloudDeleteOperation());
+      await deleteCloudBackup(backupId);
+      setCloudDelete(null);
+      showToast({ tone: "success", title: t("settings.backup.cloud.deletedTitle") });
+      await load();
+    } catch (requestError) {
+      showToast({
+        tone: "danger",
+        title: t("settings.backup.cloud.deleteFailedTitle"),
+        description: requestError instanceof ApiError ? requestError.message : t("settings.backup.safeFailure"),
+      });
+    } finally {
+      setOperation(null);
+    }
+  }
+
   const actions = (
     <>
       <Button variant="secondary" disabled={loading || operationActive} onClick={() => void load()}>
@@ -520,6 +862,24 @@ export function SettingsBackupRestorePage() {
             </div>
           </Card>
 
+          <div className="hc-backup-tabs" role="tablist" aria-label={t("settings.backup.tabs.label")}>
+            {[
+              ["local", "settings.backup.tabs.local"],
+              ["cloud", "settings.backup.tabs.cloud"],
+              ["combined", "settings.backup.tabs.combined"],
+            ].map(([tab, label]) => (
+              <Button
+                key={tab}
+                size="sm"
+                variant={activeTab === tab ? "primary" : "secondary"}
+                onClick={() => setActiveTab(tab as BackupTab)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+
+          {activeTab === "local" ? (
           <section className="hc-backup-section">
             <div className="hc-backup-section__header">
               <div>
@@ -588,7 +948,255 @@ export function SettingsBackupRestorePage() {
               ))}
             />
           </section>
+          ) : null}
 
+          {activeTab === "cloud" ? (
+            <>
+              <section className="hc-backup-section">
+                <div className="hc-backup-section__header">
+                  <div>
+                    <h2>{t("settings.backup.cloud.statusTitle")}</h2>
+                    <p>{t("settings.backup.cloud.statusDescription")}</p>
+                  </div>
+                  <Badge tone={cloudStatus?.status === "Ready" ? "success" : cloudStatus?.status === "Disabled" ? "neutral" : "warning"}>
+                    {cloudStatus ? t(`settings.backup.cloud.status.${cloudStatus.status}`) : t("settings.backup.notAvailable")}
+                  </Badge>
+                </div>
+                <Card padding="md">
+                  <div className="hc-backup-cloud-status-grid">
+                    <DetailRow label="settings.backup.cloud.fields.queue" value={String(cloudStatus?.queuedCount ?? 0)} />
+                    <DetailRow label="settings.backup.cloud.fields.uploading" value={String(cloudStatus?.uploadingCount ?? 0)} />
+                    <DetailRow label="settings.backup.cloud.fields.failed" value={String(cloudStatus?.failedCount ?? 0)} />
+                    <DetailRow
+                      label="settings.backup.cloud.fields.lastUpload"
+                      value={cloudStatus?.lastSuccessfulUploadAtUtc ? formatDate(cloudStatus.lastSuccessfulUploadAtUtc, { dateStyle: "medium", timeStyle: "short" }) : t("settings.backup.notAvailable")}
+                    />
+                  </div>
+                </Card>
+              </section>
+
+              <section className="hc-backup-section">
+                <div className="hc-backup-section__header">
+                  <div>
+                    <h2>{t("settings.backup.cloud.settingsTitle")}</h2>
+                    <p>{t("settings.backup.cloud.settingsDescription")}</p>
+                  </div>
+                  <div className="hc-table__actions">
+                    <Button variant="secondary" disabled={operationActive} isLoading={operation === "cloudTest"} onClick={() => void testCloudConnection()}>
+                      settings.backup.cloud.actions.testConnection
+                    </Button>
+                    <Button disabled={!canCreateBackup || operationActive} isLoading={operation === "cloudSettings"} onClick={() => void saveCloudSettings()}>
+                      settings.backup.cloud.actions.saveSettings
+                    </Button>
+                  </div>
+                </div>
+
+                <Card padding="md">
+                  <div className="hc-backup-cloud-settings-grid">
+                    <Checkbox
+                      checked={cloudConfiguration.enabled}
+                      label="settings.backup.cloud.fields.enabled"
+                      description="settings.backup.cloud.fields.enabledDescription"
+                      onChange={(event) => updateCloudConfiguration("enabled", event.target.checked)}
+                    />
+                    <Checkbox
+                      checked={cloudConfiguration.autoUploadAfterBackup}
+                      label="settings.backup.cloud.fields.autoUpload"
+                      description="settings.backup.cloud.fields.autoUploadDescription"
+                      onChange={(event) => updateCloudConfiguration("autoUploadAfterBackup", event.target.checked)}
+                    />
+                    <Field label="settings.backup.cloud.fields.bucket">
+                      <Input value={cloudConfiguration.bucketName} onChange={(event) => updateCloudConfiguration("bucketName", event.target.value)} />
+                    </Field>
+                    <Field label="settings.backup.cloud.fields.endpoint" hint="settings.backup.cloud.fields.endpointHint">
+                      <Input value={cloudConfiguration.endpoint} onChange={(event) => updateCloudConfiguration("endpoint", event.target.value)} />
+                    </Field>
+	                    <Field label="settings.backup.cloud.fields.prefix">
+	                      <Input value={cloudConfiguration.prefix} onChange={(event) => updateCloudConfiguration("prefix", event.target.value)} />
+	                    </Field>
+	                    <Checkbox
+	                      checked={replaceCloudCredentials}
+	                      label="settings.backup.cloud.fields.replaceCredentials"
+	                      description={cloudConfiguration.hasAccessKey || cloudConfiguration.hasSecretKey ? "settings.backup.cloud.fields.replaceCredentialsDescription" : "settings.backup.cloud.fields.replaceCredentialsMissingDescription"}
+	                      onChange={(event) => {
+                          setCloudConnectionResult(null);
+                          setCloudSettingsDirty(true);
+                          setReplaceCloudCredentials(event.target.checked);
+                        }}
+	                    />
+	                    <div className="hc-table__actions">
+	                      <Button
+	                        variant="secondary"
+	                        disabled={operationActive || (!cloudConfiguration.hasAccessKey && !cloudConfiguration.hasSecretKey)}
+	                        onClick={() => setClearCloudCredentialsOpen(true)}
+	                      >
+	                        settings.backup.cloud.actions.clearCredentials
+	                      </Button>
+	                    </div>
+	                    {replaceCloudCredentials ? (
+	                      <>
+	                        <Field label="settings.backup.cloud.fields.accessKey" hint="settings.backup.cloud.fields.credentialReplaceRequired">
+	                          <Input value={cloudAccessKey} onChange={(event) => {
+                              setCloudConnectionResult(null);
+                              setCloudSettingsDirty(true);
+                              setCloudAccessKey(event.target.value);
+                            }} />
+	                        </Field>
+	                        <Field label="settings.backup.cloud.fields.secretKey" hint="settings.backup.cloud.fields.credentialReplaceRequired">
+	                          <Input type="password" value={cloudSecretKey} onChange={(event) => {
+                              setCloudConnectionResult(null);
+                              setCloudSettingsDirty(true);
+                              setCloudSecretKey(event.target.value);
+                            }} />
+	                        </Field>
+	                      </>
+	                    ) : null}
+                    <Field label="settings.backup.cloud.fields.retentionCount">
+                      <Input type="number" min={1} value={cloudConfiguration.retentionCount} onChange={(event) => updateCloudConfiguration("retentionCount", Number(event.target.value))} />
+                    </Field>
+                    <Field label="settings.backup.cloud.fields.timeout">
+                      <Input type="number" min={3} value={cloudConfiguration.connectionTimeoutSeconds} onChange={(event) => updateCloudConfiguration("connectionTimeoutSeconds", Number(event.target.value))} />
+                    </Field>
+                    <Field label="settings.backup.cloud.fields.retryCount">
+                      <Input type="number" min={1} value={cloudConfiguration.retryCount} onChange={(event) => updateCloudConfiguration("retryCount", Number(event.target.value))} />
+                    </Field>
+                  </div>
+                </Card>
+                {cloudConnectionResult ? (
+                  <Card padding="md">
+                    <div className="hc-backup-cloud-test-result">
+                      <div>
+                        <Badge tone={cloudConnectionResult.succeeded ? "success" : "danger"}>
+                          {cloudConnectionResult.succeeded
+                            ? t("settings.backup.cloud.connectionSucceededTitle")
+                            : t(cloudConnectionCategoryTitleKey(cloudConnectionResult.category))}
+                        </Badge>
+                        <p className="hc-form-help">
+                          {cloudConnectionResult.succeeded
+                            ? cloudConnectionResult.message
+                            : t(cloudConnectionCategoryDescriptionKey(cloudConnectionResult.category))}
+                        </p>
+                      </div>
+                      <div className="hc-backup-cloud-status-grid">
+                        <DetailRow label="settings.backup.cloud.connectionDetails.category" value={t(cloudConnectionCategoryTitleKey(cloudConnectionResult.category))} />
+                        <DetailRow label="settings.backup.cloud.connectionDetails.stage" value={t(cloudConnectionStageLabelKey(cloudConnectionResult.stage))} />
+                        <DetailRow label="settings.backup.cloud.connectionDetails.statusCode" value={cloudConnectionResult.statusCode == null ? t("settings.backup.notAvailable") : String(cloudConnectionResult.statusCode)} />
+                        <DetailRow label="settings.backup.cloud.connectionDetails.providerCode" value={cloudConnectionResult.providerErrorCode ?? t("settings.backup.notAvailable")} />
+                        <DetailRow
+                          label="settings.backup.cloud.connectionDetails.cleanup"
+                          value={cloudConnectionResult.cleanupSucceeded
+                            ? t("settings.backup.cloud.connectionCleanup.succeeded")
+                            : t("settings.backup.cloud.connectionCleanup.failed")}
+                        />
+                        <DetailRow
+                          label="settings.backup.cloud.connectionDetails.testedAt"
+                          value={formatDate(cloudConnectionResult.testedAtUtc, { dateStyle: "medium", timeStyle: "short" })}
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                ) : null}
+              </section>
+
+              <section className="hc-backup-section">
+                <div className="hc-backup-section__header">
+                  <div>
+                    <h2>{t("settings.backup.cloud.historyTitle")}</h2>
+                    <p>{t("settings.backup.cloud.historyDescription")}</p>
+                  </div>
+                </div>
+                <DataTable
+                  hasData={cloudBackups.length > 0}
+                  emptyState={<EmptyState title="settings.backup.cloud.emptyTitle" description="settings.backup.cloud.emptyDescription" />}
+                  columns={(
+                    <tr>
+                      <th scope="col">{t("settings.backup.columns.createdAt")}</th>
+                      <th scope="col">{t("settings.backup.columns.size")}</th>
+                      <th scope="col">{t("settings.backup.cloud.columns.upload")}</th>
+                      <th scope="col">{t("settings.backup.cloud.columns.sync")}</th>
+                      <th scope="col" className="hc-table__head-actions">{t("common.actions")}</th>
+                    </tr>
+                  )}
+                  rows={cloudBackups.map((backup) => (
+                    <tr key={backup.backupId} className="hc-table__row">
+                      <td>
+                        <div className="hc-table__cell-strong">
+                          <span className="hc-table__title">{formatDate(backup.createdAtUtc, { dateStyle: "medium", timeStyle: "short" })}</span>
+                          <span className="hc-table__subtitle">{backup.backupId}</span>
+                        </div>
+                      </td>
+                      <td>{formatBytes(backup.sizeBytes)}</td>
+                      <td><Badge tone={cloudUploadTone(backup.uploadStatus)}>{t(cloudUploadLabelKey(backup.uploadStatus))}</Badge></td>
+                      <td><Badge tone={cloudSyncTone(backup.syncStatus)}>{t(cloudSyncLabelKey(backup.syncStatus))}</Badge></td>
+                      <td className="hc-table__cell-actions">
+                        <div className="hc-table__actions">
+                          <Button size="sm" variant="secondary" disabled={!canValidateRestore || operationActive} isLoading={operation === "cloudDownload"} onClick={() => void downloadFromCloud(backup.backupId)}>
+                            settings.backup.cloud.actions.download
+                          </Button>
+	                          <Button size="sm" variant="danger" disabled={!canCreateBackup || operationActive} isLoading={operation === "cloudDelete" && cloudDelete?.backup.backupId === backup.backupId} onClick={() => setCloudDelete({ backup, confirmationText: "" })}>
+	                            settings.backup.cloud.actions.deleteCloud
+	                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                />
+              </section>
+            </>
+          ) : null}
+
+          {activeTab === "combined" ? (
+            <section className="hc-backup-section">
+              <div className="hc-backup-section__header">
+                <div>
+                  <h2>{t("settings.backup.cloud.combinedTitle")}</h2>
+                  <p>{t("settings.backup.cloud.combinedDescription")}</p>
+                </div>
+              </div>
+              <DataTable
+                hasData={combinedBackups.length > 0}
+                emptyState={<EmptyState title="settings.backup.emptyTitle" description="settings.backup.emptyDescription" />}
+                columns={(
+                  <tr>
+                    <th scope="col">{t("settings.backup.columns.createdAt")}</th>
+                    <th scope="col">{t("settings.backup.columns.size")}</th>
+                    <th scope="col">{t("settings.backup.cloud.columns.local")}</th>
+                    <th scope="col">{t("settings.backup.cloud.columns.cloud")}</th>
+                    <th scope="col">{t("settings.backup.cloud.columns.upload")}</th>
+                    <th scope="col">{t("settings.backup.cloud.columns.sync")}</th>
+                    <th scope="col" className="hc-table__head-actions">{t("common.actions")}</th>
+                  </tr>
+                )}
+                rows={combinedBackups.map((backup) => (
+                  <tr key={backup.backupId} className="hc-table__row">
+                    <td>
+                      <div className="hc-table__cell-strong">
+                        <span className="hc-table__title">{formatDate(backup.createdAtUtc, { dateStyle: "medium", timeStyle: "short" })}</span>
+                        <span className="hc-table__subtitle">{backup.backupId}</span>
+                      </div>
+                    </td>
+                    <td>{formatBytes(backup.sizeBytes)}</td>
+                    <td><Badge tone={backupStatusTone(backup.localStatus)}>{t(backupStatusLabelKey(backup.localStatus))}</Badge></td>
+                    <td><Badge tone={cloudObjectTone(backup.cloudStatus)}>{t(cloudObjectLabelKey(backup.cloudStatus))}</Badge></td>
+                    <td><Badge tone={cloudUploadTone(backup.uploadStatus)}>{t(cloudUploadLabelKey(backup.uploadStatus))}</Badge></td>
+                    <td><Badge tone={cloudSyncTone(backup.syncStatus)}>{t(cloudSyncLabelKey(backup.syncStatus))}</Badge></td>
+                    <td className="hc-table__cell-actions">
+                      <div className="hc-table__actions">
+                        <Button size="sm" variant="secondary" disabled={!canCreateBackup || operationActive || backup.localStatus !== "Succeeded"} isLoading={operation === "cloudUpload"} onClick={() => void queueCloudUpload(backup.backupId)}>
+                          settings.backup.cloud.actions.upload
+                        </Button>
+                        <Button size="sm" variant="secondary" disabled={!canValidateRestore || operationActive || backup.cloudStatus !== "Present"} isLoading={operation === "cloudDownload"} onClick={() => void downloadFromCloud(backup.backupId)}>
+                          settings.backup.cloud.actions.download
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              />
+            </section>
+          ) : null}
+
+          {activeTab === "local" ? (
           <section className="hc-backup-section">
             <div className="hc-backup-section__header">
               <div>
@@ -628,6 +1236,7 @@ export function SettingsBackupRestorePage() {
               </div>
             </Card>
           </section>
+          ) : null}
         </div>
       ) : null}
 
@@ -638,6 +1247,19 @@ export function SettingsBackupRestorePage() {
         onClose={() => setRestoreWizard(null)}
         onRunPreflight={() => void runRestorePreflight()}
         onRestore={() => void runRestore()}
+      />
+      <CloudDeleteDialog
+        state={cloudDelete}
+        loading={operation === "cloudDelete"}
+        onChange={(confirmationText) => setCloudDelete((current) => current ? { ...current, confirmationText } : current)}
+        onClose={() => setCloudDelete(null)}
+        onConfirm={() => cloudDelete ? void deleteFromCloud(cloudDelete.backup.backupId) : undefined}
+      />
+      <CloudCredentialsClearDialog
+        open={clearCloudCredentialsOpen}
+        loading={operation === "cloudSettings"}
+        onClose={() => setClearCloudCredentialsOpen(false)}
+        onConfirm={() => void clearCloudCredentials()}
       />
     </SettingsScaffold>
   );

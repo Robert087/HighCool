@@ -37,7 +37,15 @@ On 2026-07-25, Batch 5 added the authenticated `/settings/backup-restore` page, 
 
 On 2026-07-26, the desktop runtime connection-refused failure was diagnosed and fixed. The main WebView now loads bundled Tauri frontend assets, the frontend obtains the dynamic backend origin through a safe `get_backend_runtime_info` command, and the Linux backend supervisor thread remains alive so `PR_SET_PDEATHSIG` no longer terminates `ERP.Api` immediately after readiness. See `HIGHCOOL_DESKTOP_RUNTIME_CONNECTION_FIX_RESULT.md`.
 
-The final desktop installer/updater, scheduled backups, Cloudflare R2/cloud backups, backup deletion, Windows packaging verification, and fully approved normal-desktop restore/window/failure-state smoke remain incomplete.
+## Post-Audit Update - Desktop Cloud Backup Batch 6
+
+On 2026-07-26, Batch 6 added Cloudflare R2 cloud backup support to the desktop backup/restore workflow: encrypted persistent R2 settings, S3-compatible provider operations, automatic/manual upload queue with retry state, bounded cloud and combined history endpoints, cloud retention, download/checksum verification before local restore use, and localized Backup/Restore UI tabs for local/cloud/combined views. See `HIGHCOOL_DESKTOP_BATCH6_CLOUDFLARE_R2_RESULT.md`.
+
+## Post-Audit Update - Desktop Cloud Backup Batch 6.1
+
+On 2026-07-26, Batch 6.1 hardened the R2 integration after the staging audit: strict Cloudflare R2 endpoint/DNS validation, HMAC-authenticated cloud manifests, safer download trust boundaries, atomic queue persistence with backup recovery, explicit retry failure categories, checksum-based sync status, safer retention pagination/ownership rules, cloud delete confirmation, and explicit credential replace/clear semantics. Live R2 smoke testing, exhaustive fake-provider/route-matrix tests, Windows packaging, and normal-desktop interactive verification remain pending. See `HIGHCOOL_DESKTOP_BATCH6_1_R2_HARDENING_RESULT.md`.
+
+The final desktop installer/updater, scheduled backups, live R2 credential smoke, Windows packaging verification, and fully approved normal-desktop restore/window/failure-state smoke remain incomplete.
 
 ## Evidence convention
 
@@ -61,7 +69,7 @@ The application is not production-ready. The most serious confirmed remaining fi
 5. Warehouse and branch scopes are modeled and administrable, but `EnsureWarehouseAccessAsync` is never called by a business workflow and branch access is never evaluated.
 6. Financial rows can mix null/default and user-selected currencies, while balances and running balances are aggregated without currency partitioning or exchange-rate application.
 7. Posting validates shared open quantities inside ordinary transactions but has no row version, serializable isolation, or locking strategy; concurrent posts can race over PO remaining quantity, returnable quantity, shortage quantity, or payment target balance.
-8. Desktop shell foundation now exists and builds with Tauri, Batch 5 added the authenticated backup/restore UI plus hardened restore operation-token checks, and the 2026-07-26 runtime fix resolved the observed WSLg connection-refused path. Final desktop packaging, full normal-desktop interactive smoke approval, scheduled/cloud backups, Windows packaging verification, and production operations remain incomplete.
+8. Desktop shell foundation now exists and builds with Tauri, Batch 5 added the authenticated backup/restore UI plus hardened restore operation-token checks, the 2026-07-26 runtime fix resolved the observed WSLg connection-refused path, and Batch 6 added Cloudflare R2 cloud backup integration. Final desktop packaging, full normal-desktop interactive smoke approval, scheduled backups, live R2 credential smoke, Windows packaging verification, and production operations remain incomplete.
 
 Estimated completion:
 

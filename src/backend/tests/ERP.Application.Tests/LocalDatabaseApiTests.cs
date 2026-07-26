@@ -76,6 +76,63 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     }
 
     [Fact]
+    public async Task CloudConfigurationEndpoints_RejectUnsafeAccessAndNeverReturnSecrets()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+
+        _factory.ClearAuthenticatedContext();
+        var unauthenticated = await client.GetAsync("/api/local-database/cloud/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+
+        await _factory.ResetDatabaseAsync();
+        await _factory.MakeCurrentUserNonOwnerWithoutRolesAsync();
+        var forbidden = await client.GetAsync("/api/local-database/cloud/status");
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        await _factory.ResetDatabaseAsync();
+        var unsafeEndpoint = await client.PutAsJsonAsync("/api/local-database/cloud/configuration", new CloudBackupConfigurationRequest(
+            true,
+            true,
+            "highcool-backups",
+            "https://localhost",
+            "r2-access-key",
+            "r2-secret-key",
+            "desktop",
+            30,
+            30,
+            3,
+            CloudBackupCredentialUpdateMode.Replace));
+        Assert.Equal(HttpStatusCode.BadRequest, unsafeEndpoint.StatusCode);
+        Assert.DoesNotContain("r2-secret-key", await unsafeEndpoint.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+        var saved = await client.PutAsJsonAsync("/api/local-database/cloud/configuration", new CloudBackupConfigurationRequest(
+            true,
+            true,
+            "highcool-backups",
+            "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com",
+            "r2-access-key",
+            "r2-secret-key",
+            "desktop",
+            30,
+            30,
+            3,
+            CloudBackupCredentialUpdateMode.Replace));
+        saved.EnsureSuccessStatusCode();
+        var payload = await saved.Content.ReadAsStringAsync();
+        Assert.Contains("\"hasAccessKey\":true", payload);
+        Assert.Contains("\"hasSecretKey\":true", payload);
+        Assert.DoesNotContain("r2-secret-key", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("r2-access-key\"", payload, StringComparison.OrdinalIgnoreCase);
+
+        await using var nonDesktopFactory = new ApiFactory("Testing", enableEndpointCapability: false);
+        await nonDesktopFactory.InitializeAsync();
+        var nonDesktop = await nonDesktopFactory.CreateClient().GetAsync("/api/local-database/cloud/status");
+        Assert.Equal(HttpStatusCode.Conflict, nonDesktop.StatusCode);
+        Assert.Contains("LocalDatabaseFeatureUnavailable", await nonDesktop.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task BackupVerifyAndRetentionEndpoints_ReturnSafeResultsAndClampSettings()
     {
         await _factory.ResetDatabaseAsync();

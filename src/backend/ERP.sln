@@ -14,6 +14,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{30CF4F11
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ERP.Application.Tests", "tests\ERP.Application.Tests\ERP.Application.Tests.csproj", "{4AAD02CD-7602-4F0F-BF49-97E9F2F86AAF}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{E61D2A0F-FE4D-43A5-9A2C-0BEEE0AC10A9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ERP.Tools", "Tools\ERP.Tools\ERP.Tools.csproj", "{3850626C-5F45-4EFA-9A20-13FD4113A70F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,11 +44,16 @@ Global
 		{4AAD02CD-7602-4F0F-BF49-97E9F2F86AAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4AAD02CD-7602-4F0F-BF49-97E9F2F86AAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4AAD02CD-7602-4F0F-BF49-97E9F2F86AAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3850626C-5F45-4EFA-9A20-13FD4113A70F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3850626C-5F45-4EFA-9A20-13FD4113A70F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3850626C-5F45-4EFA-9A20-13FD4113A70F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3850626C-5F45-4EFA-9A20-13FD4113A70F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{4AAD02CD-7602-4F0F-BF49-97E9F2F86AAF} = {30CF4F11-6931-4C9F-A889-0EC013601762}
+		{3850626C-5F45-4EFA-9A20-13FD4113A70F} = {E61D2A0F-FE4D-43A5-9A2C-0BEEE0AC10A9}
 	EndGlobalSection
 EndGlobal

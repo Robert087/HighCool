@@ -73,6 +73,11 @@ public sealed class BackupManifestService
             throw new InvalidOperationException("Backup encryption algorithm is not supported.");
         }
 
+        if (manifest.Authentication is not null && (!manifest.EncryptedSizeBytes.HasValue || manifest.EncryptedSizeBytes.Value <= 0))
+        {
+            throw new InvalidOperationException("Authenticated backup manifest is missing encrypted size.");
+        }
+
         var expectedBackupIdFragment = manifest.BackupId[..Math.Min(8, manifest.BackupId.Length)];
         if (!Path.GetFileName(manifestPath).Contains(expectedBackupIdFragment, StringComparison.OrdinalIgnoreCase))
         {

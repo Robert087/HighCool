@@ -3,6 +3,11 @@ import type {
   BackupIntegrityStatus,
   BackupReason,
   BackupStatus,
+  CloudBackupObjectStatus,
+  CloudBackupConnectionFailureCategory,
+  CloudBackupConnectionTestStage,
+  CloudBackupSyncStatus,
+  CloudBackupUploadStatus,
   RestorePreflightStatus,
 } from "./backupApi";
 import { formatNumber } from "../i18n/format";
@@ -34,6 +39,24 @@ export function restorePreflightTone(status: RestorePreflightStatus | null | und
   return "danger";
 }
 
+export function cloudUploadTone(status: CloudBackupUploadStatus): Tone {
+  if (status === "Uploaded") return "success";
+  if (status === "Queued" || status === "Uploading") return "warning";
+  if (status === "Failed") return "danger";
+  return "neutral";
+}
+
+export function cloudObjectTone(status: CloudBackupObjectStatus): Tone {
+  return status === "Present" ? "success" : "warning";
+}
+
+export function cloudSyncTone(status: CloudBackupSyncStatus): Tone {
+  if (status === "InSync") return "success";
+  if (status === "OutOfSync" || status === "Failed" || status === "Corrupted" || status === "MissingRemotePayload" || status === "MissingRemoteManifest") return "danger";
+  if (status === "LegacyUntrusted") return "neutral";
+  return "warning";
+}
+
 export function canRestoreBackup(integrityStatus: BackupIntegrityStatus, preflightStatus?: RestorePreflightStatus | null) {
   return integrityStatus !== "Failed" && (!preflightStatus || preflightStatus === "Valid");
 }
@@ -52,6 +75,30 @@ export function backupIntegrityLabelKey(status: BackupIntegrityStatus) {
 
 export function restorePreflightLabelKey(status: RestorePreflightStatus | null | undefined) {
   return status ? `settings.backup.restorePreflight.${status}` : "settings.backup.notAvailable";
+}
+
+export function cloudUploadLabelKey(status: CloudBackupUploadStatus) {
+  return `settings.backup.cloud.uploadStatus.${status}`;
+}
+
+export function cloudObjectLabelKey(status: CloudBackupObjectStatus) {
+  return `settings.backup.cloud.objectStatus.${status}`;
+}
+
+export function cloudSyncLabelKey(status: CloudBackupSyncStatus) {
+  return `settings.backup.cloud.syncStatus.${status}`;
+}
+
+export function cloudConnectionCategoryTitleKey(category: CloudBackupConnectionFailureCategory) {
+  return `settings.backup.cloud.connectionCategory.${category}.title`;
+}
+
+export function cloudConnectionCategoryDescriptionKey(category: CloudBackupConnectionFailureCategory) {
+  return `settings.backup.cloud.connectionCategory.${category}.description`;
+}
+
+export function cloudConnectionStageLabelKey(stage: CloudBackupConnectionTestStage) {
+  return `settings.backup.cloud.connectionStage.${stage}`;
 }
 
 export function formatBytes(value: number | null | undefined) {

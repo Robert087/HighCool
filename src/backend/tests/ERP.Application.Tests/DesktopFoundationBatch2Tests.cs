@@ -401,6 +401,7 @@ public sealed class DesktopFoundationBatch2Tests
             new ApplicationDatabaseMetadataService(dbContext),
             new DevelopmentFileBackupEncryptionKeyProvider(storage),
             new BackupManifestService(),
+            new BackupManifestAuthenticationService(new DevelopmentFileBackupEncryptionKeyProvider(storage)),
             new LocalDatabaseOperationCoordinator());
     }
 

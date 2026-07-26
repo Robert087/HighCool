@@ -4,6 +4,10 @@ import type {
   BackupDetails,
   BackupListItem,
   BackupRetentionSettings,
+  CloudBackupConfiguration,
+  CloudBackupConnectionTestResult,
+  CloudBackupListItem,
+  CloudBackupStatusSummary,
   RestorePreflightResult,
 } from "../../services/backupApi";
 import type { BackupRestoreOperation } from "./backupRestorePageState";
@@ -47,6 +51,71 @@ const backup: BackupListItem = {
   lastVerifiedAtUtc: "2026-07-25T10:30:00Z",
 };
 
+const cloudStatus: CloudBackupStatusSummary = {
+  status: "Ready",
+  message: "Cloud backup is ready.",
+  enabled: true,
+  configured: true,
+  queuedCount: 0,
+  uploadingCount: 0,
+  failedCount: 0,
+  lastSuccessfulUploadAtUtc: "2026-07-25T10:35:00Z",
+};
+
+const cloudConfiguration: CloudBackupConfiguration = {
+  enabled: true,
+  autoUploadAfterBackup: true,
+  bucketName: "highcool-backups",
+  endpoint: "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.r2.cloudflarestorage.com",
+  accessKey: "abcd...wxyz",
+  hasAccessKey: true,
+  hasSecretKey: true,
+  prefix: "desktop",
+  retentionCount: 30,
+  connectionTimeoutSeconds: 30,
+  retryCount: 3,
+};
+
+const cloudBackup: CloudBackupListItem = {
+  backupId: backup.backupId,
+  createdAtUtc: backup.createdAtUtc,
+  sizeBytes: backup.sizeBytes,
+  checksumSha256: "encrypted-sha",
+  localStatus: "Succeeded",
+  cloudStatus: "Present",
+  uploadStatus: "Uploaded",
+  verificationStatus: "Verified",
+  syncStatus: "InSync",
+  lastUploadedAtUtc: "2026-07-25T10:35:00Z",
+  cloudObjectKey: "desktop/backups/backup-001/backup.manifest.json",
+};
+
+const successfulConnectionResult: CloudBackupConnectionTestResult = {
+  success: true,
+  succeeded: true,
+  status: "Succeeded",
+  category: "None",
+  message: "Cloud backup connection verified.",
+  stage: "Completed",
+  statusCode: null,
+  providerErrorCode: null,
+  cleanupSucceeded: true,
+  testedAtUtc: "2026-07-25T10:45:00Z",
+};
+
+const failedConnectionResult: CloudBackupConnectionTestResult = {
+  success: false,
+  succeeded: false,
+  status: "InvalidCredentials",
+  category: "InvalidCredentials",
+  message: "The R2 credentials are invalid.",
+  stage: "Write",
+  statusCode: 403,
+  providerErrorCode: "SignatureDoesNotMatch",
+  cleanupSucceeded: true,
+  testedAtUtc: "2026-07-25T10:45:00Z",
+};
+
 const details: BackupDetails = {
   ...backup,
   applicationVersion: "1.0.0",
@@ -77,13 +146,23 @@ interface PageState {
   canCreateBackup?: boolean;
   canExecuteRestore?: boolean;
   canValidateRestore?: boolean;
+  cloudBackups?: CloudBackupListItem[];
+  cloudConfiguration?: CloudBackupConfiguration;
+  cloudStatus?: CloudBackupStatusSummary;
+  combinedBackups?: CloudBackupListItem[];
+  clearCloudCredentialsOpen?: boolean;
+  activeTab?: "local" | "cloud" | "combined";
   details?: BackupDetails | null;
   error?: string;
   loading?: boolean;
   operation?: BackupRestoreOperation;
+  replaceCloudCredentials?: boolean;
   restoreWizard?: unknown;
   summary?: BackupCenterSummary | null;
   verifyingBackupId?: string | null;
+  cloudDelete?: { backup: CloudBackupListItem; confirmationText: string } | null;
+  cloudConnectionResult?: CloudBackupConnectionTestResult | null;
+  cloudSettingsDirty?: boolean;
 }
 
 function escapeHtml(value: string) {
@@ -98,6 +177,15 @@ async function renderPage(state: PageState = {}) {
   const stateValues = [
     state.summary ?? summary,
     state.backups ?? [backup],
+    state.cloudStatus ?? cloudStatus,
+    state.cloudConfiguration ?? cloudConfiguration,
+    "",
+    "",
+    state.replaceCloudCredentials ?? false,
+    state.clearCloudCredentialsOpen ?? false,
+    state.cloudBackups ?? [cloudBackup],
+    state.combinedBackups ?? [cloudBackup],
+    state.activeTab ?? "local",
     retention,
     state.details ?? null,
     state.restoreWizard ?? null,
@@ -105,6 +193,9 @@ async function renderPage(state: PageState = {}) {
     state.error ?? "",
     state.operation ?? null,
     state.verifyingBackupId ?? null,
+    state.cloudDelete ?? null,
+    state.cloudConnectionResult ?? null,
+    state.cloudSettingsDirty ?? false,
   ];
 
   vi.doMock("react", async () => {
@@ -176,7 +267,16 @@ async function renderPage(state: PageState = {}) {
     getBackupSummary: vi.fn(),
     listBackups: vi.fn(),
     restoreBackup: vi.fn(),
+    deleteCloudBackup: vi.fn(),
+    downloadCloudBackup: vi.fn(),
+    getCloudBackupConfiguration: vi.fn(),
+    getCloudBackupStatus: vi.fn(),
+    listCloudBackups: vi.fn(),
+    listCombinedCloudBackups: vi.fn(),
+    saveCloudBackupConfiguration: vi.fn(),
     saveBackupRetentionSettings: vi.fn(),
+    testCloudBackupConnection: vi.fn(),
+    uploadCloudBackup: vi.fn(),
     validateRestoreBackup: vi.fn(),
     verifyBackup: vi.fn(),
   }));
@@ -311,5 +411,87 @@ describe("SettingsBackupRestorePage", () => {
     expect(htmlWithOperation).toContain("Ready to restore");
     expect(htmlWithOperation).toContain(`settings.backup.actions.restoreNow</button>`);
     expect(htmlWithOperation).not.toContain(escapeHtml(validPreflight.operationId ?? ""));
+  });
+
+  it("renders cloud credential and delete confirmations from explicit state only", async () => {
+    const cloudHtml = await renderPage({ activeTab: "cloud" });
+    expect(cloudHtml).toContain("settings.backup.cloud.fields.replaceCredentials");
+    expect(cloudHtml).toContain("settings.backup.cloud.actions.clearCredentials");
+    expect(cloudHtml).not.toContain("settings.backup.cloud.deleteConfirmTitle");
+
+    const clearHtml = await renderPage({ clearCloudCredentialsOpen: true });
+    expect(clearHtml).toContain("settings.backup.cloud.clearCredentialsTitle");
+
+    const deleteHtml = await renderPage({
+      cloudDelete: {
+        backup: cloudBackup,
+        confirmationText: "",
+      },
+    });
+    expect(deleteHtml).toContain("settings.backup.cloud.deleteConfirmTitle");
+    expect(deleteHtml).toContain(cloudBackup.backupId);
+  });
+
+  it("renders a successful categorized cloud connection result", async () => {
+    const html = await renderPage({
+      activeTab: "cloud",
+      cloudConnectionResult: successfulConnectionResult,
+    });
+
+    expect(html).toContain("settings.backup.cloud.connectionSucceededTitle");
+    expect(html).toContain("Cloud backup connection verified.");
+    expect(html).toContain("settings.backup.cloud.connectionStage.Completed");
+    expect(html).toContain("settings.backup.cloud.connectionCleanup.succeeded");
+  });
+
+  it("renders categorized cloud connection failures without secrets", async () => {
+    const html = await renderPage({
+      activeTab: "cloud",
+      cloudConnectionResult: failedConnectionResult,
+    });
+
+    expect(html).toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.title");
+    expect(html).toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.description");
+    expect(html).toContain("settings.backup.cloud.connectionStage.Write");
+    expect(html).toContain("403");
+    expect(html).toContain("SignatureDoesNotMatch");
+    expect(html).not.toContain("secret");
+    expect(html).not.toContain("raw exception");
+  });
+
+  it("keeps the generic unknown fallback as the final cloud connection message", async () => {
+    const html = await renderPage({
+      activeTab: "cloud",
+      cloudConnectionResult: {
+        ...failedConnectionResult,
+        status: "UnknownProviderFailure",
+        category: "UnknownProviderFailure",
+        stage: "ClientCreation",
+        statusCode: null,
+        providerErrorCode: null,
+      },
+    });
+
+    expect(html).toContain("settings.backup.cloud.connectionCategory.UnknownProviderFailure.title");
+    expect(html).toContain("settings.backup.cloud.connectionCategory.UnknownProviderFailure.description");
+  });
+
+  it("shows cloud test loading state and suppresses stale results when state is reset", async () => {
+    const loadingHtml = await renderPage({
+      activeTab: "cloud",
+      operation: "cloudTest",
+      cloudConnectionResult: failedConnectionResult,
+    });
+
+    expect(loadingHtml).toContain("app.loading");
+    expect(loadingHtml).toContain(`disabled=""`);
+
+    const resetHtml = await renderPage({
+      activeTab: "cloud",
+      cloudConnectionResult: null,
+    });
+
+    expect(resetHtml).not.toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.title");
+    expect(resetHtml).not.toContain("SignatureDoesNotMatch");
   });
 });

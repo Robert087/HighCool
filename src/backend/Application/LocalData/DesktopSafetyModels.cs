@@ -19,7 +19,9 @@ public sealed record BackupManifest(
     long DatabaseSizeBytes,
     string PlainSha256,
     string EncryptedSha256,
-    BackupEncryptionManifest Encryption);
+    BackupEncryptionManifest Encryption,
+    long? EncryptedSizeBytes = null,
+    BackupManifestAuthentication? Authentication = null);
 
 public sealed record BackupEncryptionManifest(
     string Algorithm,
@@ -27,6 +29,31 @@ public sealed record BackupEncryptionManifest(
     string KeyId,
     string Nonce,
     string Tag);
+
+public sealed record BackupManifestAuthentication(
+    int Version,
+    string Algorithm,
+    string KeyDerivation,
+    string Signature);
+
+public sealed record BackupManifestAuthenticationResult(
+    bool IsValid,
+    string Message);
+
+public interface IBackupManifestAuthenticationService
+{
+    Task<BackupManifest> SignAsync(
+        BackupManifest manifest,
+        string payloadObjectKey,
+        string manifestObjectKey,
+        CancellationToken cancellationToken);
+
+    Task ValidateAsync(
+        BackupManifest manifest,
+        string payloadObjectKey,
+        string manifestObjectKey,
+        CancellationToken cancellationToken);
+}
 
 public enum RestorePreflightStatus
 {

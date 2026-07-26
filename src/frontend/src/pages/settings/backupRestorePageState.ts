@@ -1,7 +1,17 @@
 import type { BackupIntegrityStatus, RestorePreflightResult } from "../../services/backupApi";
 import { canRestoreBackup } from "../../services/backupPresentation";
 
-export type BackupRestoreOperation = "backup" | "verify" | "restore" | "retention" | null;
+export type BackupRestoreOperation =
+  | "backup"
+  | "verify"
+  | "restore"
+  | "retention"
+  | "cloudSettings"
+  | "cloudTest"
+  | "cloudUpload"
+  | "cloudDownload"
+  | "cloudDelete"
+  | null;
 
 export function backupOperation(): BackupRestoreOperation {
   return "backup";
@@ -17,6 +27,26 @@ export function restoreOperation(): BackupRestoreOperation {
 
 export function retentionOperation(): BackupRestoreOperation {
   return "retention";
+}
+
+export function cloudSettingsOperation(): BackupRestoreOperation {
+  return "cloudSettings";
+}
+
+export function cloudTestOperation(): BackupRestoreOperation {
+  return "cloudTest";
+}
+
+export function cloudUploadOperation(): BackupRestoreOperation {
+  return "cloudUpload";
+}
+
+export function cloudDownloadOperation(): BackupRestoreOperation {
+  return "cloudDownload";
+}
+
+export function cloudDeleteOperation(): BackupRestoreOperation {
+  return "cloudDelete";
 }
 
 export function canSubmitRestore(

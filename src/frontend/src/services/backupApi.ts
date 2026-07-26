@@ -4,6 +4,68 @@ export type BackupReason = "Manual" | "Scheduled" | "BeforeMigration" | "BeforeR
 export type BackupStatus = "Succeeded" | "Failed" | "Canceled";
 export type BackupHealthStatus = "Healthy" | "Warning" | "Error" | "Unknown";
 export type BackupIntegrityStatus = "Unknown" | "Verified" | "Failed";
+export type CloudBackupStatus = "Disabled" | "NotConfigured" | "Ready" | "Offline" | "Error";
+export type CloudBackupUploadStatus = "NotQueued" | "Queued" | "Uploading" | "Uploaded" | "Failed" | "Canceled";
+export type CloudBackupObjectStatus = "Missing" | "Present";
+export type CloudBackupSyncStatus =
+  | "LocalOnly"
+  | "CloudOnly"
+  | "InSync"
+  | "OutOfSync"
+  | "Queued"
+  | "Uploading"
+  | "Failed"
+  | "Downloading"
+  | "LegacyUntrusted"
+  | "Corrupted"
+  | "MissingRemotePayload"
+  | "MissingRemoteManifest";
+export type CloudBackupFailureCategory =
+  | "None"
+  | "TransientNetworkFailure"
+  | "Timeout"
+  | "Throttling"
+  | "ServiceUnavailable"
+  | "DnsFailure"
+  | "AuthenticationFailure"
+  | "AuthorizationFailure"
+  | "InvalidBucket"
+  | "InvalidEndpoint"
+  | "MissingLocalFile"
+  | "ChecksumMismatch"
+  | "InvalidManifest"
+  | "Cancellation"
+  | "QueueCorruption";
+export type CloudBackupConnectionFailureCategory =
+  | "None"
+  | "InvalidConfiguration"
+  | "CredentialsMissing"
+  | "CredentialsUnreadable"
+  | "InvalidCredentials"
+  | "AccessDenied"
+  | "BucketNotFound"
+  | "EndpointRejected"
+  | "DnsFailure"
+  | "TlsFailure"
+  | "Timeout"
+  | "NetworkUnavailable"
+  | "WriteDenied"
+  | "ReadDenied"
+  | "DeleteDenied"
+  | "ContentVerificationFailed"
+  | "CleanupFailed"
+  | "UnknownProviderFailure";
+export type CloudBackupConnectionTestStage =
+  | "Validation"
+  | "Credentials"
+  | "ClientCreation"
+  | "List"
+  | "Write"
+  | "Read"
+  | "ChecksumVerification"
+  | "DeleteCleanup"
+  | "Completed";
+export type CloudBackupCredentialUpdateMode = "Preserve" | "Replace" | "Clear";
 export type RestorePreflightStatus =
   | "Valid"
   | "BackupNotFound"
@@ -31,6 +93,19 @@ export interface BackupRetentionSettings {
   beforeRestoreCount: number;
   beforeApplicationUpdateCount: number;
   minimumAgeHoursBeforeDeletion: number;
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  appliedFilters: unknown;
+  sort: {
+    sortBy: string;
+    direction: "Asc" | "Desc";
+  };
 }
 
 export interface BackupCenterSummary {
@@ -118,6 +193,93 @@ export interface RestoreResult {
   safetyBackupId: string | null;
 }
 
+export interface CloudBackupConfiguration {
+  enabled: boolean;
+  autoUploadAfterBackup: boolean;
+  bucketName: string;
+  endpoint: string;
+  accessKey: string;
+  hasAccessKey: boolean;
+  hasSecretKey: boolean;
+  prefix: string;
+  retentionCount: number;
+  connectionTimeoutSeconds: number;
+  retryCount: number;
+}
+
+export interface CloudBackupConfigurationRequest {
+  enabled: boolean;
+  autoUploadAfterBackup: boolean;
+  bucketName: string;
+  endpoint: string;
+  accessKey?: string | null;
+  secretKey?: string | null;
+  prefix?: string | null;
+  retentionCount: number;
+  connectionTimeoutSeconds: number;
+  retryCount: number;
+  credentialUpdateMode?: CloudBackupCredentialUpdateMode;
+}
+
+export interface CloudBackupStatusSummary {
+  status: CloudBackupStatus;
+  message: string;
+  enabled: boolean;
+  configured: boolean;
+  queuedCount: number;
+  uploadingCount: number;
+  failedCount: number;
+  lastSuccessfulUploadAtUtc: string | null;
+}
+
+export interface CloudBackupConnectionTestResult {
+  success: boolean;
+  succeeded: boolean;
+  status: string;
+  category: CloudBackupConnectionFailureCategory;
+  message: string;
+  stage: CloudBackupConnectionTestStage;
+  statusCode: number | null;
+  providerErrorCode: string | null;
+  cleanupSucceeded: boolean;
+  testedAtUtc: string;
+}
+
+export interface CloudBackupQueueItem {
+  queueId: string;
+  backupId: string;
+  status: CloudBackupUploadStatus;
+  attempts: number;
+  maxAttempts: number;
+  queuedAtUtc: string;
+  startedAtUtc: string | null;
+  completedAtUtc: string | null;
+  nextAttemptAtUtc: string | null;
+  lastError: string | null;
+  failureCategory: CloudBackupFailureCategory;
+}
+
+export interface CloudBackupListItem {
+  backupId: string;
+  createdAtUtc: string;
+  sizeBytes: number;
+  checksumSha256: string | null;
+  localStatus: BackupStatus;
+  cloudStatus: CloudBackupObjectStatus;
+  uploadStatus: CloudBackupUploadStatus;
+  verificationStatus: BackupIntegrityStatus;
+  syncStatus: CloudBackupSyncStatus;
+  lastUploadedAtUtc: string | null;
+  cloudObjectKey: string | null;
+}
+
+export interface CloudBackupDownloadResult {
+  backupId: string;
+  downloaded: boolean;
+  message: string;
+  integrityStatus: BackupIntegrityStatus;
+}
+
 export function getBackupSummary() {
   return requestJson<BackupCenterSummary>("/api/local-database/backups/summary");
 }
@@ -164,5 +326,65 @@ export function saveBackupRetentionSettings(settings: BackupRetentionSettings) {
   return requestJson<BackupRetentionSettings>("/api/local-database/backup-retention", {
     method: "PUT",
     body: JSON.stringify(settings),
+  });
+}
+
+export function getCloudBackupStatus() {
+  return requestJson<CloudBackupStatusSummary>("/api/local-database/cloud/status");
+}
+
+export function getCloudBackupConfiguration() {
+  return requestJson<CloudBackupConfiguration>("/api/local-database/cloud/configuration");
+}
+
+export function saveCloudBackupConfiguration(settings: CloudBackupConfigurationRequest) {
+  return requestJson<CloudBackupConfiguration>("/api/local-database/cloud/configuration", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  });
+}
+
+export function testCloudBackupConnection() {
+  return requestJson<CloudBackupConnectionTestResult>("/api/local-database/cloud/test-connection", {
+    method: "POST",
+  });
+}
+
+export function listCloudBackups(page = 1, pageSize = 20) {
+  return requestJson<PagedResult<CloudBackupListItem>>(`/api/local-database/cloud/backups?page=${page}&pageSize=${pageSize}`);
+}
+
+export function listCombinedCloudBackups(page = 1, pageSize = 20) {
+  return requestJson<PagedResult<CloudBackupListItem>>(`/api/local-database/cloud/sync?page=${page}&pageSize=${pageSize}`);
+}
+
+export function uploadCloudBackup(backupId: string, force = false) {
+  return requestJson<CloudBackupQueueItem>(`/api/local-database/cloud/backups/${encodeURIComponent(backupId)}/upload`, {
+    method: "POST",
+    body: JSON.stringify({ force }),
+  });
+}
+
+export function retryCloudUpload(queueId: string) {
+  return requestJson<CloudBackupQueueItem>(`/api/local-database/cloud/uploads/${encodeURIComponent(queueId)}/retry`, {
+    method: "POST",
+  });
+}
+
+export function cancelCloudUpload(queueId: string) {
+  return requestJson<CloudBackupQueueItem>(`/api/local-database/cloud/uploads/${encodeURIComponent(queueId)}/cancel`, {
+    method: "POST",
+  });
+}
+
+export function downloadCloudBackup(backupId: string) {
+  return requestJson<CloudBackupDownloadResult>(`/api/local-database/cloud/backups/${encodeURIComponent(backupId)}/download`, {
+    method: "POST",
+  });
+}
+
+export function deleteCloudBackup(backupId: string) {
+  return requestJson<{ message: string }>(`/api/local-database/cloud/backups/${encodeURIComponent(backupId)}`, {
+    method: "DELETE",
   });
 }

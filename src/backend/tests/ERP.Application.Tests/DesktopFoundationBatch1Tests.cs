@@ -453,6 +453,7 @@ public sealed class DesktopFoundationBatch1Tests
             metadataService,
             new DevelopmentFileBackupEncryptionKeyProvider(storage),
             new BackupManifestService(),
+            new BackupManifestAuthenticationService(new DevelopmentFileBackupEncryptionKeyProvider(storage)),
             new LocalDatabaseOperationCoordinator());
     }
 
