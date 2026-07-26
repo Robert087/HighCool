@@ -5,6 +5,8 @@ use serde::Serialize;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -22,6 +24,8 @@ const PORT_END: u16 = 17699;
 const STARTUP_TIMEOUT_SECONDS: u64 = 45;
 const SHUTDOWN_TIMEOUT_SECONDS: u64 = 8;
 const LOG_MAX_BYTES: u64 = 1_048_576;
+#[cfg(windows)]
+const WINDOWS_CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Default, Clone)]
 struct DesktopState {
@@ -372,6 +376,9 @@ fn spawn_backend(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
+    #[cfg(windows)]
+    command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
+
     #[cfg(target_os = "linux")]
     unsafe {
         command.pre_exec(|| {
@@ -683,15 +690,11 @@ fn resolve_backend_executable(app: &AppHandle) -> Option<PathBuf> {
         }
     }
 
-    let dev_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("backend-publish")
-        .join("linux-x64")
-        .join(if cfg!(windows) {
-            "ERP.Api.exe"
-        } else {
-            "ERP.Api"
-        });
+    let runtime = desktop_backend_runtime();
+    let dev_candidate = backend_publish_executable_path(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."),
+        runtime,
+    );
     if dev_candidate.exists() {
         return Some(dev_candidate);
     }
@@ -699,16 +702,36 @@ fn resolve_backend_executable(app: &AppHandle) -> Option<PathBuf> {
     app.path()
         .resource_dir()
         .ok()
-        .map(|dir| {
-            dir.join("backend-publish")
-                .join("linux-x64")
-                .join(if cfg!(windows) {
-                    "ERP.Api.exe"
-                } else {
-                    "ERP.Api"
-                })
-        })
+        .map(|dir| backend_publish_executable_path(dir, runtime))
         .filter(|candidate| candidate.exists())
+}
+
+fn desktop_backend_runtime() -> &'static str {
+    if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
+        "win-x64"
+    } else if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
+        "linux-x64"
+    } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
+        "osx-arm64"
+    } else if cfg!(target_os = "macos") && cfg!(target_arch = "x86_64") {
+        "osx-x64"
+    } else {
+        "unsupported"
+    }
+}
+
+fn backend_executable_name(runtime: &str) -> &'static str {
+    if runtime.starts_with("win-") {
+        "ERP.Api.exe"
+    } else {
+        "ERP.Api"
+    }
+}
+
+fn backend_publish_executable_path(root: PathBuf, runtime: &str) -> PathBuf {
+    root.join("backend-publish")
+        .join(runtime)
+        .join(backend_executable_name(runtime))
 }
 
 fn prepare_local_directories(app_data_dir: &Path) -> std::io::Result<()> {
@@ -897,5 +920,33 @@ mod tests {
         assert!(super::build_backend_runtime_info("http://127.0.0.1").is_err());
         assert!(super::build_backend_runtime_info("https://127.0.0.1:17600").is_err());
         assert!(super::build_backend_runtime_info("http://example.com:17600").is_err());
+    }
+
+    #[test]
+    fn backend_executable_name_matches_runtime_rules() {
+        assert_eq!(super::backend_executable_name("win-x64"), "ERP.Api.exe");
+        assert_eq!(super::backend_executable_name("linux-x64"), "ERP.Api");
+        assert_eq!(super::backend_executable_name("osx-arm64"), "ERP.Api");
+        assert_eq!(super::backend_executable_name("osx-x64"), "ERP.Api");
+    }
+
+    #[test]
+    fn backend_publish_path_uses_runtime_directory() {
+        let root = std::path::PathBuf::from("resources");
+
+        assert_eq!(
+            super::backend_publish_executable_path(root.clone(), "win-x64"),
+            std::path::PathBuf::from("resources")
+                .join("backend-publish")
+                .join("win-x64")
+                .join("ERP.Api.exe")
+        );
+        assert_eq!(
+            super::backend_publish_executable_path(root, "linux-x64"),
+            std::path::PathBuf::from("resources")
+                .join("backend-publish")
+                .join("linux-x64")
+                .join("ERP.Api")
+        );
     }
 }

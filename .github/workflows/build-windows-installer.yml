@@ -1,0 +1,173 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/build-windows-installer.yml"
+      - ".config/dotnet-tools.json"
+      - "src/backend/**"
+      - "src/frontend/package.json"
+      - "src/frontend/package-lock.json"
+      - "src/frontend/src/**"
+      - "src/frontend/public/**"
+      - "src/frontend/index.html"
+      - "src/frontend/vite.config.*"
+      - "src/frontend/tsconfig*.json"
+      - "src/desktop/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    name: Build Windows NSIS Installer
+    runs-on: windows-latest
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            src/frontend/package-lock.json
+            src/desktop/package-lock.json
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('src/backend/**/*.csproj', 'src/backend/**/*.props', 'src/backend/**/*.targets', '.config/dotnet-tools.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Cache Cargo registry and git dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src/desktop/Cargo.lock', 'src/desktop/src-tauri/Cargo.lock', 'src/desktop/Cargo.toml', 'src/desktop/src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Verify Windows Tauri build prerequisites
+        shell: pwsh
+        run: |
+          dotnet --info
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+          rustup target list --installed
+          if (-not (Get-Command cl.exe -ErrorAction SilentlyContinue)) {
+            $vsDevShell = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+            if (-not (Test-Path $vsDevShell)) {
+              throw "Visual Studio Build Tools were not found on the runner."
+            }
+          }
+
+      - name: Restore backend tools and packages
+        shell: pwsh
+        run: |
+          dotnet tool restore
+          dotnet restore src/backend/ERP.sln
+
+      - name: Build backend
+        shell: pwsh
+        run: dotnet build src/backend/ERP.sln --no-restore -c Release
+
+      - name: Test backend
+        shell: pwsh
+        run: dotnet test src/backend/ERP.sln --no-build -c Release --logger "console;verbosity=minimal"
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Build frontend
+        shell: pwsh
+        working-directory: src/frontend
+        run: npm run build
+
+      - name: Test frontend
+        shell: pwsh
+        working-directory: src/frontend
+        run: npm test -- --run
+
+      - name: Install desktop dependencies
+        shell: pwsh
+        working-directory: src/desktop
+        run: npm ci
+
+      - name: Test desktop scripts
+        shell: pwsh
+        working-directory: src/desktop
+        run: npm test
+
+      - name: Check desktop Rust formatting
+        shell: pwsh
+        working-directory: src/desktop
+        run: cargo fmt --check
+
+      - name: Check desktop Rust build
+        shell: pwsh
+        working-directory: src/desktop
+        run: cargo check
+
+      - name: Test desktop Rust code
+        shell: pwsh
+        working-directory: src/desktop
+        run: cargo test
+
+      - name: Build Windows NSIS installer
+        shell: pwsh
+        working-directory: src/desktop
+        run: |
+          New-Item -ItemType Directory -Force -Path ../../artifacts/logs | Out-Null
+          npm run desktop:build:windows *>&1 | Tee-Object -FilePath ../../artifacts/logs/windows-installer-build.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: HighCool-Windows-Installer
+          path: src/desktop/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HighCool-Windows-Installer-Build-Logs
+          path: artifacts/logs/*.log
+          if-no-files-found: ignore
+          retention-days: 7

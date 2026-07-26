@@ -85,6 +85,69 @@ Desktop runtime connection fix on 2026-07-26 changed the main Tauri WebView to l
 
 Batch 6 on 2026-07-26 added Cloudflare R2 cloud backup support for the desktop backup/restore screen. The backend owns all R2 communication through S3-compatible APIs, stores R2 credentials encrypted in the desktop local data directory, queues automatic/manual uploads with retry state, lists local/cloud/combined backup history, downloads cloud backups through manifest/checksum verification before existing restore flow use, and applies cloud retention. The UI is localized in English and Arabic and keeps local backup/restore usable when cloud backup is disabled or unavailable. Live R2 credential verification still needs to be run in a real environment.
 
+Batch 7 on 2026-07-26 added a native Windows NSIS installer build path for the Tauri desktop shell. The Windows build publishes the ASP.NET backend for `win-x64` as a self-contained Release deployment, keeps `PublishSingleFile=false`, leaves trimming disabled, bundles the published backend directory as an immutable application resource, and keeps runtime databases, logs, backups, pending uploads, settings, and keys under the Tauri application data directory instead of the installation directory. Native Windows installer generation and smoke testing remain pending until run on Windows 10/11 x64.
+
+### Windows Installer Build
+
+Build Windows installers only from native Windows 10/11 x64, not WSL. Required build tools are Git, Node.js 20 with npm 10, .NET SDK 8.0, Rust stable with the `x86_64-pc-windows-msvc` target, Visual Studio Build Tools with the C++ workload and Windows SDK, and the Tauri CLI installed through this workspace's npm dependencies. HighCool uses the installed or bootstrapped Microsoft Edge WebView2 runtime; MSI/WiX packaging is not enabled.
+
+```powershell
+Set-Location C:\Path\To\HighCool
+dotnet tool restore
+dotnet restore src/backend/ERP.sln
+Set-Location C:\Path\To\HighCool\src\frontend
+npm install
+Set-Location C:\Path\To\HighCool\src\desktop
+npm install
+rustup target add x86_64-pc-windows-msvc
+npm run desktop:build:windows
+```
+
+The one-command installer build is:
+
+```powershell
+Set-Location C:\Path\To\HighCool\src\desktop
+npm run desktop:build:windows
+```
+
+The expected NSIS installer output is under:
+
+```text
+C:\Path\To\HighCool\src\desktop\target\x86_64-pc-windows-msvc\release\bundle\nsis\
+```
+
+The build script validates prerequisites, checks that `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` use the same desktop version, cleans only generated desktop publish and NSIS bundle output, builds the React frontend, publishes `ERP.Api` to `src/desktop/backend-publish/win-x64`, and runs `tauri build --target x86_64-pc-windows-msvc --bundles nsis`. The installer is configured as a per-user NSIS installer with product name `HighCool`, application identifier `com.highcool.desktop`, version `0.1.0`, English language, Start Menu folder `HighCool`, downgrade prevention, and WebView2 bootstrapper download. Publisher, code-signing certificate, MSI packaging, and native Windows icon validation are pending project decisions or native Windows verification.
+
+On Windows, Tauri derives the app-data root from the identifier. Expected production paths are:
+
+```text
+%APPDATA%\com.highcool.desktop\Data\highcool.db
+%APPDATA%\com.highcool.desktop\Data\highcool.db-wal
+%APPDATA%\com.highcool.desktop\Data\highcool.db-shm
+%APPDATA%\com.highcool.desktop\Backups\
+%APPDATA%\com.highcool.desktop\PendingBackups\
+%APPDATA%\com.highcool.desktop\Logs\
+%APPDATA%\com.highcool.desktop\Data\cloud-backup-settings.json
+%APPDATA%\com.highcool.desktop\Data\cloud-backup-queue.json
+%APPDATA%\com.highcool.desktop\Data\Keys\highcool-local-backup.key
+%APPDATA%\com.highcool.desktop\Keys\highcool-desktop-jwt.key
+%APPDATA%\com.highcool.desktop\Data\TestTooling\
+```
+
+Fresh installs create the application-data directories on first launch, create or migrate the SQLite database through backend startup, and bind the backend only to `http://127.0.0.1:<dynamic-port>`. Upgrades replace application binaries and bundled resources without touching the application-data directory. Normal uninstall removes installed binaries but must leave application data in place. Optional manual cleanup is to uninstall HighCool, confirm no HighCool process is running, back up any required files, then remove `%APPDATA%\com.highcool.desktop` manually.
+
+Windows smoke-test checklist:
+
+```text
+Fresh install: install HighCool, launch from Start Menu, verify only one instance opens, verify backend readiness, verify database creation, complete organization setup, create sample business data, create a local backup, configure R2, upload a cloud backup, close and reopen, and confirm data persists.
+Upgrade: install version N, create data and backups, install version N+1 over it, verify database/WAL/SHM files, keys, settings, backups, pending uploads, logs, and R2 configuration remain, verify migrations execute, and verify backup/restore still works.
+Uninstall/reinstall: uninstall HighCool, confirm binaries are removed, confirm app data remains, reinstall, and confirm the existing database/configuration/backups are detected.
+PC-loss simulation: install on a clean Windows profile or VM, configure required R2 credentials/settings, list cloud backups, restore, and verify the organization snapshot or equivalent business data.
+Failure cases: backend cannot start, database locked, database migration failure, WebView2 unavailable, R2 unavailable, corrupted backup, insufficient disk space, interrupted installer, and interrupted upgrade.
+```
+
+Before approving a customer installer, run the native Windows command above, inspect the generated NSIS `.exe`, install it in a clean Windows user profile, complete the smoke-test checklist, and confirm the installed bundle contains no JWT secrets, R2 credentials, encryption keys, SQLite databases, WAL/SHM files, backups, logs, local app-data files, `.env` files, test snapshots, or seed manifests.
+
 Batch 6.1 on 2026-07-26 hardened the R2 integration with strict Cloudflare R2 endpoint validation, DNS safety checks, HMAC-authenticated backup manifests, atomic queue writes with recovery, explicit retry categories, checksum-based sync status, safer retention pagination/ownership rules, cloud delete confirmation, and explicit credential replace/clear behavior. It still requires a disposable live R2 smoke test before staging approval.
 
 ### Organization Test Data Tooling

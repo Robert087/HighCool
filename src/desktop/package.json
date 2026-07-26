@@ -6,9 +6,13 @@
   "scripts": {
     "build:frontend": "npm --prefix ../frontend run build",
     "publish:backend": "node scripts/publish-backend.mjs",
+    "publish:backend:windows": "node scripts/publish-backend.mjs --runtime win-x64",
+    "check:versions": "node scripts/check-version-consistency.mjs",
     "prepare:desktop": "npm run build:frontend && npm run publish:backend",
+    "prepare:desktop:windows": "npm run build:frontend && npm run publish:backend:windows",
     "desktop:dev": "npm run prepare:desktop && tauri dev",
     "desktop:build": "npm run prepare:desktop && tauri build",
+    "desktop:build:windows": "node scripts/build-windows-installer.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
