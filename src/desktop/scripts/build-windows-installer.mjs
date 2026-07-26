@@ -8,6 +8,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDirectory, "..");
 const repoRoot = resolve(desktopRoot, "../..");
 const windowsTarget = "x86_64-pc-windows-msvc";
+const bundleConfig = resolve(desktopRoot, "src-tauri", "tauri.bundle.conf.json");
 
 if (process.platform !== "win32") {
   console.error("HighCool Windows installer builds must run on native Windows with the MSVC Rust target.");
@@ -36,7 +37,7 @@ await cleanGeneratedWindowsBundles();
 
 run("npm", ["run", "build:frontend"], { cwd: desktopRoot, label: "frontend production build" });
 run("npm", ["run", "publish:backend:windows"], { cwd: desktopRoot, label: "win-x64 backend publish" });
-run("npx", ["tauri", "build", "--target", windowsTarget, "--bundles", "nsis"], {
+run("npx", ["tauri", "build", "--config", bundleConfig, "--target", windowsTarget, "--bundles", "nsis"], {
   cwd: desktopRoot,
   label: "Tauri NSIS bundle",
 });

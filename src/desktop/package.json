@@ -11,7 +11,7 @@
     "prepare:desktop": "npm run build:frontend && npm run publish:backend",
     "prepare:desktop:windows": "npm run build:frontend && npm run publish:backend:windows",
     "desktop:dev": "npm run prepare:desktop && tauri dev",
-    "desktop:build": "npm run prepare:desktop && tauri build",
+    "desktop:build": "npm run prepare:desktop && tauri build --config src-tauri/tauri.bundle.conf.json",
     "desktop:build:windows": "node scripts/build-windows-installer.mjs",
     "test": "node --test tests/*.test.mjs"
   },
