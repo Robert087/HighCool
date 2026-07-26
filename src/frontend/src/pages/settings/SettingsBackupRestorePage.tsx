@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Badge,
   Button,
@@ -24,16 +24,11 @@ import {
   saveBackupRetentionSettings,
   validateRestoreBackup,
   verifyBackup,
-  type BackupCenterSummary,
   type CloudBackupConfiguration,
-  type CloudBackupConnectionTestResult,
   type CloudBackupListItem,
-  type CloudBackupStatusSummary,
   type BackupDetails,
   type BackupListItem,
   type BackupRetentionSettings,
-  type RestorePreflightResult,
-  type RestoreResult,
   deleteCloudBackup,
   downloadCloudBackup,
   getCloudBackupConfiguration,
@@ -73,56 +68,19 @@ import {
   cloudSettingsOperation,
   cloudTestOperation,
   cloudUploadOperation,
+  EMPTY_RETENTION,
   normalizeRetentionNumber,
   retentionOperation,
   restoreOperation,
+  useBackupRestorePageState,
   verifyOperation,
+  type BackupTab,
+  type CloudDeleteState,
   type BackupRestoreOperation,
+  type RestoreWizardState,
 } from "./backupRestorePageState";
 
 type Operation = BackupRestoreOperation;
-type BackupTab = "local" | "cloud" | "combined";
-
-interface RestoreWizardState {
-  backup: BackupListItem;
-  details: BackupDetails | null;
-  preflight: RestorePreflightResult | null;
-  result: RestoreResult | null;
-  acceptedWarning: boolean;
-  confirmationText: string;
-  error: string;
-  loading: boolean;
-  stageKey: string;
-}
-
-interface CloudDeleteState {
-  backup: CloudBackupListItem;
-  confirmationText: string;
-}
-
-const EMPTY_RETENTION: BackupRetentionSettings = {
-  enabled: true,
-  manualCount: 10,
-  scheduledCount: 24,
-  beforeMigrationCount: 10,
-  beforeRestoreCount: 10,
-  beforeApplicationUpdateCount: 10,
-  minimumAgeHoursBeforeDeletion: 24,
-};
-
-const EMPTY_CLOUD_CONFIGURATION: CloudBackupConfiguration = {
-  enabled: false,
-  autoUploadAfterBackup: false,
-  bucketName: "",
-  endpoint: "",
-  accessKey: "",
-  hasAccessKey: false,
-  hasSecretKey: false,
-  prefix: "",
-  retentionCount: 30,
-  connectionTimeoutSeconds: 30,
-  retryCount: 3,
-};
 
 function valueOrUnavailable(value: string | number | null | undefined) {
   return value == null || value === "" ? "settings.backup.notAvailable" : String(value);
@@ -412,27 +370,50 @@ export function SettingsBackupRestorePage() {
   const { hasPermission } = useAuth();
   const { formatDate, t } = useI18n();
   const { showToast } = useToast();
-  const [summary, setSummary] = useState<BackupCenterSummary | null>(null);
-  const [backups, setBackups] = useState<BackupListItem[]>([]);
-  const [cloudStatus, setCloudStatus] = useState<CloudBackupStatusSummary | null>(null);
-  const [cloudConfiguration, setCloudConfiguration] = useState<CloudBackupConfiguration>(EMPTY_CLOUD_CONFIGURATION);
-  const [cloudAccessKey, setCloudAccessKey] = useState("");
-  const [cloudSecretKey, setCloudSecretKey] = useState("");
-  const [replaceCloudCredentials, setReplaceCloudCredentials] = useState(false);
-  const [clearCloudCredentialsOpen, setClearCloudCredentialsOpen] = useState(false);
-  const [cloudBackups, setCloudBackups] = useState<CloudBackupListItem[]>([]);
-  const [combinedBackups, setCombinedBackups] = useState<CloudBackupListItem[]>([]);
-  const [activeTab, setActiveTab] = useState<BackupTab>("local");
-  const [retention, setRetention] = useState<BackupRetentionSettings>(EMPTY_RETENTION);
-  const [details, setDetails] = useState<BackupDetails | null>(null);
-  const [restoreWizard, setRestoreWizard] = useState<RestoreWizardState | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [operation, setOperation] = useState<Operation>(null);
-  const [verifyingBackupId, setVerifyingBackupId] = useState<string | null>(null);
-  const [cloudDelete, setCloudDelete] = useState<CloudDeleteState | null>(null);
-  const [cloudConnectionResult, setCloudConnectionResult] = useState<CloudBackupConnectionTestResult | null>(null);
-  const [cloudSettingsDirty, setCloudSettingsDirty] = useState(false);
+  const {
+    summary,
+    setSummary,
+    backups,
+    setBackups,
+    cloudStatus,
+    setCloudStatus,
+    cloudConfiguration,
+    setCloudConfiguration,
+    cloudAccessKey,
+    setCloudAccessKey,
+    cloudSecretKey,
+    setCloudSecretKey,
+    replaceCloudCredentials,
+    setReplaceCloudCredentials,
+    clearCloudCredentialsOpen,
+    setClearCloudCredentialsOpen,
+    cloudBackups,
+    setCloudBackups,
+    combinedBackups,
+    setCombinedBackups,
+    activeTab,
+    setActiveTab,
+    retention,
+    setRetention,
+    details,
+    setDetails,
+    restoreWizard,
+    setRestoreWizard,
+    loading,
+    setLoading,
+    error,
+    setError,
+    operation,
+    setOperation,
+    verifyingBackupId,
+    setVerifyingBackupId,
+    cloudDelete,
+    setCloudDelete,
+    cloudConnectionResult,
+    setCloudConnectionResult,
+    cloudSettingsDirty,
+    setCloudSettingsDirty,
+  } = useBackupRestorePageState();
 
   const canCreateBackup = hasPermission(Permissions.SettingsDatabaseBackupCreate);
   const canValidateRestore = hasPermission(Permissions.SettingsDatabaseRestoreValidate);

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import type { ReactNode } from "react";
 import type {
   BackupCenterSummary,
   BackupDetails,
@@ -166,6 +167,8 @@ interface PageState {
   cloudSettingsDirty?: boolean;
 }
 
+let currentPageState: PageState = {};
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
@@ -177,52 +180,63 @@ function text(key: string) {
 }
 
 async function renderPage(state: PageState = {}) {
+  vi.doUnmock("../../features/auth/AuthProvider");
+  vi.doUnmock("../../components/ui");
+  vi.doUnmock("../../services/backupApi");
+  vi.doUnmock("./backupRestorePageState");
   vi.resetModules();
+  currentPageState = state;
 
-  const stateValues = [
-    state.summary ?? summary,
-    state.backups ?? [backup],
-    state.cloudStatus ?? cloudStatus,
-    state.cloudConfiguration ?? cloudConfiguration,
-    "",
-    "",
-    state.replaceCloudCredentials ?? false,
-    state.clearCloudCredentialsOpen ?? false,
-    state.cloudBackups ?? [cloudBackup],
-    state.combinedBackups ?? [cloudBackup],
-    state.activeTab ?? "local",
-    retention,
-    state.details ?? null,
-    state.restoreWizard ?? null,
-    state.loading ?? false,
-    state.error ?? "",
-    state.operation ?? null,
-    state.verifyingBackupId ?? null,
-    state.cloudDelete ?? null,
-    state.cloudConnectionResult ?? null,
-    state.cloudSettingsDirty ?? false,
-  ];
-
-  vi.doMock("react", async () => {
-    const actual = await vi.importActual<typeof import("react")>("react");
-    let stateIndex = 0;
+  vi.doMock("./backupRestorePageState", async () => {
+    const actual = await vi.importActual<typeof import("./backupRestorePageState")>("./backupRestorePageState");
+    const setState = () => vi.fn();
 
     return {
       ...actual,
-      useEffect: () => undefined,
-      useMemo: <T,>(factory: () => T) => factory(),
-      useState: <T,>(initialValue: T | (() => T)) => {
-        if (typeof initialValue === "function") {
-          return [(initialValue as () => T)(), vi.fn()] as const;
-        }
-
-        const value = stateIndex < stateValues.length
-          ? stateValues[stateIndex]
-          : initialValue;
-        stateIndex += 1;
-
-        return [value, vi.fn()] as const;
-      },
+      useBackupRestorePageState: () => ({
+        summary: currentPageState.summary ?? summary,
+        setSummary: setState(),
+        backups: currentPageState.backups ?? [backup],
+        setBackups: setState(),
+        cloudStatus: currentPageState.cloudStatus ?? cloudStatus,
+        setCloudStatus: setState(),
+        cloudConfiguration: currentPageState.cloudConfiguration ?? cloudConfiguration,
+        setCloudConfiguration: setState(),
+        cloudAccessKey: "",
+        setCloudAccessKey: setState(),
+        cloudSecretKey: "",
+        setCloudSecretKey: setState(),
+        replaceCloudCredentials: currentPageState.replaceCloudCredentials ?? false,
+        setReplaceCloudCredentials: setState(),
+        clearCloudCredentialsOpen: currentPageState.clearCloudCredentialsOpen ?? false,
+        setClearCloudCredentialsOpen: setState(),
+        cloudBackups: currentPageState.cloudBackups ?? [cloudBackup],
+        setCloudBackups: setState(),
+        combinedBackups: currentPageState.combinedBackups ?? [cloudBackup],
+        setCombinedBackups: setState(),
+        activeTab: currentPageState.activeTab ?? "local",
+        setActiveTab: setState(),
+        retention,
+        setRetention: setState(),
+        details: currentPageState.details ?? null,
+        setDetails: setState(),
+        restoreWizard: currentPageState.restoreWizard ?? null,
+        setRestoreWizard: setState(),
+        loading: currentPageState.loading ?? false,
+        setLoading: setState(),
+        error: currentPageState.error ?? "",
+        setError: setState(),
+        operation: currentPageState.operation ?? null,
+        setOperation: setState(),
+        verifyingBackupId: currentPageState.verifyingBackupId ?? null,
+        setVerifyingBackupId: setState(),
+        cloudDelete: currentPageState.cloudDelete ?? null,
+        setCloudDelete: setState(),
+        cloudConnectionResult: currentPageState.cloudConnectionResult ?? null,
+        setCloudConnectionResult: setState(),
+        cloudSettingsDirty: currentPageState.cloudSettingsDirty ?? false,
+        setCloudSettingsDirty: setState(),
+      }),
     };
   });
 
@@ -275,18 +289,27 @@ async function renderPage(state: PageState = {}) {
     verifyBackup: vi.fn(),
   }));
 
-  const [{ renderToStaticMarkup }, { I18nProvider }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
+  const [{ renderToStaticMarkup }, React, { I18nProvider }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
     import("react-dom/server"),
+    import("react"),
     import("../../i18n"),
     import("react-router-dom"),
     import("./SettingsBackupRestorePage"),
   ]);
 
+  function ProviderHookProbe({ children }: { children: ReactNode }) {
+    React.useState("provider-hook-state");
+
+    return <>{children}</>;
+  }
+
   return renderToStaticMarkup(
     <I18nProvider>
-      <MemoryRouter>
-        <SettingsBackupRestorePage />
-      </MemoryRouter>
+      <ProviderHookProbe>
+        <MemoryRouter>
+          <SettingsBackupRestorePage />
+        </MemoryRouter>
+      </ProviderHookProbe>
     </I18nProvider>,
   );
 }
@@ -296,6 +319,7 @@ afterEach(() => {
   vi.doUnmock("../../features/auth/AuthProvider");
   vi.doUnmock("../../components/ui");
   vi.doUnmock("../../services/backupApi");
+  vi.doUnmock("./backupRestorePageState");
 });
 
 describe("SettingsBackupRestorePage", () => {
@@ -469,6 +493,24 @@ describe("SettingsBackupRestorePage", () => {
       },
     });
 
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.title"));
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.description"));
+  });
+
+  it("keeps explicit page state stable when providers allocate hook state first", async () => {
+    const html = await renderPage({
+      activeTab: "cloud",
+      cloudConnectionResult: {
+        ...failedConnectionResult,
+        status: "UnknownProviderFailure",
+        category: "UnknownProviderFailure",
+        stage: "ClientCreation",
+        statusCode: null,
+        providerErrorCode: null,
+      },
+    });
+
+    expect(html).not.toContain("hc-skeleton");
     expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.title"));
     expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.description"));
   });
