@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,16 @@ test("backend publish resource is only configured for bundle packaging", async (
     "../backend-publish": "backend-publish",
   });
   assert.match(packageJsonScript(await readFile(resolve(desktopRoot, "package.json"), "utf8"), "desktop:build"), /tauri\.bundle\.conf\.json/);
+});
+
+test("windows resource generation has a real ico and package metadata", async () => {
+  const tauriConfig = JSON.parse(await readFile(resolve(desktopRoot, "src-tauri/tauri.conf.json"), "utf8"));
+  const cargoToml = await readFile(resolve(desktopRoot, "src-tauri/Cargo.toml"), "utf8");
+
+  assert.deepEqual(tauriConfig.bundle.icon, ["icons/icon.ico", "icons/icon.png"]);
+  await access(resolve(desktopRoot, "src-tauri/icons/icon.ico"));
+  assert.match(cargoToml, /\[package\.metadata\.tauri-winres\]/);
+  assert.match(cargoToml, /OriginalFilename = "HighCool\.exe"/);
 });
 
 function packageJsonScript(packageJsonContents, scriptName) {

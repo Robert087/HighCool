@@ -5,6 +5,11 @@ description = "HighCool desktop development shell"
 edition = "2021"
 license = "UNLICENSED"
 
+[package.metadata.tauri-winres]
+OriginalFilename = "HighCool.exe"
+FileDescription = "HighCool desktop"
+ProductName = "HighCool"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
