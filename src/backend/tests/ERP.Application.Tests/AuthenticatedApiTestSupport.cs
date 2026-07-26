@@ -5,6 +5,7 @@ using ERP.Domain.Identity;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,19 @@ namespace ERP.Application.Tests;
 internal static class AuthenticatedApiTestSupport
 {
     public const string AuthenticationScheme = "Test";
+    public const string JwtSecret = "HighCool-Integration-Tests-Only-Secret-At-Least-32-Characters";
+    public const string JwtIssuer = "HighCool.Tests";
+    public const string JwtAudience = "HighCool.Tests";
+
+    public static void ConfigureAuthentication(IConfigurationBuilder configuration)
+    {
+        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Authentication:JwtSecret"] = JwtSecret,
+            ["Authentication:Issuer"] = JwtIssuer,
+            ["Authentication:Audience"] = JwtAudience
+        });
+    }
 
     public static void ConfigureServices(IServiceCollection services)
     {

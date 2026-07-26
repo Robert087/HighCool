@@ -408,6 +408,146 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
     }
 
     [Fact]
+    public void JwtSigningConfiguration_ShouldRejectTooShortConfiguredSecrets()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:JwtSecret"] = "too-short"
+            })
+            .Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.Resolve(configuration, new TestHostEnvironment("Production")));
+        Assert.Contains("at least", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_ConfiguredValidSecret_ShouldAvoidDevelopmentKeyFileAccess()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Authentication:JwtSecret"] = "configured-test-secret-that-is-long-enough-for-jwt",
+                ["Authentication:Issuer"] = "ConfiguredIssuer",
+                ["Authentication:Audience"] = "ConfiguredAudience"
+            })
+            .Build();
+
+        var options = JwtSigningConfiguration.Resolve(configuration, new TestHostEnvironment("Development"));
+
+        Assert.Equal("configured-test-secret-that-is-long-enough-for-jwt", options.Secret);
+        Assert.Equal("ConfiguredIssuer", options.Issuer);
+        Assert.Equal("ConfiguredAudience", options.Audience);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldReturnExistingValidKeyUnchanged()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt existing");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+        var existingSecret = "existing-development-secret-that-is-long-enough";
+        Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+        File.WriteAllText(keyPath, existingSecret);
+
+        var resolved = JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath);
+
+        Assert.Equal(existingSecret, resolved);
+        Assert.Equal(existingSecret, File.ReadAllText(keyPath));
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldCreateMissingKeyAndCloseHandle()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt missing");
+        var keyPath = Path.Combine(directory.Path, "keys with spaces", "jwt.key");
+
+        var secret = JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath);
+
+        JwtSigningConfiguration.ValidateSecret(secret);
+        Assert.Equal(secret, File.ReadAllText(keyPath));
+        using var exclusive = new FileStream(keyPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.True(exclusive.CanRead);
+    }
+
+    [Fact]
+    public async Task JwtSigningConfiguration_DevelopmentSecret_ShouldReturnOneSecretForConcurrentCallers()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt concurrent");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+
+        var tasks = Enumerable.Range(0, 32)
+            .Select(_ => Task.Run(() => JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath)))
+            .ToArray();
+
+        var secrets = await Task.WhenAll(tasks);
+
+        var secret = Assert.Single(secrets.Distinct(StringComparer.Ordinal));
+        JwtSigningConfiguration.ValidateSecret(secret);
+        Assert.Equal(secret, File.ReadAllText(keyPath));
+        Assert.Single(Directory.EnumerateFiles(Path.GetDirectoryName(keyPath)!));
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldRejectEmptyExistingKey()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt empty");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+        Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+        File.WriteAllText(keyPath, "   ");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath));
+
+        Assert.Contains(keyPath, exception.Message);
+        Assert.Contains("empty or invalid", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldRejectTooShortExistingKey()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt short");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+        Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+        File.WriteAllText(keyPath, "too-short");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath));
+
+        Assert.Contains(keyPath, exception.Message);
+        Assert.Contains("empty or invalid", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldRejectPlaceholderExistingKey()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt placeholder");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+        Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+        File.WriteAllText(keyPath, "this-placeholder-development-secret-is-long-enough");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath));
+
+        Assert.Contains(keyPath, exception.Message);
+        Assert.Contains("empty or invalid", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void JwtSigningConfiguration_DevelopmentSecret_ShouldReadWinningValueWhenCreateNewLoses()
+    {
+        using var directory = TemporaryDirectory.Create("highcool jwt winner");
+        var keyPath = Path.Combine(directory.Path, "keys", "jwt.key");
+        var winningSecret = "winning-development-secret-created-by-other-process";
+        Directory.CreateDirectory(Path.GetDirectoryName(keyPath)!);
+        using (var stream = new FileStream(keyPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            writer.Write(winningSecret);
+        }
+
+        var resolved = JwtSigningConfiguration.GetOrCreateDevelopmentSecret(keyPath);
+
+        Assert.Equal(winningSecret, resolved);
+    }
+
+    [Fact]
     public async Task Owner_ShouldAccessWorkspaceSettingsAndAuditEndpoints()
     {
         await _factory.ResetDatabaseAsync();
@@ -1025,6 +1165,31 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
     }
 
     public sealed record DeliveredToken(string Email, string Token);
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        private TemporaryDirectory(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public static TemporaryDirectory Create(string prefix)
+        {
+            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{prefix}-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(root);
+            return new TemporaryDirectory(root);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
     {

@@ -258,6 +258,7 @@ public sealed class StockLedgerApiTests : IClassFixture<StockLedgerApiTests.ApiF
                     ["DatabaseProvider"] = "Sqlite",
                     ["ConnectionStrings:DefaultConnection"] = SqliteTestDatabase.CreateConnectionString(_databasePath)
                 });
+                AuthenticatedApiTestSupport.ConfigureAuthentication(config);
             });
             builder.ConfigureServices(services =>
             {

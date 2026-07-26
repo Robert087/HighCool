@@ -350,12 +350,10 @@ public sealed class LocalDatabaseApiTests
                     ["LocalStorage:BackupDirectory"] = BackupDirectory,
                     ["LocalStorage:PendingBackupDirectory"] = PendingDirectory,
                     ["LocalStorage:LogDirectory"] = LogDirectory,
-                    ["Authentication:JwtSecret"] = "local-database-api-tests-signing-key-with-enough-length",
-                    ["Authentication:Issuer"] = "HighCool.Tests",
-                    ["Authentication:Audience"] = "HighCool.Tests",
                     ["RestorePreflightOperation:LifetimeSeconds"] = _restorePreflightLifetimeSeconds?.ToString(),
                     ["LocalDatabase:EnableEndpointCapability"] = _enableEndpointCapability.ToString()
                 });
+                AuthenticatedApiTestSupport.ConfigureAuthentication(config);
             });
             builder.ConfigureServices(services =>
             {

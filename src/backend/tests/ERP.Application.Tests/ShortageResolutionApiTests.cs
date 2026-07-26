@@ -199,6 +199,7 @@ public sealed class ShortageResolutionApiTests : IClassFixture<ShortageResolutio
                     ["DatabaseProvider"] = "Sqlite",
                     ["ConnectionStrings:DefaultConnection"] = SqliteTestDatabase.CreateConnectionString(_databasePath)
                 });
+                AuthenticatedApiTestSupport.ConfigureAuthentication(config);
             });
             builder.ConfigureServices(services =>
             {

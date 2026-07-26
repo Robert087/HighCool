@@ -192,6 +192,7 @@ public sealed class PurchaseReceiptPostingApiTests : IClassFixture<PurchaseRecei
                     ["DatabaseProvider"] = "Sqlite",
                     ["ConnectionStrings:DefaultConnection"] = SqliteTestDatabase.CreateConnectionString(_databasePath)
                 });
+                AuthenticatedApiTestSupport.ConfigureAuthentication(config);
             });
             builder.ConfigureServices(services =>
             {
