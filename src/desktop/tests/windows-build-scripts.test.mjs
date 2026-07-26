@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { formatSpawnFailure, resolveExecutable } from "../scripts/command-utils.mjs";
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -21,6 +22,7 @@ test("windows installer script fails early outside native Windows with PowerShel
   assert.match(script, /tauri\.bundle\.conf\.json/);
   assert.match(script, /"--config", bundleConfig/);
   assert.match(script, /--bundles", "nsis"/);
+  assert.match(script, /resolveExecutable\(command\)/);
 });
 
 test("desktop package exposes repeatable Windows build scripts", async () => {
@@ -50,6 +52,36 @@ test("windows resource generation has a real ico and package metadata", async ()
   await access(resolve(desktopRoot, "src-tauri/icons/icon.ico"));
   assert.match(cargoToml, /\[package\.metadata\.tauri-winres\]/);
   assert.match(cargoToml, /OriginalFilename = "HighCool\.exe"/);
+});
+
+test("installer runner resolves npm and npx through Windows command shims", () => {
+  assert.equal(resolveExecutable("npm", "win32"), "npm.cmd");
+  assert.equal(resolveExecutable("npx", "win32"), "npx.cmd");
+  assert.equal(resolveExecutable("npm", "linux"), "npm");
+  assert.equal(resolveExecutable("dotnet", "win32"), "dotnet");
+  assert.equal(resolveExecutable("cargo", "win32"), "cargo");
+});
+
+test("installer runner reports spawn errors with command diagnostics", () => {
+  const message = formatSpawnFailure({
+    label: "npm",
+    command: "npm",
+    executable: "npm.cmd",
+    args: ["--version"],
+    result: {
+      status: null,
+      signal: null,
+      error: Object.assign(new Error("spawn npm ENOENT"), { code: "ENOENT" }),
+    },
+  });
+
+  assert.match(message, /command: npm/);
+  assert.match(message, /executable: npm\.cmd/);
+  assert.match(message, /arguments: \["--version"\]/);
+  assert.match(message, /status: null/);
+  assert.match(message, /signal: null/);
+  assert.match(message, /error\.message: spawn npm ENOENT/);
+  assert.match(message, /error\.code: ENOENT/);
 });
 
 function packageJsonScript(packageJsonContents, scriptName) {

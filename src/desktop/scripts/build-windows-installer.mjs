@@ -3,6 +3,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { formatSpawnFailure, resolveExecutable } from "./command-utils.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDirectory, "..");
@@ -90,7 +91,8 @@ function collectExeFiles(root) {
 
 function run(command, args, options = {}) {
   const label = options.label ?? command;
-  const result = spawnSync(command, args, {
+  const executable = resolveExecutable(command);
+  const result = spawnSync(executable, args, {
     cwd: options.cwd ?? repoRoot,
     stdio: options.validateOutput ? "pipe" : "inherit",
     encoding: options.validateOutput ? "utf8" : undefined,
@@ -99,7 +101,7 @@ function run(command, args, options = {}) {
 
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   if (result.status !== 0) {
-    throw new Error(`${label} failed with exit code ${result.status}`);
+    throw new Error(formatSpawnFailure({ label, command, executable, args, result }));
   }
 
   if (options.validateOutput && !options.validateOutput(output)) {
