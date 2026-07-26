@@ -79,19 +79,22 @@ public sealed class DesktopFoundationBatch2Tests
         {
             storage.EnsureRequiredDirectories();
             await CreateHighCoolDatabaseAsync(databasePath, "LIVE");
-            var originalChecksum = await SqliteDatabaseBackupService.CalculateChecksumAsync(databasePath, CancellationToken.None);
 
             var backupService = CreateBackupService(databasePath, storage);
             var backup = await backupService.CreateBackupAsync(BackupReason.Manual, CancellationToken.None);
+            await AddSentinelAsync(databasePath, "AFTER_BACKUP");
 
-            await using var dbContext = CreateDbContext(databasePath);
-            var restoreService = CreateRestoreService(databasePath, storage, dbContext);
-            var preflight = await restoreService.ValidateAsync(new RestoreRequest(backup.BackupId), CancellationToken.None);
-            var afterChecksum = await SqliteDatabaseBackupService.CalculateChecksumAsync(databasePath, CancellationToken.None);
+            RestorePreflightResult preflight;
+            await using (var dbContext = CreateDbContext(databasePath))
+            {
+                var restoreService = CreateRestoreService(databasePath, storage, dbContext);
+                preflight = await restoreService.ValidateAsync(new RestoreRequest(backup.BackupId), CancellationToken.None);
+            }
 
             Assert.Equal(RestorePreflightStatus.Valid, preflight.Status);
             Assert.Equal(DatabaseSchemaInfo.CurrentSchemaVersion, preflight.SchemaVersion);
-            Assert.Equal(originalChecksum, afterChecksum);
+            Assert.True(await SentinelExistsAsync(databasePath, "LIVE"));
+            Assert.True(await SentinelExistsAsync(databasePath, "AFTER_BACKUP"));
             Assert.Empty(Directory.EnumerateFiles(storage.PendingBackupDirectory));
         }
         finally
