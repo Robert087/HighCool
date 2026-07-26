@@ -181,7 +181,6 @@ function text(key: string) {
 
 async function renderPage(state: PageState = {}) {
   vi.doUnmock("../../features/auth/AuthProvider");
-  vi.doUnmock("../../components/ui");
   vi.doUnmock("../../services/backupApi");
   vi.doUnmock("./backupRestorePageState");
   vi.resetModules();
@@ -260,15 +259,6 @@ async function renderPage(state: PageState = {}) {
     }),
   }));
 
-  vi.doMock("../../components/ui", async () => {
-    const actual = await vi.importActual<typeof import("../../components/ui")>("../../components/ui");
-
-    return {
-      ...actual,
-      useToast: () => ({ showToast: vi.fn() }),
-    };
-  });
-
   vi.doMock("../../services/backupApi", () => ({
     createManualBackup: vi.fn(),
     getBackupDetails: vi.fn(),
@@ -289,9 +279,10 @@ async function renderPage(state: PageState = {}) {
     verifyBackup: vi.fn(),
   }));
 
-  const [{ renderToStaticMarkup }, React, { I18nProvider }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
+  const [{ renderToStaticMarkup }, React, { ToastProvider }, { I18nProvider }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
     import("react-dom/server"),
     import("react"),
+    import("../../components/ui"),
     import("../../i18n"),
     import("react-router-dom"),
     import("./SettingsBackupRestorePage"),
@@ -303,21 +294,28 @@ async function renderPage(state: PageState = {}) {
     return <>{children}</>;
   }
 
-  return renderToStaticMarkup(
-    <I18nProvider>
-      <ProviderHookProbe>
-        <MemoryRouter>
-          <SettingsBackupRestorePage />
-        </MemoryRouter>
-      </ProviderHookProbe>
-    </I18nProvider>,
+  function renderWithProviders(ui: ReactNode) {
+    return renderToStaticMarkup(
+      <MemoryRouter>
+        <I18nProvider>
+          <ProviderHookProbe>
+            <ToastProvider>
+              {ui}
+            </ToastProvider>
+          </ProviderHookProbe>
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  return renderWithProviders(
+    <SettingsBackupRestorePage />,
   );
 }
 
 afterEach(() => {
   vi.doUnmock("react");
   vi.doUnmock("../../features/auth/AuthProvider");
-  vi.doUnmock("../../components/ui");
   vi.doUnmock("../../services/backupApi");
   vi.doUnmock("./backupRestorePageState");
 });
