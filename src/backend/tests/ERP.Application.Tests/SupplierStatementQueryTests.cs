@@ -93,7 +93,7 @@ public sealed class SupplierStatementQueryTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-supplier-statement-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var dbContext = new AppDbContext(options);

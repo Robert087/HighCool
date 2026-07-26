@@ -930,7 +930,7 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["DatabaseProvider"] = "Sqlite",
-                    ["ConnectionStrings:DefaultConnection"] = $"Data Source={_databasePath}",
+                    ["ConnectionStrings:DefaultConnection"] = SqliteTestDatabase.CreateConnectionString(_databasePath),
                     ["Authentication:JwtSecret"] = TestJwtSecret,
                     ["Authentication:Issuer"] = TestJwtIssuer,
                     ["Authentication:Audience"] = TestJwtAudience
@@ -942,7 +942,7 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
                 services.RemoveAll<AppDbContext>();
                 services.RemoveAll<IAuthMessageDeliveryService>();
                 services.RemoveAll<JwtSigningOptions>();
-                services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                services.AddDbContext<AppDbContext>(options => options.UseSqlite(SqliteTestDatabase.CreateConnectionString(_databasePath)));
                 services.AddSingleton(new JwtSigningOptions(TestJwtSecret, TestJwtIssuer, TestJwtAudience));
                 services.AddSingleton<TestAuthMessageDeliveryService>();
                 services.AddScoped<IAuthMessageDeliveryService>(provider => provider.GetRequiredService<TestAuthMessageDeliveryService>());
@@ -962,12 +962,8 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
 
         public new async Task DisposeAsync()
         {
-            if (File.Exists(_databasePath))
-            {
-                File.Delete(_databasePath);
-            }
-
             await base.DisposeAsync();
+            SqliteTestDatabase.DeleteSqliteFileSet(_databasePath);
         }
 
         public async Task ResetDatabaseAsync()

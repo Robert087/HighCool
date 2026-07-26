@@ -151,7 +151,7 @@ public sealed class OrganizationTestDataToolTests
             var storageRoot = Path.Combine(Path.GetTempPath(), $"highcool-test-data-tools-storage-{Guid.NewGuid():N}");
             var executionContext = new OrganizationToolExecutionContext();
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlite($"Data Source={databasePath}")
+                .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
                 .Options;
             var dbContext = new AppDbContext(options, executionContext);
             await dbContext.Database.EnsureCreatedAsync();
@@ -179,7 +179,7 @@ public sealed class OrganizationTestDataToolTests
             TryDelete(_databasePath);
             if (Directory.Exists(_storageRoot))
             {
-                Directory.Delete(_storageRoot, recursive: true);
+                SqliteTestDatabase.DeleteDirectoryIfExists(_storageRoot);
             }
         }
 
@@ -294,10 +294,7 @@ public sealed class OrganizationTestDataToolTests
 
         private static void TryDelete(string path)
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            SqliteTestDatabase.DeleteSqliteFileSet(path);
         }
     }
 

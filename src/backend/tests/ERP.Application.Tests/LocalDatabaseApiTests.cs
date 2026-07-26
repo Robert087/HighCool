@@ -15,32 +15,24 @@ using Xunit;
 
 namespace ERP.Application.Tests;
 
-public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.ApiFactory>
+public sealed class LocalDatabaseApiTests
 {
-    private readonly ApiFactory _factory;
-
-    public LocalDatabaseApiTests(ApiFactory factory)
-    {
-        _factory = factory;
-    }
-
     [Fact]
     public async Task LocalDatabaseEndpoints_RejectUnauthenticatedAndMissingPermissionAndNonDesktop()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
 
-        _factory.ClearAuthenticatedContext();
+        factory.ClearAuthenticatedContext();
         var unauthenticated = await client.GetAsync("/api/local-database/backups/summary");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
 
-        await _factory.ResetDatabaseAsync();
-        await _factory.MakeCurrentUserNonOwnerWithoutRolesAsync();
+        await factory.ResetDatabaseAsync();
+        await factory.MakeCurrentUserNonOwnerWithoutRolesAsync();
         var forbidden = await client.GetAsync("/api/local-database/backups/summary");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        await using var nonDesktopFactory = new ApiFactory("Testing", enableEndpointCapability: false);
-        await nonDesktopFactory.InitializeAsync();
+        await using var nonDesktopFactory = await CreateFactoryAsync(enableEndpointCapability: false);
         var nonDesktop = await nonDesktopFactory.CreateClient().GetAsync("/api/local-database/backups/summary");
         Assert.Equal(HttpStatusCode.Conflict, nonDesktop.StatusCode);
         Assert.Contains("LocalDatabaseFeatureUnavailable", await nonDesktop.Content.ReadAsStringAsync());
@@ -49,15 +41,15 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task BackupCatalogEndpoints_ReturnSafeSummaryListDetailsAndRejectInvalidIds()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
 
         var backup = await CreateBackupAsync(client);
         var summary = await client.GetAsync("/api/local-database/backups/summary");
         summary.EnsureSuccessStatusCode();
         var summaryPayload = await summary.Content.ReadAsStringAsync();
         Assert.Contains("\"availableBackupCount\":1", summaryPayload);
-        Assert.DoesNotContain(_factory.RootDirectory, summaryPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.RootDirectory, summaryPayload, StringComparison.OrdinalIgnoreCase);
 
         var list = await client.GetFromJsonAsync<JsonElement[]>("/api/local-database/backups");
         var item = Assert.Single(list!);
@@ -67,7 +59,7 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
         details.EnsureSuccessStatusCode();
         var detailsPayload = await details.Content.ReadAsStringAsync();
         Assert.Contains("\"databaseFileName\"", detailsPayload);
-        Assert.DoesNotContain(_factory.RootDirectory, detailsPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.RootDirectory, detailsPayload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("keyBytes", detailsPayload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("JwtSecret", detailsPayload, StringComparison.OrdinalIgnoreCase);
 
@@ -78,19 +70,19 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task CloudConfigurationEndpoints_RejectUnsafeAccessAndNeverReturnSecrets()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
 
-        _factory.ClearAuthenticatedContext();
+        factory.ClearAuthenticatedContext();
         var unauthenticated = await client.GetAsync("/api/local-database/cloud/status");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
 
-        await _factory.ResetDatabaseAsync();
-        await _factory.MakeCurrentUserNonOwnerWithoutRolesAsync();
+        await factory.ResetDatabaseAsync();
+        await factory.MakeCurrentUserNonOwnerWithoutRolesAsync();
         var forbidden = await client.GetAsync("/api/local-database/cloud/status");
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
 
-        await _factory.ResetDatabaseAsync();
+        await factory.ResetDatabaseAsync();
         var unsafeEndpoint = await client.PutAsJsonAsync("/api/local-database/cloud/configuration", new CloudBackupConfigurationRequest(
             true,
             true,
@@ -125,8 +117,7 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
         Assert.DoesNotContain("r2-secret-key", payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("r2-access-key\"", payload, StringComparison.OrdinalIgnoreCase);
 
-        await using var nonDesktopFactory = new ApiFactory("Testing", enableEndpointCapability: false);
-        await nonDesktopFactory.InitializeAsync();
+        await using var nonDesktopFactory = await CreateFactoryAsync(enableEndpointCapability: false);
         var nonDesktop = await nonDesktopFactory.CreateClient().GetAsync("/api/local-database/cloud/status");
         Assert.Equal(HttpStatusCode.Conflict, nonDesktop.StatusCode);
         Assert.Contains("LocalDatabaseFeatureUnavailable", await nonDesktop.Content.ReadAsStringAsync());
@@ -135,20 +126,20 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task BackupVerifyAndRetentionEndpoints_ReturnSafeResultsAndClampSettings()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
         var backup = await CreateBackupAsync(client);
 
         var verify = await client.PostAsync($"/api/local-database/backups/{backup.BackupId}/verify", null);
         verify.EnsureSuccessStatusCode();
         Assert.Contains("\"status\":\"Verified\"", await verify.Content.ReadAsStringAsync());
 
-        await TamperEncryptedBackupAsync(_factory.BackupDirectory, backup.BackupFileName!);
+        await TamperEncryptedBackupAsync(factory.BackupDirectory, backup.BackupFileName!);
         var failedVerify = await client.PostAsync($"/api/local-database/backups/{backup.BackupId}/verify", null);
         failedVerify.EnsureSuccessStatusCode();
         var failedVerifyPayload = await failedVerify.Content.ReadAsStringAsync();
         Assert.Contains("\"status\":\"Failed\"", failedVerifyPayload);
-        Assert.DoesNotContain(_factory.RootDirectory, failedVerifyPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.RootDirectory, failedVerifyPayload, StringComparison.OrdinalIgnoreCase);
 
         var retention = await client.GetFromJsonAsync<BackupRetentionSettingsDto>("/api/local-database/backup-retention");
         Assert.NotNull(retention);
@@ -171,14 +162,14 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task ManualBackup_RejectsClientPathsAndConcurrentOperations()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
 
         var pathAttempt = await client.PostAsJsonAsync("/api/local-database/backups", new { backupPath = "/tmp/outside.db" });
         Assert.Equal(HttpStatusCode.BadRequest, pathAttempt.StatusCode);
         Assert.Contains("filesystem paths", await pathAttempt.Content.ReadAsStringAsync());
 
-        var coordinator = _factory.Services.GetRequiredService<ILocalDatabaseOperationCoordinator>();
+        var coordinator = factory.Services.GetRequiredService<ILocalDatabaseOperationCoordinator>();
         await using var lease = await coordinator.TryAcquireExclusiveAsync(LocalDatabaseOperationKind.Restore, "activebackup", CancellationToken.None);
         var conflict = await client.PostAsync("/api/local-database/backups", null);
         Assert.Equal(HttpStatusCode.BadRequest, conflict.StatusCode);
@@ -188,8 +179,8 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task RestorePreflightAndConfirmation_AreBoundExpiringAndSingleUse()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
         var backup = await CreateBackupAsync(client);
         var secondBackup = await CreateBackupAsync(client);
 
@@ -211,13 +202,13 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
             new { backupId = secondBackup.BackupId, operationId, confirmation = "RESTORE_LOCAL_DATABASE" });
         Assert.Contains("does not match", await wrongBackup.Content.ReadAsStringAsync());
 
-        await _factory.SwitchToSecondOwnerAsync();
+        await factory.SwitchToSecondOwnerAsync();
         var wrongUser = await client.PostAsJsonAsync(
             "/api/local-database/restore",
             new { backupId = backup.BackupId, operationId, confirmation = "RESTORE_LOCAL_DATABASE" });
         Assert.Contains("current user", await wrongUser.Content.ReadAsStringAsync());
 
-        await _factory.SwitchToPrimaryOwnerAsync();
+        await factory.SwitchToPrimaryOwnerAsync();
         var success = await client.PostAsJsonAsync(
             "/api/local-database/restore",
             new { backupId = backup.BackupId, operationId, confirmation = "RESTORE_LOCAL_DATABASE" });
@@ -233,8 +224,7 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task RestoreConfirmation_RejectsExpiredOperationToken()
     {
-        await using var expiringFactory = new ApiFactory("Testing", restorePreflightLifetimeSeconds: 1);
-        await expiringFactory.InitializeAsync();
+        await using var expiringFactory = await CreateFactoryAsync(restorePreflightLifetimeSeconds: 1);
         var client = expiringFactory.CreateClient();
         var backup = await CreateBackupAsync(client);
         var preflight = await RunPreflightAsync(client, backup.BackupId);
@@ -251,16 +241,26 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
     [Fact]
     public async Task RestorePreflight_RejectsCorruptBackupSafely()
     {
-        await _factory.ResetDatabaseAsync();
-        var client = _factory.CreateClient();
+        await using var factory = await CreateFactoryAsync();
+        var client = factory.CreateClient();
         var backup = await CreateBackupAsync(client);
 
-        await TamperEncryptedBackupAsync(_factory.BackupDirectory, backup.BackupFileName!);
+        await TamperEncryptedBackupAsync(factory.BackupDirectory, backup.BackupFileName!);
 
         var preflight = await RunPreflightAsync(client, backup.BackupId);
         Assert.Equal("ChecksumMismatch", preflight.GetProperty("status").GetString());
         Assert.False(preflight.TryGetProperty("operationId", out var operationId) && !string.IsNullOrWhiteSpace(operationId.GetString()));
-        Assert.DoesNotContain(_factory.RootDirectory, preflight.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(factory.RootDirectory, preflight.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<ApiFactory> CreateFactoryAsync(
+        string environment = "Testing",
+        int? restorePreflightLifetimeSeconds = null,
+        bool enableEndpointCapability = true)
+    {
+        var factory = new ApiFactory(environment, restorePreflightLifetimeSeconds, enableEndpointCapability);
+        await factory.InitializeAsync();
+        return factory;
     }
 
     private static async Task TamperEncryptedBackupAsync(string backupDirectory, string backupFileName)
@@ -361,7 +361,7 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                services.AddDbContext<AppDbContext>(options => options.UseSqlite(SqliteTestDatabase.CreateConnectionString(_databasePath)));
                 AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }
@@ -373,8 +373,8 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
 
         public new async Task DisposeAsync()
         {
-            DeleteDirectoryIfExists(RootDirectory);
             await base.DisposeAsync();
+            DeleteDirectoryIfExists(RootDirectory);
         }
 
         public async Task ResetDatabaseAsync()
@@ -517,10 +517,7 @@ public sealed class LocalDatabaseApiTests : IClassFixture<LocalDatabaseApiTests.
 
         private static void DeleteDirectoryIfExists(string path)
         {
-            if (Directory.Exists(path))
-            {
-                Directory.Delete(path, recursive: true);
-            }
+            SqliteTestDatabase.DeleteDirectoryIfExists(path);
         }
     }
 

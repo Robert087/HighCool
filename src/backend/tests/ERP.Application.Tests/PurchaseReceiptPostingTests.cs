@@ -215,7 +215,7 @@ public sealed class PurchaseReceiptPostingTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-posting-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var executionContext = TestOrganizationContext.CreateExecutionContext();

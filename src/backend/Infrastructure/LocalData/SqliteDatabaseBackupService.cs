@@ -188,7 +188,8 @@ public sealed class SqliteDatabaseBackupService(
         await using var source = new SqliteConnection(sourceConnectionString);
         await using var destination = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = tempPath
+            DataSource = tempPath,
+            Pooling = false
         }.ToString());
 
         await source.OpenAsync(cancellationToken);
@@ -233,7 +234,8 @@ public sealed class SqliteDatabaseBackupService(
         await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
-            Mode = SqliteOpenMode.ReadOnly
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
         }.ToString());
 
         await connection.OpenAsync(cancellationToken);

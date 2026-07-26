@@ -199,7 +199,7 @@ public sealed class DevelopmentDatabaseInitializerTests
     private static ServiceProvider CreateProvider(string databasePath, bool? allowReset = false)
     {
         var services = new ServiceCollection();
-        services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={databasePath}"));
+        services.AddDbContext<AppDbContext>(options => options.UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath)));
         services.AddScoped<IApplicationDatabaseMetadataService, ApplicationDatabaseMetadataService>();
         return services.BuildServiceProvider();
     }
@@ -245,15 +245,12 @@ public sealed class DevelopmentDatabaseInitializerTests
 
     private static void DeleteIfExists(string databasePath)
     {
-        if (File.Exists(databasePath))
-        {
-            File.Delete(databasePath);
-        }
+        SqliteTestDatabase.DeleteSqliteFileSet(databasePath);
     }
 
     private static async Task CreatePartialDatabaseAsync(string databasePath)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
 
         await using var command = connection.CreateCommand();
@@ -271,7 +268,7 @@ public sealed class DevelopmentDatabaseInitializerTests
 
     private static async Task<bool> TableExistsAsync(string databasePath, string tableName)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """

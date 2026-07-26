@@ -333,7 +333,7 @@ public sealed class DatabaseRestoreService(
             return RestorePreflightStatus.NewerSchema;
         }
 
-        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection(CreateSqliteFileConnectionString(databasePath, Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly));
         await connection.OpenAsync(cancellationToken);
         foreach (var tableName in new[] { "application_database_metadata", "Organizations", "UserAccounts", "Roles" })
         {
@@ -353,7 +353,7 @@ public sealed class DatabaseRestoreService(
     {
         try
         {
-            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath}");
+            await using var connection = new Microsoft.Data.Sqlite.SqliteConnection(CreateSqliteFileConnectionString(databasePath));
             await connection.OpenAsync(cancellationToken);
             await using var transaction = (Microsoft.Data.Sqlite.SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
             await using var command = connection.CreateCommand();
@@ -391,7 +391,7 @@ public sealed class DatabaseRestoreService(
         CancellationToken cancellationToken)
     {
         var utcNow = DateTime.UtcNow;
-        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection(CreateSqliteFileConnectionString(databasePath));
         await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
@@ -497,6 +497,16 @@ public sealed class DatabaseRestoreService(
             File.Delete(filePath);
         }
     }
+
+    private static string CreateSqliteFileConnectionString(
+        string databasePath,
+        Microsoft.Data.Sqlite.SqliteOpenMode mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWriteCreate)
+        => new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = mode,
+            Pooling = false
+        }.ToString();
 
     private sealed record RestorePreflightValidation(
         RestorePreflightResult Result,

@@ -279,7 +279,7 @@ public sealed class DesktopFoundationBatch1Tests
             storage.EnsureRequiredDirectories();
             await CreateHighCoolSentinelDatabaseAsync(databasePath);
 
-            await using var heldOpenConnection = new SqliteConnection($"Data Source={databasePath}");
+            await using var heldOpenConnection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
             await heldOpenConnection.OpenAsync();
 
             var service = CreateBackupService(databasePath, storage);
@@ -405,7 +405,7 @@ public sealed class DesktopFoundationBatch1Tests
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         return new AppDbContext(options);
@@ -480,7 +480,7 @@ public sealed class DesktopFoundationBatch1Tests
     private static async Task CreateSentinelDatabaseAsync(string databasePath)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -498,7 +498,7 @@ public sealed class DesktopFoundationBatch1Tests
 
     private static async Task<bool> SentinelExistsAsync(string databasePath)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM uoms WHERE code = 'B2S';";
@@ -507,7 +507,7 @@ public sealed class DesktopFoundationBatch1Tests
 
     private static async Task<string> RunIntegrityCheckAsync(string databasePath)
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "PRAGMA integrity_check;";
@@ -524,31 +524,18 @@ public sealed class DesktopFoundationBatch1Tests
 
     private static void DeleteIfExists(string databasePath)
     {
-        if (File.Exists(databasePath))
-        {
-            File.Delete(databasePath);
-        }
-
+        SqliteTestDatabase.DeleteSqliteFileSet(databasePath);
         DeleteDirectoryIfExists(Path.GetDirectoryName(databasePath));
     }
 
     private static void DeleteSqliteFileSet(string databasePath)
     {
-        foreach (var path in new[] { databasePath, $"{databasePath}-wal", $"{databasePath}-shm" })
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
+        SqliteTestDatabase.DeleteSqliteFileSet(databasePath);
     }
 
     private static void DeleteDirectoryIfExists(string? directoryPath)
     {
-        if (!string.IsNullOrWhiteSpace(directoryPath) && Directory.Exists(directoryPath))
-        {
-            Directory.Delete(directoryPath, recursive: true);
-        }
+        SqliteTestDatabase.DeleteDirectoryIfExists(directoryPath);
     }
 
     private sealed class TestLocalStoragePathService : ILocalStoragePathService

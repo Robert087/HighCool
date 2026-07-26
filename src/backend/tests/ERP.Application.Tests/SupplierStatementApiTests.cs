@@ -134,14 +134,14 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["DatabaseProvider"] = "Sqlite",
-                    ["ConnectionStrings:DefaultConnection"] = $"Data Source={_databasePath}"
+                    ["ConnectionStrings:DefaultConnection"] = SqliteTestDatabase.CreateConnectionString(_databasePath)
                 });
             });
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                services.AddDbContext<AppDbContext>(options => options.UseSqlite($"Data Source={_databasePath}"));
+                services.AddDbContext<AppDbContext>(options => options.UseSqlite(SqliteTestDatabase.CreateConnectionString(_databasePath)));
                 AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }
@@ -153,12 +153,8 @@ public sealed class SupplierStatementApiTests : IClassFixture<SupplierStatementA
 
         public new async Task DisposeAsync()
         {
-            if (File.Exists(_databasePath))
-            {
-                File.Delete(_databasePath);
-            }
-
             await base.DisposeAsync();
+            SqliteTestDatabase.DeleteSqliteFileSet(_databasePath);
         }
 
         public async Task ResetDatabaseAsync()

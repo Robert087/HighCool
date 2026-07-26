@@ -633,7 +633,7 @@ public sealed class ReversalWorkflowTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-reversal-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var dbContext = new AppDbContext(options);

@@ -259,7 +259,7 @@ public sealed class PurchaseOrderWorkflowTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-po-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var executionContext = TestOrganizationContext.CreateExecutionContext();

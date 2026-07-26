@@ -383,7 +383,7 @@ public sealed class PaymentWorkflowTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-payment-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var dbContext = new AppDbContext(options);

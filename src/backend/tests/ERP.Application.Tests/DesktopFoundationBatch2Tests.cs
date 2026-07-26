@@ -449,7 +449,7 @@ public sealed class DesktopFoundationBatch2Tests
 
     private static async Task<bool> SentinelExistsAsync(string databasePath, string code = "B2S")
     {
-        await using var connection = new SqliteConnection($"Data Source={databasePath}");
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM uoms WHERE code = $code;";
@@ -461,7 +461,7 @@ public sealed class DesktopFoundationBatch2Tests
     {
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         return new AppDbContext(options);
@@ -491,21 +491,12 @@ public sealed class DesktopFoundationBatch2Tests
 
     private static void DeleteSqliteFileSet(string databasePath)
     {
-        foreach (var path in new[] { databasePath, $"{databasePath}-wal", $"{databasePath}-shm" })
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
+        SqliteTestDatabase.DeleteSqliteFileSet(databasePath);
     }
 
     private static void DeleteDirectoryIfExists(string? directoryPath)
     {
-        if (!string.IsNullOrWhiteSpace(directoryPath) && Directory.Exists(directoryPath))
-        {
-            Directory.Delete(directoryPath, recursive: true);
-        }
+        SqliteTestDatabase.DeleteDirectoryIfExists(directoryPath);
     }
 
     private sealed class TestLocalStoragePathService(

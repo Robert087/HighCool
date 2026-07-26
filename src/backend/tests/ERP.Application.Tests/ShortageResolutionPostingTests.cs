@@ -404,7 +404,7 @@ public sealed class ShortageResolutionPostingTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-shortage-resolution-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var dbContext = new AppDbContext(options);

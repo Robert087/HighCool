@@ -122,7 +122,7 @@ public sealed class StockLedgerQueryTests
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-stock-ledger-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
         var dbContext = new AppDbContext(options);
