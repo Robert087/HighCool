@@ -10,6 +10,7 @@ import type {
   CloudBackupStatusSummary,
   RestorePreflightResult,
 } from "../../services/backupApi";
+import { messagesByLocale } from "../../i18n/messages";
 import type { BackupRestoreOperation } from "./backupRestorePageState";
 
 const retention: BackupRetentionSettings = {
@@ -171,6 +172,10 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+function text(key: string) {
+  return messagesByLocale.en[key] ?? key;
+}
+
 async function renderPage(state: PageState = {}) {
   vi.resetModules();
 
@@ -207,11 +212,13 @@ async function renderPage(state: PageState = {}) {
       useEffect: () => undefined,
       useMemo: <T,>(factory: () => T) => factory(),
       useState: <T,>(initialValue: T | (() => T)) => {
+        if (typeof initialValue === "function") {
+          return [(initialValue as () => T)(), vi.fn()] as const;
+        }
+
         const value = stateIndex < stateValues.length
           ? stateValues[stateIndex]
-          : typeof initialValue === "function"
-            ? (initialValue as () => T)()
-            : initialValue;
+          : initialValue;
         stateIndex += 1;
 
         return [value, vi.fn()] as const;
@@ -238,19 +245,6 @@ async function renderPage(state: PageState = {}) {
       },
     }),
   }));
-
-  vi.doMock("../../i18n", async () => {
-    const actual = await vi.importActual<typeof import("../../i18n")>("../../i18n");
-
-    return {
-      ...actual,
-      useI18n: () => ({
-        formatDate: (value: string) => value,
-        t: (key: string) => key,
-        translateText: (value: string) => value,
-      }),
-    };
-  });
 
   vi.doMock("../../components/ui", async () => {
     const actual = await vi.importActual<typeof import("../../components/ui")>("../../components/ui");
@@ -281,23 +275,25 @@ async function renderPage(state: PageState = {}) {
     verifyBackup: vi.fn(),
   }));
 
-  const [{ renderToStaticMarkup }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
+  const [{ renderToStaticMarkup }, { I18nProvider }, { MemoryRouter }, { SettingsBackupRestorePage }] = await Promise.all([
     import("react-dom/server"),
+    import("../../i18n"),
     import("react-router-dom"),
     import("./SettingsBackupRestorePage"),
   ]);
 
   return renderToStaticMarkup(
-    <MemoryRouter>
-      <SettingsBackupRestorePage />
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter>
+        <SettingsBackupRestorePage />
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
 afterEach(() => {
   vi.doUnmock("react");
   vi.doUnmock("../../features/auth/AuthProvider");
-  vi.doUnmock("../../i18n");
   vi.doUnmock("../../components/ui");
   vi.doUnmock("../../services/backupApi");
 });
@@ -307,24 +303,24 @@ describe("SettingsBackupRestorePage", () => {
     const html = await renderPage({ loading: true, summary: null, backups: [] });
 
     expect(html).toContain("hc-skeleton");
-    expect(html).toContain("settings.backup.actions.backupNow");
+    expect(html).toContain(text("settings.backup.actions.backupNow"));
   });
 
   it("renders summary cards and the empty history state", async () => {
     const html = await renderPage({ backups: [] });
 
-    expect(html).toContain("settings.backup.summary.database");
+    expect(html).toContain(text("settings.backup.summary.database"));
     expect(html).toContain("highcool.db");
-    expect(html).toContain("settings.backup.emptyTitle");
+    expect(html).toContain(text("settings.backup.emptyTitle"));
     expect(html).not.toContain("backup-001");
   });
 
   it("renders backup history rows without exposing raw paths", async () => {
     const html = await renderPage();
 
-    expect(html).toContain("backup-001");
-    expect(html).toContain("settings.backup.actions.verify");
-    expect(html).toContain("settings.backup.actions.restore");
+    expect(html).toContain("Backup 001");
+    expect(html).toContain(text("settings.backup.actions.verify"));
+    expect(html).toContain(text("settings.backup.actions.restore"));
     expect(html).not.toContain("/root/");
     expect(html).not.toContain("/tmp/");
   });
@@ -336,8 +332,8 @@ describe("SettingsBackupRestorePage", () => {
       backups: [],
     });
 
-    expect(featureUnavailableHtml).toContain("settings.backup.errorTitle");
-    expect(featureUnavailableHtml).toContain("common.retry");
+    expect(featureUnavailableHtml).toContain(text("settings.backup.errorTitle"));
+    expect(featureUnavailableHtml).toContain(text("common.retry"));
     expect(featureUnavailableHtml).not.toContain("/root/");
 
     const permissionDeniedHtml = await renderPage({
@@ -347,27 +343,27 @@ describe("SettingsBackupRestorePage", () => {
     });
 
     expect(permissionDeniedHtml).toContain(`disabled=""`);
-    expect(permissionDeniedHtml).toContain("settings.backup.actions.backupNow");
+    expect(permissionDeniedHtml).toContain(text("settings.backup.actions.backupNow"));
   });
 
   it("keeps backup, verify, restore, and retention progress states distinct", async () => {
     const backupHtml = await renderPage({ operation: "backup" });
-    expect(backupHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">app.loading</button>`);
-    expect(backupHtml).toContain("settings.backup.actions.saveRetention");
+    expect(backupHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">${text("app.loading")}</button>`);
+    expect(backupHtml).toContain(text("settings.backup.actions.saveRetention"));
 
     const verifyHtml = await renderPage({ operation: "verify", verifyingBackupId: backup.backupId });
-    expect(verifyHtml).toContain("app.loading");
-    expect(verifyHtml).toContain("settings.backup.actions.backupNow");
+    expect(verifyHtml).toContain(text("app.loading"));
+    expect(verifyHtml).toContain(text("settings.backup.actions.backupNow"));
 
     const retentionHtml = await renderPage({ operation: "retention" });
-    expect(retentionHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">settings.backup.actions.backupNow</button>`);
-    expect(retentionHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">app.loading</button>`);
+    expect(retentionHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">${text("settings.backup.actions.backupNow")}</button>`);
+    expect(retentionHtml).toContain(`<button class="hc-button hc-button--primary hc-button--md" disabled="" type="button">${text("app.loading")}</button>`);
   });
 
   it("renders the details dialog with safe backup metadata only", async () => {
     const html = await renderPage({ details });
 
-    expect(html).toContain("settings.backup.detailsTitle");
+    expect(html).toContain(text("settings.backup.detailsTitle"));
     expect(html).toContain("encrypted-sha");
     expect(html).toContain("plain-sha");
     expect(html).toContain("highcool.db");
@@ -390,8 +386,8 @@ describe("SettingsBackupRestorePage", () => {
       },
     });
 
-    expect(htmlWithoutOperation).toContain("settings.backup.restoreTitle");
-    expect(htmlWithoutOperation).toContain(`settings.backup.actions.restoreNow</button>`);
+    expect(htmlWithoutOperation).toContain(text("settings.backup.restoreTitle"));
+    expect(htmlWithoutOperation).toContain(`${text("settings.backup.actions.restoreNow")}</button>`);
     expect(htmlWithoutOperation).toContain(`disabled=""`);
 
     const htmlWithOperation = await renderPage({
@@ -409,18 +405,18 @@ describe("SettingsBackupRestorePage", () => {
     });
 
     expect(htmlWithOperation).toContain("Ready to restore");
-    expect(htmlWithOperation).toContain(`settings.backup.actions.restoreNow</button>`);
+    expect(htmlWithOperation).toContain(`${text("settings.backup.actions.restoreNow")}</button>`);
     expect(htmlWithOperation).not.toContain(escapeHtml(validPreflight.operationId ?? ""));
   });
 
   it("renders cloud credential and delete confirmations from explicit state only", async () => {
     const cloudHtml = await renderPage({ activeTab: "cloud" });
-    expect(cloudHtml).toContain("settings.backup.cloud.fields.replaceCredentials");
-    expect(cloudHtml).toContain("settings.backup.cloud.actions.clearCredentials");
-    expect(cloudHtml).not.toContain("settings.backup.cloud.deleteConfirmTitle");
+    expect(cloudHtml).toContain(text("settings.backup.cloud.fields.replaceCredentials"));
+    expect(cloudHtml).toContain(text("settings.backup.cloud.actions.clearCredentials"));
+    expect(cloudHtml).not.toContain(text("settings.backup.cloud.deleteConfirmTitle"));
 
     const clearHtml = await renderPage({ clearCloudCredentialsOpen: true });
-    expect(clearHtml).toContain("settings.backup.cloud.clearCredentialsTitle");
+    expect(clearHtml).toContain(text("settings.backup.cloud.clearCredentialsTitle"));
 
     const deleteHtml = await renderPage({
       cloudDelete: {
@@ -428,7 +424,7 @@ describe("SettingsBackupRestorePage", () => {
         confirmationText: "",
       },
     });
-    expect(deleteHtml).toContain("settings.backup.cloud.deleteConfirmTitle");
+    expect(deleteHtml).toContain(text("settings.backup.cloud.deleteConfirmTitle"));
     expect(deleteHtml).toContain(cloudBackup.backupId);
   });
 
@@ -438,10 +434,10 @@ describe("SettingsBackupRestorePage", () => {
       cloudConnectionResult: successfulConnectionResult,
     });
 
-    expect(html).toContain("settings.backup.cloud.connectionSucceededTitle");
+    expect(html).toContain(text("settings.backup.cloud.connectionSucceededTitle"));
     expect(html).toContain("Cloud backup connection verified.");
-    expect(html).toContain("settings.backup.cloud.connectionStage.Completed");
-    expect(html).toContain("settings.backup.cloud.connectionCleanup.succeeded");
+    expect(html).toContain(text("settings.backup.cloud.connectionStage.Completed"));
+    expect(html).toContain(text("settings.backup.cloud.connectionCleanup.succeeded"));
   });
 
   it("renders categorized cloud connection failures without secrets", async () => {
@@ -450,12 +446,13 @@ describe("SettingsBackupRestorePage", () => {
       cloudConnectionResult: failedConnectionResult,
     });
 
-    expect(html).toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.title");
-    expect(html).toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.description");
-    expect(html).toContain("settings.backup.cloud.connectionStage.Write");
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.InvalidCredentials.title"));
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.InvalidCredentials.description"));
+    expect(html).toContain(text("settings.backup.cloud.connectionStage.Write"));
     expect(html).toContain("403");
     expect(html).toContain("SignatureDoesNotMatch");
-    expect(html).not.toContain("secret");
+    expect(html).not.toContain(cloudConfiguration.accessKey);
+    expect(html).not.toContain("secretKey");
     expect(html).not.toContain("raw exception");
   });
 
@@ -472,8 +469,8 @@ describe("SettingsBackupRestorePage", () => {
       },
     });
 
-    expect(html).toContain("settings.backup.cloud.connectionCategory.UnknownProviderFailure.title");
-    expect(html).toContain("settings.backup.cloud.connectionCategory.UnknownProviderFailure.description");
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.title"));
+    expect(html).toContain(text("settings.backup.cloud.connectionCategory.UnknownProviderFailure.description"));
   });
 
   it("shows cloud test loading state and suppresses stale results when state is reset", async () => {
@@ -483,7 +480,7 @@ describe("SettingsBackupRestorePage", () => {
       cloudConnectionResult: failedConnectionResult,
     });
 
-    expect(loadingHtml).toContain("app.loading");
+    expect(loadingHtml).toContain(text("app.loading"));
     expect(loadingHtml).toContain(`disabled=""`);
 
     const resetHtml = await renderPage({
@@ -491,7 +488,7 @@ describe("SettingsBackupRestorePage", () => {
       cloudConnectionResult: null,
     });
 
-    expect(resetHtml).not.toContain("settings.backup.cloud.connectionCategory.InvalidCredentials.title");
+    expect(resetHtml).not.toContain(text("settings.backup.cloud.connectionCategory.InvalidCredentials.title"));
     expect(resetHtml).not.toContain("SignatureDoesNotMatch");
   });
 });
