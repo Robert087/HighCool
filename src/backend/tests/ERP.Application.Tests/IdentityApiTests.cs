@@ -587,12 +587,159 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
 
         var featuresResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/settings/features");
         Assert.Equal(HttpStatusCode.OK, featuresResponse.StatusCode);
+        var featuresPayload = await featuresResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"inventoryEnabled\":true", featuresPayload);
+        Assert.Contains("\"purchasingEnabled\":true", featuresPayload);
+        Assert.Contains("\"salesEnabled\":false", featuresPayload);
+
+        var enabledInventoryResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/items");
+        Assert.Equal(HttpStatusCode.OK, enabledInventoryResponse.StatusCode);
+
+        var updateFeaturesResponse = await WithAuth(client, login.AccessToken).PutAsJsonAsync("/api/settings/features", new
+        {
+            enableProcurement = true,
+            enablePurchaseOrders = true,
+            enablePurchaseReceipts = true,
+            enableInventory = false,
+            enableWarehouses = false,
+            enableMultipleWarehouses = false,
+            enableSupplierManagement = true,
+            enableSupplierFinancials = true,
+            enableShortageManagement = false,
+            enableComponentsBom = false,
+            enableUom = false,
+            enableUomConversion = false,
+            enableSales = false,
+            enableEmployees = false,
+            enableSalaries = false,
+            enableEmployeeAdvances = false,
+            enableExpenses = false,
+            enableReports = false,
+            enableNotifications = false,
+            enablePriceLists = false,
+            enableStockTransfers = false,
+            enableStockAdjustments = false,
+            enableInventoryCounts = false,
+            enableInventoryIssues = false,
+            enableLowStockAlerts = false
+        });
+        Assert.Equal(HttpStatusCode.OK, updateFeaturesResponse.StatusCode);
+
+        var gatedInventoryResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/items");
+        Assert.Equal(HttpStatusCode.Forbidden, gatedInventoryResponse.StatusCode);
+        var gatedInventoryPayload = await gatedInventoryResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"code\":\"FEATURE_DISABLED\"", gatedInventoryPayload);
+        Assert.Contains("\"feature\":\"inventory\"", gatedInventoryPayload);
+
+        var updatedFeaturesResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/settings/features");
+        Assert.Equal(HttpStatusCode.OK, updatedFeaturesResponse.StatusCode);
+        var updatedFeaturesPayload = await updatedFeaturesResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"inventoryEnabled\":false", updatedFeaturesPayload);
 
         var auditResponse = await WithAuth(client, login.AccessToken).GetAsync("/api/settings/audit-log?page=1&pageSize=20");
         Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
         var auditPayload = await auditResponse.Content.ReadAsStringAsync();
         Assert.Contains("\"action\":\"signup\"", auditPayload);
         Assert.Contains("\"action\":\"login\"", auditPayload);
+    }
+
+    [Fact]
+    public async Task FeatureSettings_ShouldUseActiveOrganization_AndIgnoreTamperedOrganizationIds()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+
+        var north = await SignupAsync(client, "feature-north@highcool.test", "Feature North");
+        var south = await SignupAsync(client, "feature-south@highcool.test", "Feature South");
+
+        var updateResponse = await WithAuth(client, north.AccessToken).PutAsJsonAsync("/api/settings/features", new
+        {
+            organizationId = south.Workspace.OrganizationId,
+            enableProcurement = true,
+            enablePurchaseOrders = true,
+            enablePurchaseReceipts = true,
+            enableInventory = false,
+            enableWarehouses = false,
+            enableMultipleWarehouses = false,
+            enableSupplierManagement = true,
+            enableSupplierFinancials = true,
+            enableShortageManagement = false,
+            enableComponentsBom = false,
+            enableUom = false,
+            enableUomConversion = false,
+            enableSales = true,
+            enableEmployees = false,
+            enableSalaries = false,
+            enableEmployeeAdvances = false,
+            enableExpenses = false,
+            enableReports = false,
+            enableNotifications = false,
+            enablePriceLists = false,
+            enableStockTransfers = false,
+            enableStockAdjustments = false,
+            enableInventoryCounts = false,
+            enableInventoryIssues = false,
+            enableLowStockAlerts = false
+        });
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var northFeaturesResponse = await WithAuth(client, north.AccessToken).GetAsync("/api/settings/features");
+        Assert.Equal(HttpStatusCode.OK, northFeaturesResponse.StatusCode);
+        var northFeaturesPayload = await northFeaturesResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"inventoryEnabled\":false", northFeaturesPayload);
+        Assert.Contains("\"salesEnabled\":true", northFeaturesPayload);
+
+        var southFeaturesResponse = await WithAuth(client, south.AccessToken).GetAsync("/api/settings/features");
+        Assert.Equal(HttpStatusCode.OK, southFeaturesResponse.StatusCode);
+        var southFeaturesPayload = await southFeaturesResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"inventoryEnabled\":true", southFeaturesPayload);
+        Assert.Contains("\"salesEnabled\":false", southFeaturesPayload);
+    }
+
+    [Fact]
+    public async Task FeatureSettings_ShouldRequireOrganizationManagePermission()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+
+        var owner = await SignupAsync(client, "feature-auth-owner@highcool.test", "Feature Auth Org");
+        await CreateMemberAsync(_factory, owner.Workspace.OrganizationId, "feature-viewer@highcool.test", "viewer");
+
+        var unauthenticatedResponse = await client.PutAsJsonAsync("/api/settings/features", CreateFeatureSettingsPayload(enableInventory: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedResponse.StatusCode);
+
+        var viewerLogin = await LoginAsync(client, "feature-viewer@highcool.test");
+        var viewerUpdateResponse = await WithAuth(client, viewerLogin.AccessToken).PutAsJsonAsync("/api/settings/features", CreateFeatureSettingsPayload(enableInventory: false));
+        Assert.Equal(HttpStatusCode.Forbidden, viewerUpdateResponse.StatusCode);
+
+        var ownerUpdateResponse = await WithAuth(client, owner.AccessToken).PutAsJsonAsync("/api/settings/features", CreateFeatureSettingsPayload(
+            enableInventory: false,
+            enableWarehouses: false,
+            enableUom: false,
+            enableUomConversion: false));
+        Assert.Equal(HttpStatusCode.OK, ownerUpdateResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task FeatureSettings_ShouldRejectChildFeaturesWhenParentFeatureIsDisabled()
+    {
+        await _factory.ResetDatabaseAsync();
+        var client = _factory.CreateClient();
+
+        var owner = await SignupAsync(client, "feature-child-owner@highcool.test", "Feature Child Org");
+
+        var response = await WithAuth(client, owner.AccessToken).PutAsJsonAsync("/api/settings/features", CreateFeatureSettingsPayload(
+            enableInventory: false,
+            enableWarehouses: true,
+            enableUom: true,
+            enableUomConversion: true,
+            enableStockTransfers: true,
+            enableStockAdjustments: true,
+            enableInventoryCounts: true,
+            enableInventoryIssues: true,
+            enableLowStockAlerts: true));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -781,6 +928,17 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
             enableComponentsBom = false,
             enableUom = false,
             enableUomConversion = false,
+            enableSales = false,
+            enableEmployees = false,
+            enableSalaries = false,
+            enableEmployeeAdvances = false,
+            enableExpenses = false,
+            enableReports = false,
+            enableNotifications = false,
+            enablePriceLists = false,
+            enableInventoryCounts = false,
+            enableInventoryIssues = false,
+            enableLowStockAlerts = false,
             requirePoBeforeReceipt = true,
             allowDirectPurchaseReceipt = false,
             allowPartialReceipt = true,
@@ -804,7 +962,10 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
         Assert.Equal(HttpStatusCode.OK, saveResponse.StatusCode);
 
         var blockedInventoryResponse = await WithAuth(client, signup.AccessToken).GetAsync("/api/items");
-        Assert.Equal(HttpStatusCode.OK, blockedInventoryResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, blockedInventoryResponse.StatusCode);
+        var blockedInventoryPayload = await blockedInventoryResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"code\":\"FEATURE_DISABLED\"", blockedInventoryPayload);
+        Assert.Contains("\"feature\":\"inventory\"", blockedInventoryPayload);
 
         var completeResponse = await WithAuth(client, signup.AccessToken).PostAsJsonAsync("/api/settings/organization/setup/complete", new { });
         Assert.Equal(HttpStatusCode.OK, completeResponse.StatusCode);
@@ -815,7 +976,10 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
         Assert.Contains("\"setupCompleted\":true", meAfterCompletePayload);
 
         var inventoryDisabledResponse = await WithAuth(client, signup.AccessToken).GetAsync("/api/items");
-        Assert.Equal(HttpStatusCode.OK, inventoryDisabledResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, inventoryDisabledResponse.StatusCode);
+        var inventoryDisabledPayload = await inventoryDisabledResponse.Content.ReadAsStringAsync();
+        Assert.Contains("\"code\":\"FEATURE_DISABLED\"", inventoryDisabledPayload);
+        Assert.Contains("\"feature\":\"inventory\"", inventoryDisabledPayload);
 
         var settingsResponse = await WithAuth(client, signup.AccessToken).GetAsync("/api/settings/organization/setup");
         Assert.Equal(HttpStatusCode.OK, settingsResponse.StatusCode);
@@ -834,6 +998,60 @@ public sealed class IdentityApiTests : IClassFixture<IdentityApiTests.ApiFactory
     {
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
+    }
+
+    private static object CreateFeatureSettingsPayload(
+        bool enableProcurement = true,
+        bool enablePurchaseOrders = true,
+        bool enablePurchaseReceipts = true,
+        bool enableInventory = true,
+        bool enableWarehouses = true,
+        bool enableMultipleWarehouses = false,
+        bool enableShortageManagement = false,
+        bool enableUom = true,
+        bool enableUomConversion = true,
+        bool enableSales = false,
+        bool enableEmployees = false,
+        bool enableSalaries = false,
+        bool enableEmployeeAdvances = false,
+        bool enableExpenses = false,
+        bool enableReports = false,
+        bool enableNotifications = false,
+        bool enablePriceLists = false,
+        bool enableStockTransfers = false,
+        bool enableStockAdjustments = false,
+        bool enableInventoryCounts = false,
+        bool enableInventoryIssues = false,
+        bool enableLowStockAlerts = false)
+    {
+        return new
+        {
+            enableProcurement,
+            enablePurchaseOrders,
+            enablePurchaseReceipts,
+            enableInventory,
+            enableWarehouses,
+            enableMultipleWarehouses,
+            enableSupplierManagement = enableProcurement,
+            enableSupplierFinancials = enableProcurement,
+            enableShortageManagement,
+            enableComponentsBom = false,
+            enableUom,
+            enableUomConversion,
+            enableSales,
+            enableEmployees,
+            enableSalaries,
+            enableEmployeeAdvances,
+            enableExpenses,
+            enableReports,
+            enableNotifications,
+            enablePriceLists,
+            enableStockTransfers,
+            enableStockAdjustments,
+            enableInventoryCounts,
+            enableInventoryIssues,
+            enableLowStockAlerts
+        };
     }
 
     private static async Task<AuthApiResponse> LoginAsync(HttpClient client, string email)

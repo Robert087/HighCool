@@ -104,5 +104,27 @@ public sealed class Organization : AuditableEntity
 
     public bool EnableStockAdjustments { get; set; }
 
+    public bool EnableSales { get; set; }
+
+    public bool EnableEmployees { get; set; }
+
+    public bool EnableSalaries { get; set; }
+
+    public bool EnableEmployeeAdvances { get; set; }
+
+    public bool EnableExpenses { get; set; }
+
+    public bool EnableReports { get; set; }
+
+    public bool EnableNotifications { get; set; }
+
+    public bool EnablePriceLists { get; set; }
+
+    public bool EnableInventoryCounts { get; set; }
+
+    public bool EnableInventoryIssues { get; set; }
+
+    public bool EnableLowStockAlerts { get; set; }
+
     public ICollection<OrganizationMembership> Memberships { get; set; } = new List<OrganizationMembership>();
 }

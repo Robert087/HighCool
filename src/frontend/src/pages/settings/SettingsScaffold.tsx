@@ -14,6 +14,7 @@ type SettingsNavItem = {
 const settingsNavItems: SettingsNavItem[] = [
   { to: "/settings/users", label: "settings.nav.users", permission: Permissions.SettingsUsersManage },
   { to: "/settings/roles", label: "settings.nav.roles", permission: Permissions.SettingsRolesManage },
+  { to: "/settings/features", label: "settings.nav.features", permission: Permissions.SettingsOrganizationManage },
   { to: "/settings/backup-restore", label: "settings.nav.backupRestore", permission: Permissions.SettingsDatabaseDiagnosticsRead },
 ];
 

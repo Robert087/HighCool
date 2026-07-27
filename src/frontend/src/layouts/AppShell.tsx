@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState, type PropsWithChildren } from "re
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Badge, Button, PageContainer, useToast } from "../components/ui";
 import { useAuth } from "../features/auth/AuthProvider";
-import { useFeatureConfiguration } from "../features/auth/FeatureConfigurationProvider";
+import { useFeatureConfiguration, type FeatureFlagKey } from "../features/auth/FeatureConfigurationProvider";
 import { useI18n } from "../i18n";
 import { Permissions } from "../services/permissions";
-import { DISABLE_FEATURE_GATING } from "../config/temporaryFlags";
 
 const navigationGroups = [
   {
@@ -64,6 +63,7 @@ const navigationGroups = [
     id: "settings",
     label: "nav.settings",
     items: [
+      { label: "settings.nav.features", to: "/settings/features", icon: "settings" },
       { label: "settings.nav.users", to: "/settings/users", icon: "settings" },
       { label: "settings.nav.roles", to: "/settings/roles", icon: "settings" },
       { label: "settings.nav.backupRestore", to: "/settings/backup-restore", icon: "settings" },
@@ -414,10 +414,13 @@ export function AppShell({ children }: PropsWithChildren) {
           return false;
         }
 
-        // TEMPORARILY_DISABLED: Feature gating bypassed until all module keys/routes are aligned.
-        // Restore legacy behavior by showing all operational modules in sidebar.
-        if (DISABLE_FEATURE_GATING) {
-          return true;
+        const feature = navigationFeatures[item.to];
+        if (feature && !features) {
+          return feature === "workspaceEnabled";
+        }
+
+        if (feature && features?.[feature] === false) {
+          return false;
         }
 
         return true;
@@ -428,17 +431,17 @@ export function AppShell({ children }: PropsWithChildren) {
         return false;
       }
 
-      if (DISABLE_FEATURE_GATING) {
-        return true;
-      }
-
-      if (!workspace?.setupCompleted || !features) {
+      if (!features) {
         return group.id === "workspace";
       }
 
       return featureGroupVisibility[group.id as keyof typeof featureGroupVisibility](features);
-    }), [features, hasPermission, workspace?.setupCompleted]);
+    }), [features, hasPermission]);
   const activeGroup = filteredGroups.find((group) => group.id === activeGroupId) ?? filteredGroups[0];
+  const visibleNavigationPaths = useMemo<ReadonlySet<string>>(
+    () => new Set<string>(filteredGroups.flatMap((group) => group.items.map((item) => item.to))),
+    [filteredGroups],
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStoredBoolean(SIDEBAR_COLLAPSED_KEY, false));
   const [sidebarGroups, setSidebarGroups] = useState<GroupState>(() => readStoredGroupState(activeGroupId));
   const [theme, setTheme] = useState<"light" | "dark">(() => readStoredTheme());
@@ -469,11 +472,6 @@ export function AppShell({ children }: PropsWithChildren) {
   }, [theme]);
 
   useEffect(() => {
-    if (DISABLE_FEATURE_GATING) {
-      setSidebarGroups(Object.fromEntries(navigationGroups.map((group) => [group.id, true])) as GroupState);
-      return;
-    }
-
     setSidebarGroups((current) => ({
       ...current,
       workspace: true,
@@ -549,11 +547,12 @@ export function AppShell({ children }: PropsWithChildren) {
     const results = normalizedQuery.length === 0
       ? searchIndex.slice(0, 6)
       : searchIndex.filter((entry) =>
+        visibleNavigationPaths.has(entry.to) &&
         [entry.id, ...entry.keywords, t(entry.labelKey), t(entry.categoryKey)].join(" ").toLowerCase().includes(normalizedQuery),
       );
 
-    return results.slice(0, 7);
-  }, [searchQuery, t]);
+    return results.filter((entry) => visibleNavigationPaths.has(entry.to)).slice(0, 7);
+  }, [searchQuery, t, visibleNavigationPaths]);
 
   const workspaceStatus = useMemo(() => ({
     connectionLabel: isOnline ? t("app.connected") : t("app.offline"),
@@ -929,14 +928,45 @@ const navigationPermissions: Record<string, string | undefined> = {
   "/suppliers": Permissions.SuppliersView,
   "/warehouses": Permissions.InventoryWarehouseManage,
   "/uoms": Permissions.UomsManage,
+  "/settings/features": Permissions.SettingsOrganizationManage,
   "/settings/users": Permissions.SettingsUsersManage,
   "/settings/roles": Permissions.SettingsRolesManage,
   "/settings/backup-restore": Permissions.SettingsDatabaseDiagnosticsRead,
 };
 
+const navigationFeatures: Record<string, FeatureFlagKey | undefined> = {
+  "/workspace": "workspaceEnabled",
+  "/procurement/purchase-orders": "purchaseOrdersEnabled",
+  "/procurement/purchase-receipts": "purchaseReceiptsEnabled",
+  "/procurement/purchase-returns": "purchaseReceiptsEnabled",
+  "/inventory/stock-ledger": "inventoryEnabled",
+  "/inventory/warehouses": "warehousesEnabled",
+  "/supplier-financials": "supplierFinancialsEnabled",
+  "/supplier-financials/payments": "supplierFinancialsEnabled",
+  "/customers": "suppliersEnabled",
+  "/purchase-orders": "purchaseOrdersEnabled",
+  "/purchase-receipts": "purchaseReceiptsEnabled",
+  "/purchase-returns": "purchaseReceiptsEnabled",
+  "/open-shortages": "shortageManagementEnabled",
+  "/shortage-resolutions": "shortageManagementEnabled",
+  "/stock-balances": "inventoryEnabled",
+  "/stock-movements": "inventoryEnabled",
+  "/supplier-statements": "supplierFinancialsEnabled",
+  "/payments": "supplierFinancialsEnabled",
+  "/items": "inventoryEnabled",
+  "/uom-conversions": "uomConversionEnabled",
+  "/suppliers": "suppliersEnabled",
+  "/warehouses": "warehousesEnabled",
+  "/uoms": "uomEnabled",
+  "/settings/features": "settingsEnabled",
+  "/settings/users": "settingsEnabled",
+  "/settings/roles": "settingsEnabled",
+  "/settings/backup-restore": "settingsEnabled",
+};
+
 const featureGroupVisibility = {
   workspace: () => true,
-  procurement: (features: { procurementEnabled: boolean }) => features.procurementEnabled,
+  procurement: (features: { purchasingEnabled?: boolean; procurementEnabled: boolean }) => features.purchasingEnabled ?? features.procurementEnabled,
   inventory: (features: { inventoryEnabled: boolean }) => features.inventoryEnabled,
   shortages: (features: { inventoryEnabled: boolean }) => features.inventoryEnabled,
   suppliers: (features: { suppliersEnabled: boolean }) => features.suppliersEnabled,

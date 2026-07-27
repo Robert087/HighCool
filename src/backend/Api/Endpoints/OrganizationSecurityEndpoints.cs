@@ -17,6 +17,7 @@ public static class OrganizationSecurityEndpoints
         settings.MapPut("/organization", UpdateOrganizationAsync);
         settings.MapGet("/security", GetSecurityAsync);
         settings.MapGet("/features", GetFeaturesAsync);
+        settings.MapPut("/features", UpdateFeaturesAsync);
         settings.MapPut("/security", UpdateSecurityAsync);
         settings.MapGet("/users", ListUsersAsync);
         settings.MapPost("/users/{membershipId:guid}/suspend", SuspendUserAsync);
@@ -66,6 +67,9 @@ public static class OrganizationSecurityEndpoints
 
     private static Task<IResult> GetFeaturesAsync(IOrganizationAdministrationService service, CancellationToken cancellationToken)
         => ExecuteAsync(() => service.GetFeatureConfigurationAsync(cancellationToken));
+
+    private static Task<IResult> UpdateFeaturesAsync(OrganizationFeatureSettingsDto request, IOrganizationAdministrationService service, CancellationToken cancellationToken)
+        => ExecuteAsync(() => service.UpdateFeatureSettingsAsync(request, cancellationToken));
 
     private static Task<IResult> UpdateSecurityAsync(UpdateSecuritySettingsRequest request, IOrganizationAdministrationService service, CancellationToken cancellationToken)
         => ExecuteAsync(() => service.UpdateSecuritySettingsAsync(request, cancellationToken));

@@ -20,6 +20,8 @@ public interface IOrganizationAdministrationService
 
     Task<FeatureConfigurationDto> GetFeatureConfigurationAsync(CancellationToken cancellationToken);
 
+    Task<OrganizationSetupDto> UpdateFeatureSettingsAsync(OrganizationFeatureSettingsDto request, CancellationToken cancellationToken);
+
     Task<SecuritySettingsDto> UpdateSecuritySettingsAsync(UpdateSecuritySettingsRequest request, CancellationToken cancellationToken);
 
     Task<PagedResult<UserAccessListItemDto>> ListUsersAsync(UserListQuery query, CancellationToken cancellationToken);

@@ -114,6 +114,7 @@ public static class DependencyInjection
         services.AddScoped<IBackupRetentionService, BackupRetentionService>();
         services.AddScoped<IStartupDiagnosticsService, StartupDiagnosticsService>();
         services.AddScoped<IAuthorizationService, AuthorizationService>();
+        services.AddScoped<IOrganizationFeatureService, OrganizationFeatureService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<IOrganizationAdministrationService, OrganizationAdministrationService>();
 

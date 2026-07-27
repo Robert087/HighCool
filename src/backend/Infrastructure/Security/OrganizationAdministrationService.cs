@@ -44,7 +44,7 @@ public sealed class OrganizationAdministrationService(
 
     public async Task<OrganizationSetupDto> SaveSetupAsync(SaveOrganizationSetupRequest request, CancellationToken cancellationToken)
     {
-        await _authorizationService.EnsureOrganizationAccessAsync(cancellationToken);
+        await _authorizationService.EnsurePermissionAsync(Permissions.SettingsOrganizationManage, cancellationToken);
 
         var organization = await LoadOrganizationAsync(cancellationToken);
         var security = await LoadSecuritySettingsAsync(cancellationToken);
@@ -85,6 +85,17 @@ public sealed class OrganizationAdministrationService(
         organization.EnableComponentsBom = request.EnableComponentsBom;
         organization.EnableUom = request.EnableUom;
         organization.EnableUomConversion = request.EnableUomConversion;
+        organization.EnableSales = request.EnableSales;
+        organization.EnableEmployees = request.EnableEmployees;
+        organization.EnableSalaries = request.EnableSalaries;
+        organization.EnableEmployeeAdvances = request.EnableEmployeeAdvances;
+        organization.EnableExpenses = request.EnableExpenses;
+        organization.EnableReports = request.EnableReports;
+        organization.EnableNotifications = request.EnableNotifications;
+        organization.EnablePriceLists = request.EnablePriceLists;
+        organization.EnableInventoryCounts = request.EnableInventoryCounts;
+        organization.EnableInventoryIssues = request.EnableInventoryIssues;
+        organization.EnableLowStockAlerts = request.EnableLowStockAlerts;
         organization.RequirePoBeforeReceipt = request.RequirePoBeforeReceipt;
         organization.AllowDirectPurchaseReceipt = request.AllowDirectPurchaseReceipt;
         organization.AllowPartialReceipt = request.AllowPartialReceipt;
@@ -195,6 +206,27 @@ public sealed class OrganizationAdministrationService(
         var organization = await LoadOrganizationAsync(cancellationToken);
         var security = await LoadSecuritySettingsAsync(cancellationToken);
         return BuildFeatureConfigurationDto(organization, security);
+    }
+
+    public async Task<OrganizationSetupDto> UpdateFeatureSettingsAsync(OrganizationFeatureSettingsDto request, CancellationToken cancellationToken)
+    {
+        await _authorizationService.EnsurePermissionAsync(Permissions.SettingsOrganizationManage, cancellationToken);
+
+        ValidateFeatureDependencies(request);
+
+        var organization = await LoadOrganizationAsync(cancellationToken);
+        var security = await LoadSecuritySettingsAsync(cancellationToken);
+        var before = ToSetupDto(organization, security, await LoadWarehouseLookupsAsync(cancellationToken));
+
+        ApplyFeatureSettings(organization, request);
+        organization.UpdatedBy = _executionContext.Actor;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var after = ToSetupDto(organization, security, await LoadWarehouseLookupsAsync(cancellationToken));
+        await WriteFeatureChangeAuditEntriesAsync(before.Features, after.Features, organization.Id, cancellationToken);
+
+        return after;
     }
 
     public async Task<SecuritySettingsDto> UpdateSecuritySettingsAsync(UpdateSecuritySettingsRequest request, CancellationToken cancellationToken)
@@ -956,6 +988,21 @@ public sealed class OrganizationAdministrationService(
             throw new InvalidOperationException("Stock Adjustments requires Inventory.");
         }
 
+        if (request.EnableInventoryCounts && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Inventory Counts requires Inventory.");
+        }
+
+        if (request.EnableInventoryIssues && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Inventory Issues requires Inventory.");
+        }
+
+        if (request.EnableLowStockAlerts && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Low Stock Alerts requires Inventory.");
+        }
+
         if (request.EnableUomConversion && !request.EnableUom)
         {
             throw new InvalidOperationException("UOM Conversion requires UOM.");
@@ -990,6 +1037,98 @@ public sealed class OrganizationAdministrationService(
         {
             throw new InvalidOperationException("Over Receipt Tolerance can only be used when over receipt is enabled.");
         }
+    }
+
+    private static void ValidateFeatureDependencies(OrganizationFeatureSettingsDto request)
+    {
+        if (request.EnablePurchaseOrders && !request.EnableProcurement)
+        {
+            throw new InvalidOperationException("Purchase Orders requires Purchasing.");
+        }
+
+        if (request.EnablePurchaseReceipts && !request.EnableProcurement)
+        {
+            throw new InvalidOperationException("Purchase Receipts requires Purchasing.");
+        }
+
+        if (request.EnableShortageManagement && (!request.EnableInventory || !request.EnableProcurement || !request.EnablePurchaseReceipts))
+        {
+            throw new InvalidOperationException("Shortage Management requires Inventory, Purchasing, and Purchase Receipts.");
+        }
+
+        if (request.EnableWarehouses && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Warehouses requires Inventory.");
+        }
+
+        if (request.EnableMultipleWarehouses && (!request.EnableInventory || !request.EnableWarehouses))
+        {
+            throw new InvalidOperationException("Multiple Warehouses requires Inventory and Warehouses.");
+        }
+
+        if (request.EnableUom && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("UOM requires Inventory.");
+        }
+
+        if (request.EnableUomConversion && (!request.EnableInventory || !request.EnableUom))
+        {
+            throw new InvalidOperationException("UOM Conversion requires Inventory and UOM.");
+        }
+
+        if (request.EnableInventoryCounts && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Inventory Counts requires Inventory.");
+        }
+
+        if (request.EnableInventoryIssues && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Inventory Issues requires Inventory.");
+        }
+
+        if (request.EnableLowStockAlerts && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Low Stock Alerts requires Inventory.");
+        }
+
+        if (request.EnableStockTransfers && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Stock Transfers requires Inventory.");
+        }
+
+        if (request.EnableStockAdjustments && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Stock Adjustments requires Inventory.");
+        }
+    }
+
+    private static void ApplyFeatureSettings(Organization organization, OrganizationFeatureSettingsDto request)
+    {
+        organization.EnableProcurement = request.EnableProcurement;
+        organization.EnablePurchaseOrders = request.EnablePurchaseOrders;
+        organization.EnablePurchaseReceipts = request.EnablePurchaseReceipts;
+        organization.EnableInventory = request.EnableInventory;
+        organization.EnableWarehouses = request.EnableWarehouses;
+        organization.EnableMultipleWarehouses = request.EnableMultipleWarehouses;
+        organization.EnableSupplierManagement = request.EnableProcurement;
+        organization.EnableSupplierFinancials = request.EnableProcurement;
+        organization.EnableShortageManagement = request.EnableShortageManagement;
+        organization.EnableComponentsBom = request.EnableComponentsBom;
+        organization.EnableUom = request.EnableUom;
+        organization.EnableUomConversion = request.EnableUomConversion;
+        organization.EnableSales = request.EnableSales;
+        organization.EnableEmployees = request.EnableEmployees;
+        organization.EnableSalaries = request.EnableSalaries;
+        organization.EnableEmployeeAdvances = request.EnableEmployeeAdvances;
+        organization.EnableExpenses = request.EnableExpenses;
+        organization.EnableReports = request.EnableReports;
+        organization.EnableNotifications = request.EnableNotifications;
+        organization.EnablePriceLists = request.EnablePriceLists;
+        organization.EnableStockTransfers = request.EnableStockTransfers;
+        organization.EnableStockAdjustments = request.EnableStockAdjustments;
+        organization.EnableInventoryCounts = request.EnableInventoryCounts;
+        organization.EnableInventoryIssues = request.EnableInventoryIssues;
+        organization.EnableLowStockAlerts = request.EnableLowStockAlerts;
     }
 
     private static void ValidateSetupForCompletion(Organization organization)
@@ -1390,7 +1529,20 @@ public sealed class OrganizationAdministrationService(
             organization.EnableShortageManagement,
             organization.EnableComponentsBom,
             organization.EnableUom,
-            organization.EnableUomConversion);
+            organization.EnableUomConversion,
+            organization.EnableSales,
+            organization.EnableEmployees,
+            organization.EnableSalaries,
+            organization.EnableEmployeeAdvances,
+            organization.EnableExpenses,
+            organization.EnableReports,
+            organization.EnableNotifications,
+            organization.EnablePriceLists,
+            organization.EnableStockTransfers,
+            organization.EnableStockAdjustments,
+            organization.EnableInventoryCounts,
+            organization.EnableInventoryIssues,
+            organization.EnableLowStockAlerts);
     }
 
     private static OrganizationWorkflowSettingsDto ToWorkflowSettingsDto(Organization organization)
@@ -1536,17 +1688,43 @@ public sealed class OrganizationAdministrationService(
         var enabledModules = new List<string> { "workspace", "settings" };
         var disabledModules = new List<string>();
 
-        AddModuleState("procurement", organization.EnableProcurement && (organization.EnablePurchaseOrders || organization.EnablePurchaseReceipts), enabledModules, disabledModules);
-        AddModuleState("inventory", organization.EnableInventory, enabledModules, disabledModules);
-        AddModuleState("suppliers", organization.EnableSupplierManagement, enabledModules, disabledModules);
-        AddModuleState("supplier-financials", organization.EnableSupplierFinancials, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Purchasing, organization.EnableProcurement, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Inventory, organization.EnableInventory, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Sales, organization.EnableSales, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Employees, organization.EnableEmployees, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Salaries, organization.EnableSalaries, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.EmployeeAdvances, organization.EnableEmployeeAdvances, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Expenses, organization.EnableExpenses, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Reports, organization.EnableReports, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.Notifications, organization.EnableNotifications, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.PriceLists, organization.EnablePriceLists, enabledModules, disabledModules);
 
         return new FeatureConfigurationDto(
             WorkspaceEnabled: true,
-            ProcurementEnabled: organization.EnableProcurement && (organization.EnablePurchaseOrders || organization.EnablePurchaseReceipts),
+            PurchasingEnabled: organization.EnableProcurement,
             InventoryEnabled: organization.EnableInventory,
-            SuppliersEnabled: organization.EnableSupplierManagement,
-            SupplierFinancialsEnabled: organization.EnableSupplierFinancials,
+            SalesEnabled: organization.EnableSales,
+            EmployeesEnabled: organization.EnableEmployees,
+            SalariesEnabled: organization.EnableSalaries,
+            EmployeeAdvancesEnabled: organization.EnableEmployeeAdvances,
+            ExpensesEnabled: organization.EnableExpenses,
+            ReportsEnabled: organization.EnableReports,
+            NotificationsEnabled: organization.EnableNotifications,
+            PriceListsEnabled: organization.EnablePriceLists,
+            PurchaseOrdersEnabled: organization.EnableProcurement && organization.EnablePurchaseOrders,
+            PurchaseReceiptsEnabled: organization.EnableProcurement && organization.EnablePurchaseReceipts,
+            WarehousesEnabled: organization.EnableInventory && organization.EnableWarehouses,
+            ShortageManagementEnabled: organization.EnableInventory && organization.EnableProcurement && organization.EnableShortageManagement,
+            UomEnabled: organization.EnableInventory && organization.EnableUom,
+            UomConversionEnabled: organization.EnableInventory && organization.EnableUom && organization.EnableUomConversion,
+            InventoryTransfersEnabled: organization.EnableInventory && organization.EnableStockTransfers,
+            InventoryAdjustmentsEnabled: organization.EnableInventory && organization.EnableStockAdjustments,
+            InventoryCountsEnabled: organization.EnableInventory && organization.EnableInventoryCounts,
+            InventoryIssuesEnabled: organization.EnableInventory && organization.EnableInventoryIssues,
+            LowStockAlertsEnabled: organization.EnableInventory && organization.EnableLowStockAlerts,
+            ProcurementEnabled: organization.EnableProcurement,
+            SuppliersEnabled: organization.EnableProcurement,
+            SupplierFinancialsEnabled: organization.EnableProcurement,
             SettingsEnabled: true,
             OfflineDraftsOnly: true,
             EmailOtpEnabled: security.EnableEmailOtp,
@@ -1591,34 +1769,60 @@ public sealed class OrganizationAdministrationService(
     {
         var beforeValues = new Dictionary<string, bool>
         {
-            ["procurement"] = before.EnableProcurement,
-            ["purchase_orders"] = before.EnablePurchaseOrders,
-            ["purchase_receipts"] = before.EnablePurchaseReceipts,
-            ["inventory"] = before.EnableInventory,
-            ["warehouses"] = before.EnableWarehouses,
+            [OrganizationFeatureKeys.Purchasing] = before.EnableProcurement,
+            [OrganizationFeatureKeys.PurchaseOrders] = before.EnablePurchaseOrders,
+            [OrganizationFeatureKeys.PurchaseReceipts] = before.EnablePurchaseReceipts,
+            [OrganizationFeatureKeys.Inventory] = before.EnableInventory,
+            [OrganizationFeatureKeys.Warehouses] = before.EnableWarehouses,
             ["multiple_warehouses"] = before.EnableMultipleWarehouses,
-            ["supplier_management"] = before.EnableSupplierManagement,
-            ["supplier_financials"] = before.EnableSupplierFinancials,
-            ["shortage_management"] = before.EnableShortageManagement,
+            [OrganizationFeatureKeys.SupplierManagement] = before.EnableSupplierManagement,
+            [OrganizationFeatureKeys.SupplierFinancials] = before.EnableSupplierFinancials,
+            [OrganizationFeatureKeys.ShortageManagement] = before.EnableShortageManagement,
             ["components_bom"] = before.EnableComponentsBom,
-            ["uom"] = before.EnableUom,
-            ["uom_conversion"] = before.EnableUomConversion,
+            [OrganizationFeatureKeys.Uom] = before.EnableUom,
+            [OrganizationFeatureKeys.UomConversion] = before.EnableUomConversion,
+            [OrganizationFeatureKeys.Sales] = before.EnableSales,
+            [OrganizationFeatureKeys.Employees] = before.EnableEmployees,
+            [OrganizationFeatureKeys.Salaries] = before.EnableSalaries,
+            [OrganizationFeatureKeys.EmployeeAdvances] = before.EnableEmployeeAdvances,
+            [OrganizationFeatureKeys.Expenses] = before.EnableExpenses,
+            [OrganizationFeatureKeys.Reports] = before.EnableReports,
+            [OrganizationFeatureKeys.Notifications] = before.EnableNotifications,
+            [OrganizationFeatureKeys.PriceLists] = before.EnablePriceLists,
+            [OrganizationFeatureKeys.InventoryTransfers] = before.EnableStockTransfers,
+            [OrganizationFeatureKeys.InventoryAdjustments] = before.EnableStockAdjustments,
+            [OrganizationFeatureKeys.InventoryCounts] = before.EnableInventoryCounts,
+            [OrganizationFeatureKeys.InventoryIssues] = before.EnableInventoryIssues,
+            [OrganizationFeatureKeys.LowStockAlerts] = before.EnableLowStockAlerts,
         };
 
         var afterValues = new Dictionary<string, bool>
         {
-            ["procurement"] = after.EnableProcurement,
-            ["purchase_orders"] = after.EnablePurchaseOrders,
-            ["purchase_receipts"] = after.EnablePurchaseReceipts,
-            ["inventory"] = after.EnableInventory,
-            ["warehouses"] = after.EnableWarehouses,
+            [OrganizationFeatureKeys.Purchasing] = after.EnableProcurement,
+            [OrganizationFeatureKeys.PurchaseOrders] = after.EnablePurchaseOrders,
+            [OrganizationFeatureKeys.PurchaseReceipts] = after.EnablePurchaseReceipts,
+            [OrganizationFeatureKeys.Inventory] = after.EnableInventory,
+            [OrganizationFeatureKeys.Warehouses] = after.EnableWarehouses,
             ["multiple_warehouses"] = after.EnableMultipleWarehouses,
-            ["supplier_management"] = after.EnableSupplierManagement,
-            ["supplier_financials"] = after.EnableSupplierFinancials,
-            ["shortage_management"] = after.EnableShortageManagement,
+            [OrganizationFeatureKeys.SupplierManagement] = after.EnableSupplierManagement,
+            [OrganizationFeatureKeys.SupplierFinancials] = after.EnableSupplierFinancials,
+            [OrganizationFeatureKeys.ShortageManagement] = after.EnableShortageManagement,
             ["components_bom"] = after.EnableComponentsBom,
-            ["uom"] = after.EnableUom,
-            ["uom_conversion"] = after.EnableUomConversion,
+            [OrganizationFeatureKeys.Uom] = after.EnableUom,
+            [OrganizationFeatureKeys.UomConversion] = after.EnableUomConversion,
+            [OrganizationFeatureKeys.Sales] = after.EnableSales,
+            [OrganizationFeatureKeys.Employees] = after.EnableEmployees,
+            [OrganizationFeatureKeys.Salaries] = after.EnableSalaries,
+            [OrganizationFeatureKeys.EmployeeAdvances] = after.EnableEmployeeAdvances,
+            [OrganizationFeatureKeys.Expenses] = after.EnableExpenses,
+            [OrganizationFeatureKeys.Reports] = after.EnableReports,
+            [OrganizationFeatureKeys.Notifications] = after.EnableNotifications,
+            [OrganizationFeatureKeys.PriceLists] = after.EnablePriceLists,
+            [OrganizationFeatureKeys.InventoryTransfers] = after.EnableStockTransfers,
+            [OrganizationFeatureKeys.InventoryAdjustments] = after.EnableStockAdjustments,
+            [OrganizationFeatureKeys.InventoryCounts] = after.EnableInventoryCounts,
+            [OrganizationFeatureKeys.InventoryIssues] = after.EnableInventoryIssues,
+            [OrganizationFeatureKeys.LowStockAlerts] = after.EnableLowStockAlerts,
         };
 
         return beforeValues.Keys

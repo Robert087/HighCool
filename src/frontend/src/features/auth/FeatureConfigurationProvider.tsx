@@ -4,9 +4,38 @@ import { getFeatureConfiguration, type FeatureConfiguration } from "../../servic
 
 interface FeatureConfigurationContextValue {
   features: FeatureConfiguration | null;
+  hasFeature: (feature: FeatureFlagKey) => boolean;
   isLoading: boolean;
   reload: () => Promise<void>;
 }
+
+export type FeatureFlagKey =
+  | "workspaceEnabled"
+  | "purchasingEnabled"
+  | "procurementEnabled"
+  | "inventoryEnabled"
+  | "salesEnabled"
+  | "employeesEnabled"
+  | "salariesEnabled"
+  | "employeeAdvancesEnabled"
+  | "expensesEnabled"
+  | "reportsEnabled"
+  | "notificationsEnabled"
+  | "priceListsEnabled"
+  | "purchaseOrdersEnabled"
+  | "purchaseReceiptsEnabled"
+  | "warehousesEnabled"
+  | "shortageManagementEnabled"
+  | "uomEnabled"
+  | "uomConversionEnabled"
+  | "inventoryTransfersEnabled"
+  | "inventoryAdjustmentsEnabled"
+  | "inventoryCountsEnabled"
+  | "inventoryIssuesEnabled"
+  | "lowStockAlertsEnabled"
+  | "suppliersEnabled"
+  | "supplierFinancialsEnabled"
+  | "settingsEnabled";
 
 const FeatureConfigurationContext = createContext<FeatureConfigurationContextValue | null>(null);
 
@@ -16,7 +45,7 @@ export function FeatureConfigurationProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(false);
 
   async function load() {
-    if (!isAuthenticated || !workspace?.setupCompleted) {
+    if (!isAuthenticated || !workspace) {
       setFeatures(null);
       setIsLoading(false);
       return;
@@ -34,10 +63,11 @@ export function FeatureConfigurationProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     void load();
-  }, [isAuthenticated, workspace?.setupCompleted, workspace?.organizationId]);
+  }, [isAuthenticated, workspace?.organizationId]);
 
   const value = useMemo<FeatureConfigurationContextValue>(() => ({
     features,
+    hasFeature: (feature) => features ? features[feature] !== false : false,
     isLoading,
     reload: load,
   }), [features, isLoading]);

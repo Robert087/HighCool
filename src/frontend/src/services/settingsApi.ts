@@ -132,8 +132,28 @@ export interface Profile {
 
 export interface FeatureConfiguration {
   workspaceEnabled: boolean;
+  purchasingEnabled: boolean;
   procurementEnabled: boolean;
   inventoryEnabled: boolean;
+  salesEnabled: boolean;
+  employeesEnabled: boolean;
+  salariesEnabled: boolean;
+  employeeAdvancesEnabled: boolean;
+  expensesEnabled: boolean;
+  reportsEnabled: boolean;
+  notificationsEnabled: boolean;
+  priceListsEnabled: boolean;
+  purchaseOrdersEnabled: boolean;
+  purchaseReceiptsEnabled: boolean;
+  warehousesEnabled: boolean;
+  shortageManagementEnabled: boolean;
+  uomEnabled: boolean;
+  uomConversionEnabled: boolean;
+  inventoryTransfersEnabled: boolean;
+  inventoryAdjustmentsEnabled: boolean;
+  inventoryCountsEnabled: boolean;
+  inventoryIssuesEnabled: boolean;
+  lowStockAlertsEnabled: boolean;
   suppliersEnabled: boolean;
   supplierFinancialsEnabled: boolean;
   settingsEnabled: boolean;
@@ -172,6 +192,19 @@ export interface OrganizationFeatureSettings {
   enableComponentsBom: boolean;
   enableUom: boolean;
   enableUomConversion: boolean;
+  enableSales: boolean;
+  enableEmployees: boolean;
+  enableSalaries: boolean;
+  enableEmployeeAdvances: boolean;
+  enableExpenses: boolean;
+  enableReports: boolean;
+  enableNotifications: boolean;
+  enablePriceLists: boolean;
+  enableStockTransfers: boolean;
+  enableStockAdjustments: boolean;
+  enableInventoryCounts: boolean;
+  enableInventoryIssues: boolean;
+  enableLowStockAlerts: boolean;
 }
 
 export interface OrganizationWorkflowSettings {
@@ -380,6 +413,13 @@ export function listProfiles() {
 
 export function getFeatureConfiguration() {
   return requestJson<FeatureConfiguration>("/api/settings/features");
+}
+
+export function updateFeatureSettings(input: OrganizationFeatureSettings) {
+  return requestJson<OrganizationSetup>("/api/settings/features", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getOrganizationSetupStatus() {

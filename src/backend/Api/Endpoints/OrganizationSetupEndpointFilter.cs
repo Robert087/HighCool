@@ -1,7 +1,4 @@
 using ERP.Application.Security;
-using ERP.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-
 namespace ERP.Api.Endpoints;
 
 public sealed class OrganizationSetupEndpointFilter(
@@ -14,23 +11,35 @@ public sealed class OrganizationSetupEndpointFilter(
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
         var executionContext = context.HttpContext.RequestServices.GetRequiredService<IRequestExecutionContext>();
-        var dbContext = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+        var featureService = context.HttpContext.RequestServices.GetRequiredService<IOrganizationFeatureService>();
 
         if (!executionContext.OrganizationId.HasValue)
         {
             return Results.Json(new { message = "Organization access is required." }, statusCode: StatusCodes.Status403Forbidden);
         }
 
-        var organization = await dbContext.Organizations
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .SingleAsync(entity => entity.Id == executionContext.OrganizationId.Value, context.HttpContext.RequestAborted);
-
         // TEMPORARILY_DISABLED: Organization setup wizard bypassed until UX/feature mapping is stabilized.
-        // TEMPORARILY_DISABLED: Feature gating bypassed until all module keys/routes are aligned.
-        _ = organization;
         _ = _requireCompletedSetup;
-        _ = _requiredFeatures;
+
+        foreach (var requiredFeature in _requiredFeatures)
+        {
+            var feature = OrganizationFeatureKeys.Parse(requiredFeature);
+            try
+            {
+                await featureService.RequireEnabledAsync(feature, context.HttpContext.RequestAborted);
+            }
+            catch (FeatureDisabledException exception)
+            {
+                return Results.Json(
+                    new
+                    {
+                        code = FeatureDisabledException.ErrorCode,
+                        feature = exception.Feature.ToKey(),
+                        message = "This feature is disabled for the active organization."
+                    },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+        }
 
         return await next(context);
     }

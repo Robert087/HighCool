@@ -1,18 +1,10 @@
 import type { PropsWithChildren } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthProvider";
-import { useFeatureConfiguration } from "../features/auth/FeatureConfigurationProvider";
+import { useFeatureConfiguration, type FeatureFlagKey } from "../features/auth/FeatureConfigurationProvider";
 import { AccessDeniedPage } from "../pages/AccessDeniedPage";
 import { FeatureDisabledPage } from "../pages/FeatureDisabledPage";
-import { DISABLE_FEATURE_GATING, DISABLE_ORG_SETUP_WIZARD } from "../config/temporaryFlags";
-
-type FeatureFlagKey =
-  | "workspaceEnabled"
-  | "procurementEnabled"
-  | "inventoryEnabled"
-  | "suppliersEnabled"
-  | "supplierFinancialsEnabled"
-  | "settingsEnabled";
+import { DISABLE_ORG_SETUP_WIZARD } from "../config/temporaryFlags";
 
 interface RouteGateProps extends PropsWithChildren {
   allowDuringSetup?: boolean;
@@ -22,7 +14,7 @@ interface RouteGateProps extends PropsWithChildren {
 
 export function RouteGate({ allowDuringSetup = false, children, feature, permission }: RouteGateProps) {
   const { hasPermission, isAuthenticated, isLoading, workspace } = useAuth();
-  const { features, isLoading: isFeaturesLoading } = useFeatureConfiguration();
+  const { hasFeature, isLoading: isFeaturesLoading } = useFeatureConfiguration();
 
   if (isLoading) {
     return null;
@@ -44,12 +36,12 @@ export function RouteGate({ allowDuringSetup = false, children, feature, permiss
     return <AccessDeniedPage />;
   }
 
-  if (!DISABLE_FEATURE_GATING && feature) {
+  if (feature) {
     if (isFeaturesLoading) {
       return null;
     }
 
-    if (features && !features[feature]) {
+    if (!hasFeature(feature)) {
       return <FeatureDisabledPage />;
     }
   }
