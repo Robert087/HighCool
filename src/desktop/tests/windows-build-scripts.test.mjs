@@ -82,6 +82,23 @@ test("windows resource generation has a real ico and package metadata", async ()
   assert.match(cargoToml, /OriginalFilename = "HighCool\.exe"/);
 });
 
+test("NSIS installer blocks while HighCool runtime processes are still running", async () => {
+  const tauriConfig = JSON.parse(await readFile(resolve(desktopRoot, "src-tauri/tauri.conf.json"), "utf8"));
+  const hooks = await readFile(resolve(desktopRoot, "src-tauri/windows/installer-hooks.nsh"), "utf8");
+
+  assert.equal(tauriConfig.bundle.windows.nsis.installerHooks, "./windows/installer-hooks.nsh");
+  assert.match(hooks, /NSIS_HOOK_PREINSTALL/);
+  assert.match(hooks, /NSIS_HOOK_PREUNINSTALL/);
+  assert.match(hooks, /\$\{MAINBINARYNAME\}\.exe/);
+  assert.match(hooks, /ERP\.Api\.exe/);
+  assert.match(hooks, /FindProcessCurrentUser/);
+  assert.match(hooks, /MB_RETRYCANCEL/);
+  assert.match(hooks, /Abort "HighCool must be closed before installation can continue\."/);
+  assert.doesNotMatch(hooks, /KillProcess/);
+  assert.doesNotMatch(hooks, /\btaskkill\b/i);
+  assert.doesNotMatch(hooks, /\bdotnet\.exe\b/i);
+});
+
 test("tauri resolves through @tauri-apps/cli/tauri.js", () => {
   const launch = resolveTauriLaunchSpec(["--version"], {
     desktopRoot,

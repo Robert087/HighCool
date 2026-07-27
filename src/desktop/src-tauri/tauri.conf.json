@@ -37,6 +37,7 @@
         "silent": true
       },
       "nsis": {
+        "installerHooks": "./windows/installer-hooks.nsh",
         "installMode": "currentUser",
         "languages": ["English"],
         "displayLanguageSelector": false,
