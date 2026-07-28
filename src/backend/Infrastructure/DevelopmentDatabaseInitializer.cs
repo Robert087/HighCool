@@ -18,6 +18,35 @@ public sealed class DevelopmentDatabaseInitializer(
     IDatabaseConfigurationService databaseConfigurationService,
     ILogger<DevelopmentDatabaseInitializer> logger) : IHostedService
 {
+    private const string EfMigrationsHistoryTable = "__EFMigrationsHistory";
+    private const string EfMigrationsProductVersion = "8.0.4";
+
+    private static readonly string[] LegacyDesktopFoundationMigrationIds =
+    [
+        "20260419193505_InitialBaseline",
+        "20260419205218_AddMasterDataModule",
+        "20260419211847_AddItemsModule",
+        "20260420100246_UpdateItemsAndGlobalUomConversions",
+        "20260420113603_AddPurchaseReceiptDraftModule",
+        "20260420133645_AddPurchaseReceiptPostingAndLedgers",
+        "20260420143613_AddPurchaseOrdersAndPurchaseOrderLinkedReceipts",
+        "20260420152431_AddPurchaseReceiptComponentExpectedQty",
+        "20260421145805_MakeShortageReasonOptional",
+        "20260421151238_AddCustomersModule",
+        "20260421152754_AddShortageResolutionModule",
+        "20260422092520_CorrectShortageResolutionMixedSettlement",
+        "20260422113835_AddSupplierStatementModule",
+        "20260422134048_ExtendSupplierMasterDataFields",
+        "20260422143010_AddSupplierPaymentsModule",
+        "20260423090045_AddPurchaseReturnsAndReversalFramework",
+        "20260423112943_AddPerformanceIndexesAndPaginationReadModelSupport",
+        "20260428115630_AddIdentityAndOrganizationAccessControl",
+        "20260428152516_AddOrganizationSetupWizardConfiguration",
+        "20260429120000_AddPurchaseOrderLinePricing",
+        "20260725120000_AddApplicationDatabaseMetadata",
+        "20260725124500_AddDesktopFoundationBatch2Safety"
+    ];
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var databaseConfiguration = databaseConfigurationService.GetConfiguration();
@@ -60,7 +89,8 @@ public sealed class DevelopmentDatabaseInitializer(
                 }
             }
 
-            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+            await EnsureLegacyMigrationHistoryAsync(dbContext, cancellationToken);
+            await dbContext.Database.MigrateAsync(cancellationToken);
             var metadata = await metadataService.EnsureInitializedAsync(cancellationToken);
             logger.LogInformation(
                 "HighCool local database schema version {SchemaVersion} initialized for application version {ApplicationVersion}.",
@@ -72,7 +102,7 @@ public sealed class DevelopmentDatabaseInitializer(
             if (CanResetDevelopmentDatabase())
             {
                 await ResetSqliteDatabaseFileAsync(dbContext, databasePath, cancellationToken);
-                await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+                await dbContext.Database.MigrateAsync(cancellationToken);
                 await metadataService.EnsureInitializedAsync(cancellationToken);
                 return;
             }
@@ -103,6 +133,129 @@ public sealed class DevelopmentDatabaseInitializer(
         => hostEnvironment.IsDevelopment() &&
            bool.TryParse(configuration[$"{LocalDatabaseOptions.SectionName}:AllowDevelopmentReset"], out var allowReset) &&
            allowReset;
+
+    private static async Task EnsureLegacyMigrationHistoryAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        if (!await HasApplicationTablesAsync(dbContext, cancellationToken) ||
+            await TableExistsAsync(dbContext, EfMigrationsHistoryTable, cancellationToken))
+        {
+            return;
+        }
+
+        if (!await HasLegacyDesktopFoundationSchemaAsync(dbContext, cancellationToken))
+        {
+            throw new InvalidOperationException(
+                "The configured SQLite database was created without EF migration history and does not match a supported HighCool legacy schema. The database was not modified.");
+        }
+
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldCloseConnection = connection.State != System.Data.ConnectionState.Open;
+
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var createCommand = connection.CreateCommand();
+            createCommand.Transaction = transaction;
+            createCommand.CommandText = """
+                CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory" (
+                    "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                    "ProductVersion" TEXT NOT NULL
+                );
+                """;
+            await createCommand.ExecuteNonQueryAsync(cancellationToken);
+
+            foreach (var migrationId in LegacyDesktopFoundationMigrationIds)
+            {
+                await using var insertCommand = connection.CreateCommand();
+                insertCommand.Transaction = transaction;
+                insertCommand.CommandText = """
+                    INSERT OR IGNORE INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ($migrationId, $productVersion);
+                    """;
+                insertCommand.Parameters.Add(CreateParameter(insertCommand, "$migrationId", migrationId));
+                insertCommand.Parameters.Add(CreateParameter(insertCommand, "$productVersion", EfMigrationsProductVersion));
+                await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static async Task<bool> HasLegacyDesktopFoundationSchemaAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+        => await TableExistsAsync(dbContext, "application_database_metadata", cancellationToken) &&
+           await TableExistsAsync(dbContext, "application_database_restore_journal", cancellationToken) &&
+           await TableExistsAsync(dbContext, "application_database_upgrade_journal", cancellationToken) &&
+           await ColumnExistsAsync(dbContext, "Organizations", "EnableStockTransfers", cancellationToken) &&
+           !await ColumnExistsAsync(dbContext, "Organizations", "EnableEmployeeAdvances", cancellationToken) &&
+           !await TableExistsAsync(dbContext, "item_categories", cancellationToken);
+
+    private static async Task<bool> ColumnExistsAsync(
+        AppDbContext dbContext,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldCloseConnection = connection.State != System.Data.ConnectionState.Open;
+
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info({QuoteSqliteIdentifier(tableName)});";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static System.Data.Common.DbParameter CreateParameter(
+        System.Data.Common.DbCommand command,
+        string name,
+        object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        return parameter;
+    }
+
+    private static string QuoteSqliteIdentifier(string value)
+        => $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
     private async Task ResetSqliteDatabaseFileAsync(
         AppDbContext dbContext,

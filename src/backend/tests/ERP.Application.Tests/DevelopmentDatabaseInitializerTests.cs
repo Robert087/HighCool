@@ -5,6 +5,8 @@ using ERP.Infrastructure.LocalData;
 using ERP.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -196,6 +198,34 @@ public sealed class DevelopmentDatabaseInitializerTests
         }
     }
 
+    [Fact]
+    public async Task StartAsync_LegacyDesktopFoundationDatabaseWithoutEfHistory_AppliesPendingMigrations()
+    {
+        var databasePath = CreateDatabasePath();
+
+        try
+        {
+            var installationId = await CreateLegacyDesktopFoundationDatabaseWithoutMigrationHistoryAsync(databasePath);
+
+            await using var provider = CreateProvider(databasePath);
+            var initializer = CreateInitializer(provider, databasePath, environmentName: Environments.Production);
+
+            await initializer.StartAsync(CancellationToken.None);
+
+            Assert.True(await TableExistsAsync(databasePath, "__EFMigrationsHistory"));
+            Assert.True(await TableExistsAsync(databasePath, "item_categories"));
+            Assert.True(await ColumnExistsAsync(databasePath, "Organizations", "EnableEmployeeAdvances"));
+            Assert.True(await ColumnExistsAsync(databasePath, "items", "minimum_stock_quantity"));
+            Assert.Equal(installationId, await GetInstallationIdAsync(databasePath));
+            Assert.True(await MigrationHistoryContainsAsync(databasePath, "20260727225601_AddOrganizationFeatureGatesPhase2"));
+            Assert.True(await MigrationHistoryContainsAsync(databasePath, "20260727235401_Phase3InventoryFoundation"));
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
     private static ServiceProvider CreateProvider(string databasePath, bool? allowReset = false)
     {
         var services = new ServiceCollection();
@@ -266,6 +296,23 @@ public sealed class DevelopmentDatabaseInitializerTests
         await command.ExecuteNonQueryAsync();
     }
 
+    private static async Task<string> CreateLegacyDesktopFoundationDatabaseWithoutMigrationHistoryAsync(string databasePath)
+    {
+        await using (var provider = CreateProvider(databasePath))
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var migrator = dbContext.Database.GetService<IMigrator>();
+            await migrator.MigrateAsync("20260725124500_AddDesktopFoundationBatch2Safety");
+
+            var metadataService = scope.ServiceProvider.GetRequiredService<IApplicationDatabaseMetadataService>();
+            var metadata = await metadataService.EnsureInitializedAsync(CancellationToken.None);
+
+            await dbContext.Database.ExecuteSqlRawAsync("""DROP TABLE "__EFMigrationsHistory";""");
+            return metadata.InstallationId;
+        }
+    }
+
     private static async Task<bool> TableExistsAsync(string databasePath, string tableName)
     {
         await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
@@ -280,6 +327,51 @@ public sealed class DevelopmentDatabaseInitializerTests
 
         command.Parameters.AddWithValue("$tableName", tableName);
         return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(string databasePath, string tableName, string columnName)
+    {
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"", StringComparison.Ordinal)}\");";
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> MigrationHistoryContainsAsync(string databasePath, string migrationId)
+    {
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM "__EFMigrationsHistory"
+            WHERE "MigrationId" = $migrationId;
+            """;
+        command.Parameters.AddWithValue("$migrationId", migrationId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync()) > 0;
+    }
+
+    private static async Task<string> GetInstallationIdAsync(string databasePath)
+    {
+        await using var connection = new SqliteConnection(SqliteTestDatabase.CreateConnectionString(databasePath));
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT "installation_id"
+            FROM "application_database_metadata"
+            LIMIT 1;
+            """;
+        return Convert.ToString(await command.ExecuteScalarAsync()) ?? string.Empty;
     }
 
     private sealed class TestLocalStoragePathService(string dataDirectory) : ILocalStoragePathService
