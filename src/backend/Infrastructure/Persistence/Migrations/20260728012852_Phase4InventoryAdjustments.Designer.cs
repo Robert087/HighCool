@@ -4,6 +4,7 @@ using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ERP.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260728012852_Phase4InventoryAdjustments")]
+    partial class Phase4InventoryAdjustments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1117,11 +1120,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(128)")
                         .HasColumnName("updated_by");
 
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("int")
-                        .HasColumnName("version");
-
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("warehouse_id");
@@ -1239,11 +1237,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("item_id");
 
-                    b.Property<string>("LedgerOperationKey")
-                        .HasMaxLength(160)
-                        .HasColumnType("nvarchar(160)")
-                        .HasColumnName("ledger_operation_key");
-
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1315,10 +1308,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("UomId");
 
                     b.HasIndex("WarehouseId");
-
-                    b.HasIndex("OrganizationId", "LedgerOperationKey")
-                        .IsUnique()
-                        .HasFilter("[ledger_operation_key] IS NOT NULL");
 
                     b.HasIndex("OrganizationId", "SourceDocType", "SourceDocId");
 
@@ -3493,66 +3482,6 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("application_database_upgrade_journal", (string)null);
-                });
-
-            modelBuilder.Entity("ERP.Domain.System.DocumentNumberSequence", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("created_by");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
-                        .HasColumnName("document_type");
-
-                    b.Property<int>("NextValue")
-                        .HasColumnType("int")
-                        .HasColumnName("next_value");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("PaddingLength")
-                        .HasColumnType("int")
-                        .HasColumnName("padding_length");
-
-                    b.Property<string>("Prefix")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("nvarchar(16)")
-                        .HasColumnName("prefix");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
-                        .HasColumnName("updated_by");
-
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("int")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrganizationId", "DocumentType")
-                        .IsUnique();
-
-                    b.ToTable("document_number_sequences", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Identity.MembershipBranchAccess", b =>

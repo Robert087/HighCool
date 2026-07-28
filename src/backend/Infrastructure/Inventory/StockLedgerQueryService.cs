@@ -107,6 +107,12 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
             .Distinct()
             .ToArray();
 
+        var inventoryAdjustmentIds = rows
+            .Where(entity => entity.SourceDocType is SourceDocumentType.InventoryAdjustment or SourceDocumentType.InventoryAdjustmentCancellation)
+            .Select(entity => entity.SourceDocId)
+            .Distinct()
+            .ToArray();
+
         var purchaseReceiptNumbers = purchaseReceiptIds.Length == 0
             ? new Dictionary<Guid, string>()
             : await dbContext.PurchaseReceipts
@@ -135,6 +141,13 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
                 .Where(entity => reversalIds.Contains(entity.Id))
                 .ToDictionaryAsync(entity => entity.Id, entity => entity.ReversalNo, cancellationToken);
 
+        var inventoryAdjustmentNumbers = inventoryAdjustmentIds.Length == 0
+            ? new Dictionary<Guid, string>()
+            : await dbContext.InventoryAdjustments
+                .AsNoTracking()
+                .Where(entity => inventoryAdjustmentIds.Contains(entity.Id))
+                .ToDictionaryAsync(entity => entity.Id, entity => entity.AdjustmentNo, cancellationToken);
+
         var items = new List<StockLedgerEntryDto>();
         foreach (var entity in rows)
         {
@@ -152,7 +165,7 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
                 entity.SourceDocType,
                 entity.SourceDocId,
                 entity.SourceLineId,
-                ResolveSourceDocumentNo(entity.SourceDocType, entity.SourceDocId, purchaseReceiptNumbers, shortageResolutionNumbers, purchaseReturnNumbers, reversalNumbers),
+                ResolveSourceDocumentNo(entity.SourceDocType, entity.SourceDocId, purchaseReceiptNumbers, shortageResolutionNumbers, purchaseReturnNumbers, reversalNumbers, inventoryAdjustmentNumbers),
                 entity.QtyIn,
                 entity.QtyOut,
                 entity.UomId,
@@ -252,7 +265,8 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
         IReadOnlyDictionary<Guid, string> purchaseReceiptNumbers,
         IReadOnlyDictionary<Guid, string> shortageResolutionNumbers,
         IReadOnlyDictionary<Guid, string> purchaseReturnNumbers,
-        IReadOnlyDictionary<Guid, string> reversalNumbers)
+        IReadOnlyDictionary<Guid, string> reversalNumbers,
+        IReadOnlyDictionary<Guid, string> inventoryAdjustmentNumbers)
     {
         return sourceDocType switch
         {
@@ -260,6 +274,8 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
             SourceDocumentType.ShortageResolution when shortageResolutionNumbers.TryGetValue(sourceDocId, out var resolutionNo) => resolutionNo,
             SourceDocumentType.PurchaseReturn when purchaseReturnNumbers.TryGetValue(sourceDocId, out var returnNo) => returnNo,
             SourceDocumentType.DocumentReversal when reversalNumbers.TryGetValue(sourceDocId, out var reversalNo) => reversalNo,
+            SourceDocumentType.InventoryAdjustment when inventoryAdjustmentNumbers.TryGetValue(sourceDocId, out var adjustmentNo) => adjustmentNo,
+            SourceDocumentType.InventoryAdjustmentCancellation when inventoryAdjustmentNumbers.TryGetValue(sourceDocId, out var canceledAdjustmentNo) => canceledAdjustmentNo,
             _ => sourceDocId.ToString()
         };
     }

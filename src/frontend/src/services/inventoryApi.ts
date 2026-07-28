@@ -1,7 +1,22 @@
 import { requestJson, type PaginatedResult, type PaginationParams } from "./api";
 
-export type StockTransactionType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortagePhysicalResolution";
-export type SourceDocumentType = "PurchaseReceipt" | "PurchaseReceiptReversal" | "ShortageResolution";
+export type StockTransactionType =
+  | "PurchaseReceipt"
+  | "PurchaseReceiptReversal"
+  | "PurchaseReturn"
+  | "PurchaseReturnCancellation"
+  | "ShortagePhysicalResolution"
+  | "InventoryAdjustmentIncrease"
+  | "InventoryAdjustmentDecrease"
+  | "InventoryAdjustmentCancellation";
+export type SourceDocumentType =
+  | "PurchaseReceipt"
+  | "PurchaseReceiptReversal"
+  | "PurchaseReturn"
+  | "DocumentReversal"
+  | "ShortageResolution"
+  | "InventoryAdjustment"
+  | "InventoryAdjustmentCancellation";
 
 export interface InventoryFilters {
   search: string;

@@ -29,6 +29,7 @@ const navigationGroups = [
     items: [
       { label: "nav.stockCard", to: "/inventory/stock-ledger", icon: "ledger" },
       { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
+      { label: "nav.inventoryAdjustments", to: "/inventory-adjustments", icon: "document" },
       { label: "nav.items", to: "/items", icon: "items" },
       { label: "nav.itemCategories", to: "/item-categories", icon: "items" },
       { label: "nav.warehouses", to: "/inventory/warehouses", icon: "warehouse" },
@@ -324,7 +325,7 @@ function getGroupForPath(pathname: string) {
   if (pathname.startsWith("/open-shortages") || pathname.startsWith("/shortage-resolutions")) {
     return "shortages";
   }
-  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/items") || pathname.startsWith("/item-categories") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
+  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/inventory-adjustments") || pathname.startsWith("/items") || pathname.startsWith("/item-categories") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
     return "inventory";
   }
   if (pathname.startsWith("/inventory/")) {
@@ -911,6 +912,7 @@ const navigationPermissions: Record<string, string | undefined> = {
   "/procurement/purchase-receipts": Permissions.ProcurementPurchaseReceiptView,
   "/procurement/purchase-returns": Permissions.ProcurementPurchaseReturnView,
   "/inventory/stock-ledger": Permissions.InventoryStockLedgerView,
+  "/inventory-adjustments": Permissions.InventoryStockLedgerView,
   "/inventory/warehouses": Permissions.InventoryWarehouseManage,
   "/supplier-financials": Permissions.SupplierFinancialsPayablesView,
   "/supplier-financials/payments": Permissions.SupplierFinancialsPayablesView,
@@ -942,6 +944,7 @@ const navigationFeatures: Record<string, FeatureFlagKey | undefined> = {
   "/procurement/purchase-receipts": "purchaseReceiptsEnabled",
   "/procurement/purchase-returns": "purchaseReceiptsEnabled",
   "/inventory/stock-ledger": "inventoryEnabled",
+  "/inventory-adjustments": "inventoryAdjustmentsEnabled",
   "/inventory/warehouses": "warehousesEnabled",
   "/supplier-financials": "supplierFinancialsEnabled",
   "/supplier-financials/payments": "supplierFinancialsEnabled",

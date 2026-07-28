@@ -21,6 +21,8 @@ public sealed class StockLedgerEntry : OrganizationScopedAuditableEntity
 
     public Guid? SourceLineId { get; set; }
 
+    public string? LedgerOperationKey { get; set; }
+
     public decimal QtyIn { get; set; }
 
     public decimal QtyOut { get; set; }

@@ -8,6 +8,8 @@ import { AccessDeniedPage } from "../pages/AccessDeniedPage";
 import { CustomerFormPage } from "../pages/CustomerFormPage";
 import { CustomersPage } from "../pages/CustomersPage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { InventoryAdjustmentFormPage } from "../pages/InventoryAdjustmentFormPage";
+import { InventoryAdjustmentsPage } from "../pages/InventoryAdjustmentsPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
 import { ItemCategoriesPage } from "../pages/ItemCategoriesPage";
 import { ItemCategoryFormPage } from "../pages/ItemCategoryFormPage";
@@ -96,6 +98,10 @@ export function AppRoutes() {
       <Route path="/stock-balances" element={guard(<StockBalancePage />, Permissions.InventoryStockLedgerView, "inventoryEnabled")} />
       <Route path="/stock-movements" element={guard(<StockMovementPage />, Permissions.InventoryStockLedgerView, "inventoryEnabled")} />
       <Route path="/inventory/stock-ledger" element={guard(<StockMovementPage />, Permissions.InventoryStockLedgerView, "inventoryEnabled")} />
+      <Route path="/inventory-adjustments" element={guard(<InventoryAdjustmentsPage />, Permissions.InventoryStockLedgerView, "inventoryAdjustmentsEnabled")} />
+      <Route path="/inventory-adjustments/new" element={guard(<InventoryAdjustmentFormPage />, Permissions.InventoryAdjustmentCreate, "inventoryAdjustmentsEnabled")} />
+      <Route path="/inventory-adjustments/:inventoryAdjustmentId" element={guard(<InventoryAdjustmentFormPage />, Permissions.InventoryStockLedgerView, "inventoryAdjustmentsEnabled")} />
+      <Route path="/inventory-adjustments/:inventoryAdjustmentId/edit" element={guard(<InventoryAdjustmentFormPage />, Permissions.InventoryAdjustmentCreate, "inventoryAdjustmentsEnabled")} />
       <Route path="/items" element={guard(<ItemsPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/new" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/:itemId/edit" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />

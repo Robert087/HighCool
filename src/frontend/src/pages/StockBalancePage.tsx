@@ -34,6 +34,10 @@ const INITIAL_FILTERS: InventoryFilters = {
   toDate: "",
 };
 
+function formatTransactionType(value: string, t: (key: string) => string) {
+  return t(`module.stockBalance.transactionType.${value}`);
+}
+
 export function StockBalancePage() {
   const [rows, setRows] = useState<StockBalance[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -157,11 +161,7 @@ export function StockBalancePage() {
     if (filters.transactionType) {
       chips.push({
         key: "transactionType",
-        label: t("module.stockBalance.filter.typeChip", { value: t(filters.transactionType === "PurchaseReceipt"
-          ? "module.stockBalance.purchaseReceipt"
-          : filters.transactionType === "PurchaseReceiptReversal"
-            ? "module.stockBalance.purchaseReceiptReversal"
-            : "module.stockBalance.shortagePhysicalResolution") }),
+        label: t("module.stockBalance.filter.typeChip", { value: formatTransactionType(filters.transactionType, t) }),
         onRemove: () => setFilter("transactionType", ""),
       });
     }
@@ -239,7 +239,12 @@ export function StockBalancePage() {
                 <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
                 <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
                 <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+                <option value="PurchaseReturn">{t("module.stockBalance.transactionType.PurchaseReturn")}</option>
+                <option value="PurchaseReturnCancellation">{t("module.stockBalance.transactionType.PurchaseReturnCancellation")}</option>
                 <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
+                <option value="InventoryAdjustmentIncrease">{t("module.stockBalance.transactionType.InventoryAdjustmentIncrease")}</option>
+                <option value="InventoryAdjustmentDecrease">{t("module.stockBalance.transactionType.InventoryAdjustmentDecrease")}</option>
+                <option value="InventoryAdjustmentCancellation">{t("module.stockBalance.transactionType.InventoryAdjustmentCancellation")}</option>
               </Select>
             </Field>
 
@@ -290,7 +295,12 @@ export function StockBalancePage() {
               <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
               <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
               <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+              <option value="PurchaseReturn">{t("module.stockBalance.transactionType.PurchaseReturn")}</option>
+              <option value="PurchaseReturnCancellation">{t("module.stockBalance.transactionType.PurchaseReturnCancellation")}</option>
               <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
+              <option value="InventoryAdjustmentIncrease">{t("module.stockBalance.transactionType.InventoryAdjustmentIncrease")}</option>
+              <option value="InventoryAdjustmentDecrease">{t("module.stockBalance.transactionType.InventoryAdjustmentDecrease")}</option>
+              <option value="InventoryAdjustmentCancellation">{t("module.stockBalance.transactionType.InventoryAdjustmentCancellation")}</option>
             </Select>
           </Field>
         )}

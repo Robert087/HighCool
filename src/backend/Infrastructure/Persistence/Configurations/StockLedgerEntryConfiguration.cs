@@ -38,6 +38,10 @@ public sealed class StockLedgerEntryConfiguration : AuditableEntityConfiguration
         builder.Property(entity => entity.SourceLineId)
             .HasColumnName("source_line_id");
 
+        builder.Property(entity => entity.LedgerOperationKey)
+            .HasColumnName("ledger_operation_key")
+            .HasMaxLength(160);
+
         builder.Property(entity => entity.QtyIn)
             .HasColumnName("qty_in")
             .HasColumnType("decimal(18,6)")
@@ -94,6 +98,9 @@ public sealed class StockLedgerEntryConfiguration : AuditableEntityConfiguration
         builder.HasIndex(entity => new { entity.OrganizationId, entity.WarehouseId, entity.TransactionDate });
         builder.HasIndex(entity => new { entity.OrganizationId, entity.TransactionType, entity.TransactionDate });
         builder.HasIndex(entity => new { entity.OrganizationId, entity.SourceDocType, entity.SourceDocId });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.LedgerOperationKey })
+            .IsUnique()
+            .HasFilter("[ledger_operation_key] IS NOT NULL");
         builder.HasIndex(entity => new { entity.SourceDocId, entity.SourceLineId, entity.TransactionType })
             .IsUnique();
     }

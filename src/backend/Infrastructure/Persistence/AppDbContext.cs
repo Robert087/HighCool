@@ -90,6 +90,10 @@ public sealed class AppDbContext(
 
     public DbSet<StockLedgerEntry> StockLedgerEntries => Set<StockLedgerEntry>();
 
+    public DbSet<InventoryAdjustment> InventoryAdjustments => Set<InventoryAdjustment>();
+
+    public DbSet<InventoryAdjustmentLine> InventoryAdjustmentLines => Set<InventoryAdjustmentLine>();
+
     public DbSet<ShortageReasonCode> ShortageReasonCodes => Set<ShortageReasonCode>();
 
     public DbSet<ShortageLedgerEntry> ShortageLedgerEntries => Set<ShortageLedgerEntry>();
@@ -111,6 +115,8 @@ public sealed class AppDbContext(
     public DbSet<ApplicationDatabaseUpgradeJournal> ApplicationDatabaseUpgradeJournal => Set<ApplicationDatabaseUpgradeJournal>();
 
     public DbSet<ApplicationDatabaseRestoreJournal> ApplicationDatabaseRestoreJournal => Set<ApplicationDatabaseRestoreJournal>();
+
+    public DbSet<DocumentNumberSequence> DocumentNumberSequences => Set<DocumentNumberSequence>();
 
     public override int SaveChanges()
     {

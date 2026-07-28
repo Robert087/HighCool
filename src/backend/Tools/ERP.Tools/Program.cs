@@ -18,6 +18,7 @@ if (parsed is null)
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddOrganizationTestDataTools();
 builder.Services.RemoveAll<IRequestExecutionContext>();
 builder.Services.RemoveAll<IOrganizationScopedToolExecutionContext>();
 builder.Services.AddSingleton<OrganizationToolExecutionContext>();

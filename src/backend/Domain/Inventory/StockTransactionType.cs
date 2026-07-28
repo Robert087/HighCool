@@ -6,5 +6,8 @@ public enum StockTransactionType
     PurchaseReceiptReversal = 2,
     ShortagePhysicalResolution = 3,
     PurchaseReturn = 4,
-    ShortageResolutionReversal = 5
+    ShortageResolutionReversal = 5,
+    InventoryAdjustmentIncrease = 6,
+    InventoryAdjustmentDecrease = 7,
+    InventoryAdjustmentCancellation = 8
 }

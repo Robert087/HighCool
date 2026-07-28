@@ -74,6 +74,7 @@ app.MapShortageResolutionEndpoints();
 app.MapPaymentEndpoints();
 app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
+app.MapInventoryAdjustmentEndpoints();
 app.MapReversalEndpoints();
 app.MapLocalDatabaseEndpoints();
 app.MapDesktopEndpoints();
