@@ -118,14 +118,41 @@ public sealed class StockLedgerQueryTests
         Assert.Contains("append-only", deleteException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static AppDbContext CreateDbContext()
+    [Fact]
+    public async Task StockAvailabilityService_ShouldRejectAggregatedStockOutWhenNegativeStockIsDisabled()
+    {
+        var executionContext = TestOrganizationContext.CreateExecutionContext();
+        await using var dbContext = CreateDbContext(executionContext);
+        await TestOrganizationContext.EnsureOrganizationAsync(dbContext, executionContext);
+        var references = await SeedReferencesAsync(dbContext);
+        await SeedLedgerEntriesAsync(dbContext, references, Guid.NewGuid());
+
+        var service = new StockAvailabilityService(dbContext);
+
+        await service.EnsureStockOutAllowedAsync(
+            [new StockOutRequirement(references.ItemA.Id, references.WarehouseA.Id, 6m, "exact stock out")],
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.EnsureStockOutAllowedAsync(
+                [
+                    new StockOutRequirement(references.ItemA.Id, references.WarehouseA.Id, 4m, "return line 1"),
+                    new StockOutRequirement(references.ItemA.Id, references.WarehouseA.Id, 3m, "return line 2")
+                ],
+                CancellationToken.None));
+
+        Assert.Contains("Insufficient stock", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("return line 1; return line 2", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AppDbContext CreateDbContext(TestRequestExecutionContext? executionContext = null)
     {
         var databasePath = Path.Combine(Path.GetTempPath(), $"highcool-stock-ledger-tests-{Guid.NewGuid():N}.db");
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlite(SqliteTestDatabase.CreateConnectionString(databasePath))
             .Options;
 
-        var dbContext = new AppDbContext(options);
+        var dbContext = new AppDbContext(options, executionContext);
         dbContext.Database.EnsureCreated();
         return dbContext;
     }

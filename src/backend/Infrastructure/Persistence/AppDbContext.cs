@@ -64,6 +64,8 @@ public sealed class AppDbContext(
 
     public DbSet<Item> Items => Set<Item>();
 
+    public DbSet<ItemCategory> ItemCategories => Set<ItemCategory>();
+
     public DbSet<ItemComponent> ItemComponents => Set<ItemComponent>();
 
     public DbSet<UomConversion> UomConversions => Set<UomConversion>();

@@ -1,5 +1,6 @@
 using ERP.Application.LocalData;
 using ERP.Application.MasterData.Items;
+using ERP.Application.MasterData.ItemCategories;
 using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.UomConversions;
@@ -20,6 +21,7 @@ using ERP.Domain.Identity;
 using ERP.Infrastructure.Inventory;
 using ERP.Infrastructure.LocalData;
 using ERP.Infrastructure.MasterData.Items;
+using ERP.Infrastructure.MasterData.ItemCategories;
 using ERP.Infrastructure.MasterData.Customers;
 using ERP.Infrastructure.MasterData.Suppliers;
 using ERP.Infrastructure.MasterData.UomConversions;
@@ -192,6 +194,7 @@ public static class DependencyInjection
         services.AddAuthorization();
 
         services.AddScoped<IItemService, ItemService>();
+        services.AddScoped<IItemCategoryService, ItemCategoryService>();
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IUomConversionService, UomConversionService>();
         services.AddScoped<ISupplierService, SupplierService>();
@@ -199,6 +202,7 @@ public static class DependencyInjection
         services.AddScoped<IUomService, UomService>();
         services.AddScoped<IStockLedgerQueryService, StockLedgerQueryService>();
         services.AddScoped<IStockBalanceService, StockBalanceService>();
+        services.AddScoped<IStockAvailabilityService, StockAvailabilityService>();
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
         services.AddScoped<IPurchaseOrderPostingService, PurchaseOrderPostingService>();
         services.AddScoped<IPurchaseOrderCancellationService, PurchaseOrderCancellationService>();

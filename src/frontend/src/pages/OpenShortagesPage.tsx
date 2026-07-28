@@ -20,7 +20,7 @@ import {
   useI18n,
 } from "../components/ui";
 import { ApiError } from "../services/api";
-import { listItems, listSuppliers, type Item, type Supplier } from "../services/masterDataApi";
+import { getActiveItemsCached, listSuppliers, type Item, type Supplier } from "../services/masterDataApi";
 import {
   listOpenShortages,
   type OpenShortage,
@@ -61,7 +61,7 @@ export function OpenShortagesPage() {
       try {
         const [supplierRows, itemRows] = await Promise.all([
           listSuppliers("", "active"),
-          listItems("", "active"),
+          getActiveItemsCached(),
         ]);
 
         if (active) {

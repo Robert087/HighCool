@@ -17,6 +17,9 @@ public sealed class UpsertItemRequestValidator : AbstractValidator<UpsertItemReq
         RuleFor(request => request.BaseUomId)
             .NotEmpty();
 
+        RuleFor(request => request.MinimumStockQuantity)
+            .GreaterThanOrEqualTo(0m);
+
         RuleFor(request => request.Components)
             .NotNull();
 

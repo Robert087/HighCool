@@ -90,10 +90,10 @@ public sealed class StockLedgerEntryConfiguration : AuditableEntityConfiguration
             .HasForeignKey(entity => entity.UomId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.ItemId, entity.WarehouseId, entity.TransactionDate });
-        builder.HasIndex(entity => new { entity.WarehouseId, entity.TransactionDate });
-        builder.HasIndex(entity => new { entity.TransactionType, entity.TransactionDate });
-        builder.HasIndex(entity => new { entity.SourceDocType, entity.SourceDocId });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.ItemId, entity.WarehouseId, entity.TransactionDate, entity.CreatedAt, entity.Id });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.WarehouseId, entity.TransactionDate });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.TransactionType, entity.TransactionDate });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.SourceDocType, entity.SourceDocId });
         builder.HasIndex(entity => new { entity.SourceDocId, entity.SourceLineId, entity.TransactionType })
             .IsUnique();
     }

@@ -44,7 +44,10 @@ public sealed class UomConversionConfiguration : AuditableEntityConfigurationBas
             .HasForeignKey(entity => entity.ToUomId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.FromUomId, entity.ToUomId, entity.IsActive })
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.FromUomId, entity.ToUomId, entity.IsActive })
             .IsUnique();
+
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.ToUomId });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.IsActive });
     }
 }

@@ -1,5 +1,6 @@
 using ERP.Application.Payments;
 using ERP.Domain.Common;
+using ERP.Domain.Inventory;
 using ERP.Domain.MasterData;
 using ERP.Domain.Payments;
 using ERP.Domain.Purchasing;
@@ -472,6 +473,24 @@ public sealed class PaymentWorkflowTests
 
         dbContext.PurchaseReceipts.Add(receipt);
         await dbContext.SaveChangesAsync();
+
+        var line = receipt.Lines.Single();
+        dbContext.StockLedgerEntries.Add(new StockLedgerEntry
+        {
+            ItemId = references.Item.Id,
+            WarehouseId = references.Warehouse.Id,
+            TransactionType = StockTransactionType.PurchaseReceipt,
+            SourceDocType = SourceDocumentType.PurchaseReceipt,
+            SourceDocId = receipt.Id,
+            SourceLineId = line.Id,
+            QtyIn = line.ReceivedQty,
+            QtyOut = 0m,
+            UomId = references.Uom.Id,
+            BaseQty = line.ReceivedQty,
+            RunningBalanceQty = line.ReceivedQty,
+            TransactionDate = receipt.ReceiptDate,
+            CreatedBy = "seed"
+        });
 
         dbContext.SupplierStatementEntries.Add(new SupplierStatementEntry
         {

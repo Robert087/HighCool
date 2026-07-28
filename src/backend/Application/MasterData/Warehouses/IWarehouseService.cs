@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.MasterData.Warehouses;
 
 public interface IWarehouseService
 {
-    Task<IReadOnlyList<WarehouseDto>> ListAsync(WarehouseListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<WarehouseDto>> ListAsync(WarehouseListQuery query, CancellationToken cancellationToken);
 
     Task<WarehouseDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

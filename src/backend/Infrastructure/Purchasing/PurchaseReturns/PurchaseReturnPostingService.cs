@@ -1,8 +1,10 @@
 using ERP.Application.Purchasing.PurchaseReturns;
 using ERP.Application.Purchasing.PurchaseReceipts;
 using ERP.Application.Statements;
+using ERP.Application.Inventory;
 using ERP.Domain.Common;
 using ERP.Domain.Inventory;
+using ERP.Infrastructure.Inventory;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +14,8 @@ public sealed class PurchaseReturnPostingService(
     AppDbContext dbContext,
     IPurchaseReturnService queryService,
     ISupplierStatementPostingService supplierStatementPostingService,
-    IQuantityConversionService quantityConversionService) : IPurchaseReturnPostingService
+    IQuantityConversionService quantityConversionService,
+    IStockAvailabilityService? stockAvailabilityService = null) : IPurchaseReturnPostingService
 {
     public async Task<PurchaseReturnDto?> PostAsync(Guid id, string actor, CancellationToken cancellationToken)
     {
@@ -50,6 +53,11 @@ public sealed class PurchaseReturnPostingService(
         }
 
         await ValidateAsync(entity, cancellationToken);
+        await (stockAvailabilityService ?? new StockAvailabilityService(dbContext)).EnsureStockOutAllowedAsync(
+            entity.Lines
+                .Select(line => new StockOutRequirement(line.ItemId, line.WarehouseId, line.BaseQty, $"Purchase return line {line.LineNo}"))
+                .ToArray(),
+            cancellationToken);
         await CreateStockEntriesAsync(entity, actor, cancellationToken);
         var returnAmount = await CalculateReturnAmountAsync(entity, cancellationToken);
         await supplierStatementPostingService.CreatePurchaseReturnEntriesAsync(entity, returnAmount, actor, cancellationToken);

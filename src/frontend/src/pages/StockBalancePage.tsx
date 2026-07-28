@@ -20,7 +20,7 @@ import {
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listStockBalances, type InventoryFilters, type StockBalance } from "../services/inventoryApi";
-import { listItems, listWarehouses, type Item, type Warehouse } from "../services/masterDataApi";
+import { getActiveItemsCached, getActiveWarehousesCached, type Item, type Warehouse } from "../services/masterDataApi";
 import { formatDate, formatQuantity } from "../i18n";
 
 const PAGE_SIZE = 12;
@@ -53,8 +53,8 @@ export function StockBalancePage() {
     async function loadReferences() {
       try {
         const [itemsResult, warehousesResult] = await Promise.all([
-          listItems("", "active"),
-          listWarehouses("", "active"),
+          getActiveItemsCached(),
+          getActiveWarehousesCached(),
         ]);
 
         if (active) {
@@ -212,7 +212,7 @@ export function StockBalancePage() {
         )}
         mobileFilters={(
           <>
-            <Field label="Item">
+            <Field label={t("table.item")}>
               <Select value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
                 <option value="">{t("module.stockBalance.allItems")}</option>
                 {items.map((item) => (
@@ -223,7 +223,7 @@ export function StockBalancePage() {
               </Select>
             </Field>
 
-            <Field label="Warehouse">
+            <Field label={t("table.warehouse")}>
               <Select value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
                 <option value="">{t("module.stockBalance.allWarehouses")}</option>
                 {warehouses.map((warehouse) => (
@@ -234,7 +234,7 @@ export function StockBalancePage() {
               </Select>
             </Field>
 
-            <Field label="Transaction type">
+            <Field label={t("module.stockBalance.transactionType")}>
               <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
                 <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
                 <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
@@ -243,11 +243,11 @@ export function StockBalancePage() {
               </Select>
             </Field>
 
-            <Field label="From date">
+            <Field label={t("common.fromDate")}>
               <Input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} />
             </Field>
 
-            <Field label="To date">
+            <Field label={t("common.toDate")}>
               <Input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} />
             </Field>
           </>
@@ -255,7 +255,7 @@ export function StockBalancePage() {
         onReset={() => setFilters(INITIAL_FILTERS)}
         primaryFilters={(
           <>
-            <FilterDropdown aria-label="Item filter" value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
+            <FilterDropdown aria-label={t("module.stockBalance.filter.itemAria")} value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
               <option value="">{t("table.item")}</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -264,7 +264,7 @@ export function StockBalancePage() {
               ))}
             </FilterDropdown>
 
-            <FilterDropdown aria-label="Warehouse filter" value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
+            <FilterDropdown aria-label={t("module.stockBalance.filter.warehouseAria")} value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
               <option value="">{t("table.warehouse")}</option>
               {warehouses.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
@@ -277,7 +277,7 @@ export function StockBalancePage() {
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search stock balances"
+            aria-label={t("module.stockBalance.searchAria")}
             placeholder={t("module.stockBalance.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
@@ -285,7 +285,7 @@ export function StockBalancePage() {
         )}
         secondaryActiveCount={filters.transactionType ? 1 : 0}
         secondaryFilters={(
-          <Field label="Transaction type">
+          <Field label={t("module.stockBalance.transactionType")}>
             <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
               <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
               <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
@@ -303,7 +303,7 @@ export function StockBalancePage() {
             description={error}
             action={
               <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>
-                Retry
+                {t("common.retry")}
               </Button>
             }
           />
@@ -326,10 +326,10 @@ export function StockBalancePage() {
           hasData={rows.length > 0}
           columns={
             <tr>
-              <th scope="col">Item</th>
-              <th scope="col">Warehouse</th>
-              <th scope="col">Balance</th>
-              <th scope="col">Base UOM</th>
+              <th scope="col">{t("table.item")}</th>
+              <th scope="col">{t("table.warehouse")}</th>
+              <th scope="col">{t("table.balance")}</th>
+              <th scope="col">{t("table.baseUom")}</th>
             </tr>
           }
           rows={rows.map((row) => (

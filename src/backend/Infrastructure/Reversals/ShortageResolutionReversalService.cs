@@ -1,8 +1,10 @@
 using ERP.Application.Reversals;
+using ERP.Application.Inventory;
 using ERP.Application.Statements;
 using ERP.Domain.Common;
 using ERP.Domain.Inventory;
 using ERP.Domain.Shortages;
+using ERP.Infrastructure.Inventory;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +12,8 @@ namespace ERP.Infrastructure.Reversals;
 
 public sealed class ShortageResolutionReversalService(
     AppDbContext dbContext,
-    ISupplierStatementPostingService statementPostingService) : IShortageResolutionReversalService
+    ISupplierStatementPostingService statementPostingService,
+    IStockAvailabilityService? stockAvailabilityService = null) : IShortageResolutionReversalService
 {
     public async Task<DocumentReversalDto?> ReverseAsync(Guid resolutionId, ReverseDocumentRequest request, string actor, CancellationToken cancellationToken)
     {
@@ -43,6 +46,7 @@ public sealed class ShortageResolutionReversalService(
             actor,
             cancellationToken);
 
+        await EnsurePhysicalStockReversalAllowedAsync(resolution, cancellationToken);
         await ReverseShortageStateAsync(resolution, reversal, actor, cancellationToken);
         await statementPostingService.CreateShortageResolutionReversalEntriesAsync(resolution, reversal, actor, cancellationToken);
 
@@ -54,6 +58,30 @@ public sealed class ShortageResolutionReversalService(
         await transaction.CommitAsync(cancellationToken);
 
         return DocumentReversalSupport.ToDto(reversal);
+    }
+
+    private async Task EnsurePhysicalStockReversalAllowedAsync(
+        ShortageResolution resolution,
+        CancellationToken cancellationToken)
+    {
+        var requirements = resolution.Allocations
+            .Where(allocation => allocation.AllocationType == ShortageAllocationType.Physical)
+            .Select(allocation =>
+            {
+                var shortage = allocation.ShortageLedgerEntry
+                    ?? throw new InvalidOperationException("Shortage resolution reversal requires shortage traceability.");
+                var receipt = shortage.PurchaseReceipt
+                    ?? throw new InvalidOperationException("Shortage resolution reversal requires receipt traceability.");
+
+                return new StockOutRequirement(
+                    shortage.ComponentItemId,
+                    receipt.WarehouseId,
+                    Round(allocation.AllocatedQty ?? 0m),
+                    $"Shortage resolution reversal allocation {allocation.SequenceNo}");
+            })
+            .ToArray();
+
+        await (stockAvailabilityService ?? new StockAvailabilityService(dbContext)).EnsureStockOutAllowedAsync(requirements, cancellationToken);
     }
 
     private async Task ValidateDependenciesAsync(Guid resolutionId, CancellationToken cancellationToken)

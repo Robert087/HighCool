@@ -16,7 +16,7 @@ public sealed class ItemMasterDataRulesTests
     public void ItemValidator_ShouldRequireRowsWhenHasComponentsIsTrue()
     {
         var validator = new UpsertItemRequestValidator();
-        var model = new UpsertItemRequest("ITM-1", "Assembly", Guid.NewGuid(), true, true, true, []);
+        var model = new UpsertItemRequest("ITM-1", "Assembly", null, Guid.NewGuid(), null, 0m, true, true, true, []);
 
         var result = validator.Validate(model);
 
@@ -34,7 +34,10 @@ public sealed class ItemMasterDataRulesTests
         var request = new UpsertItemRequest(
             "ITM-NEW",
             "New Assembly",
+            null,
             uom.Id,
+            null,
+            0m,
             true,
             true,
             true,
@@ -60,7 +63,10 @@ public sealed class ItemMasterDataRulesTests
         var request = new UpsertItemRequest(
             "ITM-SELF",
             "Self Assembly",
+            null,
             uom.Id,
+            null,
+            0m,
             true,
             true,
             true,
@@ -95,7 +101,10 @@ public sealed class ItemMasterDataRulesTests
         var request = new UpsertItemRequest(
             "ITM-CONV",
             "Assembly With Box",
+            null,
             pieceUom.Id,
+            null,
+            0m,
             true,
             true,
             true,
@@ -106,6 +115,109 @@ public sealed class ItemMasterDataRulesTests
 
         Assert.Contains("global UOM conversion is required", exception.Message, StringComparison.OrdinalIgnoreCase);
         _ = parentItem;
+    }
+
+    [Fact]
+    public async Task ItemService_ShouldRejectInactiveCategoryAssignment()
+    {
+        await using var dbContext = CreateDbContext();
+        var (uom, _, _) = await SeedItemsAsync(dbContext);
+        var inactiveCategory = new ItemCategory
+        {
+            Code = "CAT-INACTIVE",
+            Name = "Inactive Category",
+            IsActive = false,
+            CreatedBy = "seed"
+        };
+
+        dbContext.ItemCategories.Add(inactiveCategory);
+        await dbContext.SaveChangesAsync();
+
+        var service = new ItemService(dbContext);
+        var request = new UpsertItemRequest(
+            "ITM-CAT",
+            "Categorized Item",
+            inactiveCategory.Id,
+            uom.Id,
+            null,
+            0m,
+            true,
+            true,
+            false,
+            []);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateAsync(request, "tester", CancellationToken.None));
+
+        Assert.Contains("item category", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("inactive", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ItemService_ShouldPersistInventoryDefaultsAndReturnPagedLists()
+    {
+        await using var dbContext = CreateDbContext();
+        var (uom, _, _) = await SeedItemsAsync(dbContext);
+        var category = new ItemCategory
+        {
+            Code = "CAT-SPARES",
+            Name = "Spares",
+            IsActive = true,
+            CreatedBy = "seed"
+        };
+        var warehouse = new Warehouse
+        {
+            Code = "MAIN",
+            Name = "Main Warehouse",
+            IsActive = true,
+            CreatedBy = "seed"
+        };
+
+        dbContext.ItemCategories.Add(category);
+        dbContext.Warehouses.Add(warehouse);
+        await dbContext.SaveChangesAsync();
+
+        var service = new ItemService(dbContext);
+        await service.CreateAsync(
+            new UpsertItemRequest(
+                "ITM-FILTER-1",
+                "Filtered Item One",
+                category.Id,
+                uom.Id,
+                warehouse.Id,
+                5.5m,
+                true,
+                true,
+                false,
+                []),
+            "tester",
+            CancellationToken.None);
+
+        await service.CreateAsync(
+            new UpsertItemRequest(
+                "ITM-FILTER-2",
+                "Filtered Item Two",
+                null,
+                uom.Id,
+                null,
+                0m,
+                true,
+                false,
+                false,
+                []),
+            "tester",
+            CancellationToken.None);
+
+        var result = await service.ListAsync(
+            new ItemListQuery(null, true, true, category.Id, null, Page: 1, PageSize: 10, SortBy: "code"),
+            CancellationToken.None);
+
+        var row = Assert.Single(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(category.Id, row.CategoryId);
+        Assert.Equal("CAT-SPARES", row.CategoryCode);
+        Assert.Equal(warehouse.Id, row.DefaultWarehouseId);
+        Assert.Equal(5.5m, row.MinimumStockQuantity);
     }
 
     [Fact]

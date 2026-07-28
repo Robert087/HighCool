@@ -9,6 +9,8 @@ import { CustomerFormPage } from "../pages/CustomerFormPage";
 import { CustomersPage } from "../pages/CustomersPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
+import { ItemCategoriesPage } from "../pages/ItemCategoriesPage";
+import { ItemCategoryFormPage } from "../pages/ItemCategoryFormPage";
 import { ItemsPage } from "../pages/ItemsPage";
 import { LoginPage } from "../pages/LoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -97,6 +99,9 @@ export function AppRoutes() {
       <Route path="/items" element={guard(<ItemsPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/new" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/:itemId/edit" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
+      <Route path="/item-categories" element={guard(<ItemCategoriesPage />, Permissions.ItemsView, "inventoryEnabled")} />
+      <Route path="/item-categories/new" element={guard(<ItemCategoryFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
+      <Route path="/item-categories/:categoryId/edit" element={guard(<ItemCategoryFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/uom-conversions" element={guard(<UomConversionsPage />, Permissions.UomsManage, "uomConversionEnabled")} />
       <Route path="/uom-conversions/new" element={guard(<UomConversionFormPage />, Permissions.UomsManage, "uomConversionEnabled")} />
       <Route path="/uom-conversions/:uomConversionId/edit" element={guard(<UomConversionFormPage />, Permissions.UomsManage, "uomConversionEnabled")} />

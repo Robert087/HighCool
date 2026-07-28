@@ -1,8 +1,10 @@
 using ERP.Application.Reversals;
+using ERP.Application.Inventory;
 using ERP.Application.Statements;
 using ERP.Domain.Common;
 using ERP.Domain.Inventory;
 using ERP.Domain.Shortages;
+using ERP.Infrastructure.Inventory;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +12,8 @@ namespace ERP.Infrastructure.Reversals;
 
 public sealed class ReceiptReversalService(
     AppDbContext dbContext,
-    ISupplierStatementPostingService statementPostingService) : IReceiptReversalService
+    ISupplierStatementPostingService statementPostingService,
+    IStockAvailabilityService? stockAvailabilityService = null) : IReceiptReversalService
 {
     public async Task<DocumentReversalDto?> ReverseAsync(Guid receiptId, ReverseDocumentRequest request, string actor, CancellationToken cancellationToken)
     {
@@ -41,6 +44,7 @@ public sealed class ReceiptReversalService(
             actor,
             cancellationToken);
 
+        await EnsureStockReversalAllowedAsync(receipt, cancellationToken);
         await CreateStockReversalEntriesAsync(receipt, reversal, actor, cancellationToken);
         await statementPostingService.CreatePurchaseReceiptReversalEntriesAsync(receipt, reversal, actor, cancellationToken);
         await CancelShortagesAsync(receipt.Id, actor, cancellationToken);
@@ -53,6 +57,32 @@ public sealed class ReceiptReversalService(
         await transaction.CommitAsync(cancellationToken);
 
         return DocumentReversalSupport.ToDto(reversal);
+    }
+
+    private async Task EnsureStockReversalAllowedAsync(
+        Domain.Purchasing.PurchaseReceipt receipt,
+        CancellationToken cancellationToken)
+    {
+        var requirements = new List<StockOutRequirement>();
+
+        foreach (var line in receipt.Lines.OrderBy(entity => entity.LineNo))
+        {
+            var stockEntry = await dbContext.StockLedgerEntries
+                .AsNoTracking()
+                .SingleAsync(
+                    entity => entity.SourceDocType == SourceDocumentType.PurchaseReceipt &&
+                              entity.SourceDocId == receipt.Id &&
+                              entity.SourceLineId == line.Id,
+                    cancellationToken);
+
+            requirements.Add(new StockOutRequirement(
+                line.ItemId,
+                receipt.WarehouseId,
+                stockEntry.BaseQty,
+                $"Purchase receipt reversal line {line.LineNo}"));
+        }
+
+        await (stockAvailabilityService ?? new StockAvailabilityService(dbContext)).EnsureStockOutAllowedAsync(requirements, cancellationToken);
     }
 
     private async Task ValidateDependenciesAsync(Guid receiptId, CancellationToken cancellationToken)

@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.MasterData.Customers;
 using ERP.Application.MasterData.Suppliers;
 using ERP.Application.MasterData.Uoms;
@@ -194,10 +195,16 @@ public static class MasterDataEndpoints
     private static async Task<IResult> ListWarehousesAsync(
         string? search,
         bool? isActive,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IWarehouseService service,
         CancellationToken cancellationToken)
     {
-        var result = await service.ListAsync(new WarehouseListQuery(search, isActive), cancellationToken);
+        var result = await service.ListAsync(
+            new WarehouseListQuery(search, isActive, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Asc),
+            cancellationToken);
         return Results.Ok(result);
     }
 
@@ -262,10 +269,16 @@ public static class MasterDataEndpoints
     private static async Task<IResult> ListUomsAsync(
         string? search,
         bool? isActive,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        SortDirection? sortDirection,
         IUomService service,
         CancellationToken cancellationToken)
     {
-        var result = await service.ListAsync(new UomListQuery(search, isActive), cancellationToken);
+        var result = await service.ListAsync(
+            new UomListQuery(search, isActive, page ?? 1, pageSize ?? 20, sortBy, sortDirection ?? SortDirection.Asc),
+            cancellationToken);
         return Results.Ok(result);
     }
 

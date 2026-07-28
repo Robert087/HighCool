@@ -19,11 +19,19 @@ export function WarehousesPage() {
   const { showToast } = useToast();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   useEffect(() => {
     let active = true;
@@ -32,10 +40,12 @@ export function WarehousesPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listWarehouses(search, status);
+        const result = await listWarehouses(debouncedSearch, status, page, PAGE_SIZE);
 
         if (active) {
-          setWarehouses(result);
+          setWarehouses(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
         }
       } catch (loadError) {
         if (active) {
@@ -53,11 +63,11 @@ export function WarehousesPage() {
     return () => {
       active = false;
     };
-  }, [search, status, reloadKey]);
+  }, [debouncedSearch, status, page, reloadKey]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, status]);
+  }, [debouncedSearch, status]);
 
   async function handleDeactivate(id: string) {
     try {
@@ -73,12 +83,10 @@ export function WarehousesPage() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(warehouses.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleWarehouses = warehouses.slice(pageStart, pageStart + PAGE_SIZE);
+  const safeTotalPages = Math.max(1, totalPages);
+  const safePage = Math.min(page, safeTotalPages);
   const hasFilters = Boolean(search.trim()) || status !== "all";
-  const resultLabel = warehouses.length === 1 ? "1 warehouse" : `${warehouses.length} warehouses`;
+  const resultLabel = totalCount === 1 ? "1 warehouse" : `${totalCount} warehouses`;
 
   return (
     <section className="hc-list-page">
@@ -123,7 +131,7 @@ export function WarehousesPage() {
         <DataTable
           hasData={warehouses.length > 0}
           columns={<tr><th scope="col">Warehouse</th><th scope="col">Location</th><th scope="col">Status</th><th scope="col" className="hc-table__head-actions" aria-label="Actions" /></tr>}
-          rows={visibleWarehouses.map((warehouse) => (
+          rows={warehouses.map((warehouse) => (
             <tr key={warehouse.id} className="hc-table__row">
               <td>
                 <div className="hc-table__cell-strong hc-table__primary-cell">
@@ -151,8 +159,7 @@ export function WarehousesPage() {
           ))}
           footer={
             <>
-              <p className="hc-table__footer-note">Client-side pagination for the current result set.</p>
-              <Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={warehouses.length} totalPages={totalPages} />
+              <Pagination currentPage={safePage} onPageChange={setPage} pageSize={PAGE_SIZE} totalCount={totalCount} totalPages={safeTotalPages} />
             </>
           }
           emptyState={

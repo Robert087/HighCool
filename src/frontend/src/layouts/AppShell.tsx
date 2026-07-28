@@ -30,6 +30,7 @@ const navigationGroups = [
       { label: "nav.stockCard", to: "/inventory/stock-ledger", icon: "ledger" },
       { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
       { label: "nav.items", to: "/items", icon: "items" },
+      { label: "nav.itemCategories", to: "/item-categories", icon: "items" },
       { label: "nav.warehouses", to: "/inventory/warehouses", icon: "warehouse" },
       { label: "nav.uoms", to: "/uoms", icon: "uom" },
       { label: "nav.uomConversions", to: "/uom-conversions", icon: "conversion" },
@@ -323,7 +324,7 @@ function getGroupForPath(pathname: string) {
   if (pathname.startsWith("/open-shortages") || pathname.startsWith("/shortage-resolutions")) {
     return "shortages";
   }
-  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/items") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
+  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/items") || pathname.startsWith("/item-categories") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
     return "inventory";
   }
   if (pathname.startsWith("/inventory/")) {
@@ -924,6 +925,7 @@ const navigationPermissions: Record<string, string | undefined> = {
   "/supplier-statements": Permissions.SupplierFinancialsPayablesView,
   "/payments": Permissions.SupplierFinancialsPayablesView,
   "/items": Permissions.ItemsView,
+  "/item-categories": Permissions.ItemsView,
   "/uom-conversions": Permissions.UomsManage,
   "/suppliers": Permissions.SuppliersView,
   "/warehouses": Permissions.InventoryWarehouseManage,
@@ -954,6 +956,7 @@ const navigationFeatures: Record<string, FeatureFlagKey | undefined> = {
   "/supplier-statements": "supplierFinancialsEnabled",
   "/payments": "supplierFinancialsEnabled",
   "/items": "inventoryEnabled",
+  "/item-categories": "inventoryEnabled",
   "/uom-conversions": "uomConversionEnabled",
   "/suppliers": "suppliersEnabled",
   "/warehouses": "warehousesEnabled",

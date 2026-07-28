@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.MasterData.Items;
 
 public interface IItemService
 {
-    Task<IReadOnlyList<ItemDto>> ListAsync(ItemListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<ItemDto>> ListAsync(ItemListQuery query, CancellationToken cancellationToken);
 
     Task<ItemDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

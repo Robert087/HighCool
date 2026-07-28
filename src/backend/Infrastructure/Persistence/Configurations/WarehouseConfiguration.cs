@@ -29,9 +29,10 @@ public sealed class WarehouseConfiguration : AuditableEntityConfigurationBase<Wa
             .HasColumnName("is_active")
             .IsRequired();
 
-        builder.HasIndex(entity => entity.Code)
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.Code })
             .IsUnique();
 
-        builder.HasIndex(entity => entity.Name);
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.Name });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.IsActive, entity.Name });
     }
 }

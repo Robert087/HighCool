@@ -1,24 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ApiError, type ValidationErrors } from "../services/api";
 import { DocumentPageLayout, DocumentSection } from "../components/patterns";
 import { Button, Checkbox, EmptyState, Field, Input, Select, SkeletonLoader, useToast } from "../components/ui";
+import { useI18n } from "../i18n";
 import {
   createItem,
+  getActiveItemCategoriesCached,
   getActiveItemsCached,
   getActiveUomsCached,
+  getActiveWarehousesCached,
   getItem,
   updateItem,
   type Item,
+  type ItemCategory,
   type ItemComponentFormValues,
   type ItemFormValues,
   type Uom,
+  type Warehouse,
 } from "../services/masterDataApi";
 
 const initialValues: ItemFormValues = {
   code: "",
   name: "",
+  categoryId: null,
   baseUomId: "",
+  defaultWarehouseId: null,
+  minimumStockQuantity: 0,
   isActive: true,
   isSellable: true,
   hasComponents: false,
@@ -27,12 +35,15 @@ const initialValues: ItemFormValues = {
 
 export function ItemFormPage() {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { itemId } = useParams();
   const isEdit = Boolean(itemId);
   const [values, setValues] = useState<ItemFormValues>(initialValues);
   const [items, setItems] = useState<Item[]>([]);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [formError, setFormError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,20 +57,31 @@ export function ItemFormPage() {
     async function load() {
       try {
         setLoading(true);
-        const [uomList, itemList, item] = await Promise.all([
+        const [uomList, itemList, categoryList, warehouseList, item] = await Promise.all([
           getActiveUomsCached(),
           getActiveItemsCached(),
+          getActiveItemCategoriesCached(),
+          getActiveWarehousesCached(),
           itemId ? getItem(itemId) : Promise.resolve(null),
         ]);
 
         if (active) {
           setUoms(uomList);
           setItems(itemList);
+          setCategories(item?.categoryId && item.categoryName && !categoryList.some((category) => category.id === item.categoryId)
+            ? [{ id: item.categoryId, code: item.categoryCode ?? "", name: item.categoryName, description: null, isActive: false, createdAt: "", updatedAt: null }, ...categoryList]
+            : categoryList);
+          setWarehouses(item?.defaultWarehouseId && item.defaultWarehouseName && !warehouseList.some((warehouse) => warehouse.id === item.defaultWarehouseId)
+            ? [{ id: item.defaultWarehouseId, code: item.defaultWarehouseCode ?? "", name: item.defaultWarehouseName, location: null, isActive: false, createdAt: "", updatedAt: null }, ...warehouseList]
+            : warehouseList);
           if (item) {
             setValues({
               code: item.code,
               name: item.name,
+              categoryId: item.categoryId,
               baseUomId: item.baseUomId,
+              defaultWarehouseId: item.defaultWarehouseId,
+              minimumStockQuantity: item.minimumStockQuantity,
               isActive: item.isActive,
               isSellable: item.isSellable,
               hasComponents: item.hasComponents,
@@ -106,6 +128,10 @@ export function ItemFormPage() {
       nextErrors.baseUomId = ["Base UOM is required."];
     }
 
+    if (currentValues.minimumStockQuantity < 0) {
+      nextErrors.minimumStockQuantity = [t("module.items.validation.minimumStockQuantity")];
+    }
+
     if (currentValues.hasComponents && currentValues.components.length === 0) {
       nextErrors.components = ["Add at least one component row when the item is marked as having components."];
     }
@@ -144,7 +170,7 @@ export function ItemFormPage() {
     return nextErrors;
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const currentItemId = itemId;
     const nextErrors = validate(values);
@@ -271,6 +297,17 @@ export function ItemFormPage() {
                 <Input value={values.name} onChange={(event) => setValue("name", event.target.value)} />
                 {errors.name ? <small className="hc-field-error">{errors.name[0]}</small> : null}
               </Field>
+              <Field label="module.items.form.category">
+                <Select value={values.categoryId ?? ""} onChange={(event) => setValue("categoryId", event.target.value || null)}>
+                  <option value="">module.items.form.selectCategory</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id} disabled={!category.isActive}>
+                      {category.code} - {category.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.categoryId ? <small className="hc-field-error">{errors.categoryId[0]}</small> : null}
+              </Field>
               <Field label="Base UOM" required hint="Used as the primary quantity unit.">
                 <Select value={values.baseUomId} onChange={(event) => setValue("baseUomId", event.target.value)}>
                   <option value="">Select base UOM</option>
@@ -288,6 +325,27 @@ export function ItemFormPage() {
                   <Checkbox checked={values.hasComponents} label="Has components" onChange={(event) => setValue("hasComponents", event.target.checked)} />
                   <Checkbox checked={values.isActive} label="Active item" onChange={(event) => setValue("isActive", event.target.checked)} />
                 </div>
+              </Field>
+            </div>
+          </DocumentSection>
+
+          <DocumentSection title="module.items.form.inventorySection" description="module.items.form.inventorySectionDescription">
+            <div className="hc-document-form-grid">
+              <Field label="module.items.form.defaultWarehouse" hint="module.items.form.defaultWarehouseHint">
+                <Select value={values.defaultWarehouseId ?? ""} onChange={(event) => setValue("defaultWarehouseId", event.target.value || null)}>
+                  <option value="">module.items.form.selectDefaultWarehouse</option>
+                  {warehouses.map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id} disabled={!warehouse.isActive}>
+                      {warehouse.code} - {warehouse.name}
+                    </option>
+                  ))}
+                </Select>
+                {errors.defaultWarehouseId ? <small className="hc-field-error">{errors.defaultWarehouseId[0]}</small> : null}
+              </Field>
+
+              <Field label="module.items.form.minimumStockQuantity">
+                <Input min={0} step="0.000001" type="number" value={values.minimumStockQuantity} onChange={(event) => setValue("minimumStockQuantity", Number(event.target.value))} />
+                {errors.minimumStockQuantity ? <small className="hc-field-error">{errors.minimumStockQuantity[0]}</small> : null}
               </Field>
             </div>
           </DocumentSection>

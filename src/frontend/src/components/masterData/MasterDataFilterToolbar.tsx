@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { FilterDropdown, FiltersToolbar, FilterTextInput, type FilterChip } from "../ui";
 import { useI18n } from "../../i18n";
 
@@ -14,6 +15,8 @@ interface MasterDataFilterToolbarProps {
   filteredText: string;
   onSearchChange: (value: string) => void;
   onStatusChange?: (value: string) => void;
+  extraFilters?: ReactNode;
+  onExtraReset?: () => void;
 }
 
 export function MasterDataFilterToolbar({
@@ -22,6 +25,7 @@ export function MasterDataFilterToolbar({
   hasFilters,
   onSearchChange,
   onStatusChange,
+  onExtraReset,
   resultLabel,
   searchLabel,
   searchPlaceholder,
@@ -29,6 +33,7 @@ export function MasterDataFilterToolbar({
   searchWidth = "wide",
   statusEnabled = true,
   statusValue = "all",
+  extraFilters,
 }: MasterDataFilterToolbarProps) {
   const { t } = useI18n();
   const activeFilters: FilterChip[] = [];
@@ -62,13 +67,18 @@ export function MasterDataFilterToolbar({
           onChange={(event) => onSearchChange(event.target.value)}
         />
       )}
-      primaryFilters={statusEnabled ? (
-        <FilterDropdown aria-label="masterData.filter.statusAria" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
-          <option value="all">common.status</option>
-          <option value="active">status.active</option>
-          <option value="inactive">status.inactive</option>
-        </FilterDropdown>
-      ) : null}
+      primaryFilters={(
+        <>
+          {statusEnabled ? (
+            <FilterDropdown aria-label="masterData.filter.statusAria" value={statusValue} onChange={(event) => onStatusChange?.(event.target.value)}>
+              <option value="all">common.status</option>
+              <option value="active">status.active</option>
+              <option value="inactive">status.inactive</option>
+            </FilterDropdown>
+          ) : null}
+          {extraFilters}
+        </>
+      )}
       resultLabel={resultLabel}
       resetLabel="common.resetFilters"
       onReset={() => {
@@ -76,6 +86,7 @@ export function MasterDataFilterToolbar({
         if (statusEnabled) {
           onStatusChange?.("all");
         }
+        onExtraReset?.();
       }}
     />
   );

@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.MasterData.Warehouses;
 using ERP.Domain.MasterData;
 using ERP.Infrastructure.Persistence;
@@ -8,10 +9,11 @@ namespace ERP.Infrastructure.MasterData.Warehouses;
 
 public sealed class WarehouseService(AppDbContext dbContext) : IWarehouseService
 {
-    public async Task<IReadOnlyList<WarehouseDto>> ListAsync(
+    public async Task<PagedResult<WarehouseDto>> ListAsync(
         WarehouseListQuery query,
         CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
         var warehouses = dbContext.Warehouses.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -28,11 +30,23 @@ public sealed class WarehouseService(AppDbContext dbContext) : IWarehouseService
             warehouses = warehouses.Where(entity => entity.IsActive == query.IsActive.Value);
         }
 
-        return await warehouses
-            .OrderBy(entity => entity.Name)
-            .ThenBy(entity => entity.Code)
+        warehouses = ApplySorting(warehouses, query);
+
+        var totalCount = await warehouses.CountAsync(cancellationToken);
+        var rows = await warehouses
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
             .Select(entity => ToDto(entity))
             .ToListAsync(cancellationToken);
+
+        return new PagedResult<WarehouseDto>(
+            rows,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new { query.Search, query.IsActive },
+            new PagedSort(ResolveSortBy(query.SortBy), query.SortDirection));
     }
 
     public Task<WarehouseDto?> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -130,6 +144,37 @@ public sealed class WarehouseService(AppDbContext dbContext) : IWarehouseService
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static IQueryable<Warehouse> ApplySorting(IQueryable<Warehouse> query, WarehouseListQuery request)
+    {
+        var sortBy = ResolveSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("code", true) => query.OrderBy(entity => entity.Code).ThenBy(entity => entity.Name),
+            ("code", false) => query.OrderByDescending(entity => entity.Code).ThenByDescending(entity => entity.Name),
+            ("createdAt", true) => query.OrderBy(entity => entity.CreatedAt).ThenBy(entity => entity.Code),
+            ("createdAt", false) => query.OrderByDescending(entity => entity.CreatedAt).ThenByDescending(entity => entity.Code),
+            _ when ascending => query.OrderBy(entity => entity.Name).ThenBy(entity => entity.Code),
+            _ => query.OrderByDescending(entity => entity.Name).ThenByDescending(entity => entity.Code)
+        };
+    }
+
+    private static string ResolveSortBy(string? sortBy)
+    {
+        return sortBy?.Trim() switch
+        {
+            "code" => "code",
+            "createdAt" => "createdAt",
+            _ => "name"
+        };
+    }
+
+    private static int CalculateTotalPages(int totalCount, int pageSize)
+    {
+        return totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
     }
 
     private static WarehouseDto ToDto(Warehouse entity)

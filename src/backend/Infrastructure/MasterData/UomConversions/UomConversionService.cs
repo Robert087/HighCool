@@ -1,4 +1,5 @@
 using ERP.Application.Common.Exceptions;
+using ERP.Application.Common.Pagination;
 using ERP.Application.MasterData.UomConversions;
 using ERP.Domain.MasterData;
 using ERP.Infrastructure.Persistence;
@@ -8,8 +9,9 @@ namespace ERP.Infrastructure.MasterData.UomConversions;
 
 public sealed class UomConversionService(AppDbContext dbContext) : IUomConversionService
 {
-    public async Task<IReadOnlyList<UomConversionDto>> ListAsync(UomConversionListQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<UomConversionDto>> ListAsync(UomConversionListQuery query, CancellationToken cancellationToken)
     {
+        var pagination = new PaginationRequest(query.Page, query.PageSize);
         var conversions = IncludeReferences();
 
         if (query.IsActive.HasValue)
@@ -27,11 +29,33 @@ public sealed class UomConversionService(AppDbContext dbContext) : IUomConversio
                 entity.ToUom.Name.Contains(search));
         }
 
-        return await conversions
-            .OrderBy(entity => entity.FromUom!.Code)
-            .ThenBy(entity => entity.ToUom!.Code)
+        if (query.FromUomId.HasValue)
+        {
+            conversions = conversions.Where(entity => entity.FromUomId == query.FromUomId.Value);
+        }
+
+        if (query.ToUomId.HasValue)
+        {
+            conversions = conversions.Where(entity => entity.ToUomId == query.ToUomId.Value);
+        }
+
+        conversions = ApplySorting(conversions, query);
+
+        var totalCount = await conversions.CountAsync(cancellationToken);
+        var rows = await conversions
+            .Skip(pagination.Skip)
+            .Take(pagination.NormalizedPageSize)
             .Select(entity => ToDto(entity))
             .ToListAsync(cancellationToken);
+
+        return new PagedResult<UomConversionDto>(
+            rows,
+            pagination.NormalizedPage,
+            pagination.NormalizedPageSize,
+            totalCount,
+            CalculateTotalPages(totalCount, pagination.NormalizedPageSize),
+            new { query.Search, query.IsActive, query.FromUomId, query.ToUomId },
+            new PagedSort(ResolveSortBy(query.SortBy), query.SortDirection));
     }
 
     public Task<UomConversionDto?> GetAsync(Guid id, CancellationToken cancellationToken)
@@ -154,6 +178,40 @@ public sealed class UomConversionService(AppDbContext dbContext) : IUomConversio
     {
         var conversion = await GetAsync(id, cancellationToken);
         return conversion ?? throw new InvalidOperationException("UOM conversion was not found after save.");
+    }
+
+    private static IQueryable<UomConversion> ApplySorting(IQueryable<UomConversion> query, UomConversionListQuery request)
+    {
+        var sortBy = ResolveSortBy(request.SortBy);
+        var ascending = request.SortDirection == SortDirection.Asc;
+
+        return (sortBy, ascending) switch
+        {
+            ("toUom", true) => query.OrderBy(entity => entity.ToUom!.Code).ThenBy(entity => entity.FromUom!.Code),
+            ("toUom", false) => query.OrderByDescending(entity => entity.ToUom!.Code).ThenByDescending(entity => entity.FromUom!.Code),
+            ("factor", true) => query.OrderBy(entity => entity.Factor).ThenBy(entity => entity.FromUom!.Code),
+            ("factor", false) => query.OrderByDescending(entity => entity.Factor).ThenByDescending(entity => entity.FromUom!.Code),
+            ("createdAt", true) => query.OrderBy(entity => entity.CreatedAt).ThenBy(entity => entity.FromUom!.Code),
+            ("createdAt", false) => query.OrderByDescending(entity => entity.CreatedAt).ThenByDescending(entity => entity.FromUom!.Code),
+            _ when ascending => query.OrderBy(entity => entity.FromUom!.Code).ThenBy(entity => entity.ToUom!.Code),
+            _ => query.OrderByDescending(entity => entity.FromUom!.Code).ThenByDescending(entity => entity.ToUom!.Code)
+        };
+    }
+
+    private static string ResolveSortBy(string? sortBy)
+    {
+        return sortBy?.Trim() switch
+        {
+            "toUom" => "toUom",
+            "factor" => "factor",
+            "createdAt" => "createdAt",
+            _ => "fromUom"
+        };
+    }
+
+    private static int CalculateTotalPages(int totalCount, int pageSize)
+    {
+        return totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
     }
 
     private static UomConversionDto ToDto(UomConversion entity)

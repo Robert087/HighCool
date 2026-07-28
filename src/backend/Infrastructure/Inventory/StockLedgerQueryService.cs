@@ -135,8 +135,12 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
                 .Where(entity => reversalIds.Contains(entity.Id))
                 .ToDictionaryAsync(entity => entity.Id, entity => entity.ReversalNo, cancellationToken);
 
-        var items = rows
-            .Select(entity => new StockLedgerEntryDto(
+        var items = new List<StockLedgerEntryDto>();
+        foreach (var entity in rows)
+        {
+            var runningBalanceQty = await CalculateRunningBalanceAsync(entity, cancellationToken);
+
+            items.Add(new StockLedgerEntryDto(
                 entity.Id,
                 entity.ItemId,
                 entity.ItemCode,
@@ -155,13 +159,13 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
                 entity.UomCode,
                 entity.UomName,
                 entity.BaseQty,
-                entity.RunningBalanceQty,
+                runningBalanceQty,
                 entity.TransactionDate,
                 entity.UnitCost,
                 entity.TotalCost,
                 entity.CreatedAt,
-                entity.CreatedBy))
-            .ToArray();
+                entity.CreatedBy));
+        }
 
         return new PagedResult<StockLedgerEntryDto>(
             items,
@@ -202,6 +206,39 @@ public sealed class StockLedgerQueryService(AppDbContext dbContext) : IStockLedg
     private static string ResolveSortBy(string? sortBy)
     {
         return string.IsNullOrWhiteSpace(sortBy) ? "transactionDate" : sortBy.Trim();
+    }
+
+    private async Task<decimal> CalculateRunningBalanceAsync(StockLedgerListProjection row, CancellationToken cancellationToken)
+    {
+        var priorBalance = await dbContext.StockLedgerEntries
+            .AsNoTracking()
+            .Where(entity =>
+                entity.ItemId == row.ItemId &&
+                entity.WarehouseId == row.WarehouseId &&
+                (entity.TransactionDate < row.TransactionDate ||
+                 (entity.TransactionDate == row.TransactionDate && entity.CreatedAt < row.CreatedAt)))
+            .SumSignedBaseQtyAsync(dbContext, cancellationToken);
+
+        var tiedEntries = await dbContext.StockLedgerEntries
+            .AsNoTracking()
+            .Where(entity =>
+                entity.ItemId == row.ItemId &&
+                entity.WarehouseId == row.WarehouseId &&
+                entity.TransactionDate == row.TransactionDate &&
+                entity.CreatedAt == row.CreatedAt)
+            .Select(entity => new
+            {
+                entity.Id,
+                SignedQty = entity.QtyIn > 0m ? entity.BaseQty : -entity.BaseQty
+            })
+            .ToListAsync(cancellationToken);
+
+        var tiedBalance = tiedEntries
+            .OrderBy(entity => entity.Id)
+            .TakeWhile(entity => entity.Id.CompareTo(row.Id) <= 0)
+            .Sum(entity => entity.SignedQty);
+
+        return priorBalance + tiedBalance;
     }
 
     private static int CalculateTotalPages(int totalCount, int pageSize)

@@ -20,7 +20,7 @@ import {
 } from "../components/ui";
 import { ApiError } from "../services/api";
 import { listStockLedger, type InventoryFilters, type StockLedgerEntry } from "../services/inventoryApi";
-import { listItems, listWarehouses, type Item, type Warehouse } from "../services/masterDataApi";
+import { getActiveItemsCached, getActiveWarehousesCached, type Item, type Warehouse } from "../services/masterDataApi";
 import { formatDate, formatQuantity } from "../i18n";
 
 const PAGE_SIZE = 15;
@@ -65,8 +65,8 @@ export function StockMovementPage() {
     async function loadReferences() {
       try {
         const [itemsResult, warehousesResult] = await Promise.all([
-          listItems("", "active"),
-          listWarehouses("", "active"),
+          getActiveItemsCached(),
+          getActiveWarehousesCached(),
         ]);
 
         if (active) {
@@ -218,9 +218,9 @@ export function StockMovementPage() {
         )}
         mobileFilters={(
           <>
-            <Field label="Item">
+            <Field label={t("table.item")}>
               <Select value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
-                <option value="">All items</option>
+                <option value="">{t("module.stockBalance.allItems")}</option>
                 {items.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.code} - {item.name}
@@ -229,9 +229,9 @@ export function StockMovementPage() {
               </Select>
             </Field>
 
-            <Field label="Warehouse">
+            <Field label={t("table.warehouse")}>
               <Select value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
-                <option value="">All warehouses</option>
+                <option value="">{t("module.stockBalance.allWarehouses")}</option>
                 {warehouses.map((warehouse) => (
                   <option key={warehouse.id} value={warehouse.id}>
                     {warehouse.code} - {warehouse.name}
@@ -240,20 +240,20 @@ export function StockMovementPage() {
               </Select>
             </Field>
 
-            <Field label="Transaction type">
+            <Field label={t("module.stockBalance.transactionType")}>
               <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
-                <option value="">All transaction types</option>
-                <option value="PurchaseReceipt">Purchase receipt</option>
-                <option value="PurchaseReceiptReversal">Purchase receipt reversal</option>
-                <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
+                <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
+                <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
+                <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+                <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
               </Select>
             </Field>
 
-            <Field label="From date">
+            <Field label={t("common.fromDate")}>
               <Input type="date" value={filters.fromDate} onChange={(event) => setFilter("fromDate", event.target.value)} />
             </Field>
 
-            <Field label="To date">
+            <Field label={t("common.toDate")}>
               <Input type="date" value={filters.toDate} onChange={(event) => setFilter("toDate", event.target.value)} />
             </Field>
           </>
@@ -261,8 +261,8 @@ export function StockMovementPage() {
         onReset={() => setFilters(INITIAL_FILTERS)}
         primaryFilters={(
           <>
-            <FilterDropdown aria-label="Item filter" value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
-              <option value="">Item</option>
+            <FilterDropdown aria-label={t("module.stockCard.filter.itemAria")} value={filters.itemId} onChange={(event) => setFilter("itemId", event.target.value)}>
+              <option value="">{t("table.item")}</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.code} - {item.name}
@@ -270,8 +270,8 @@ export function StockMovementPage() {
               ))}
             </FilterDropdown>
 
-            <FilterDropdown aria-label="Warehouse filter" value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
-              <option value="">Warehouse</option>
+            <FilterDropdown aria-label={t("module.stockCard.filter.warehouseAria")} value={filters.warehouseId} onChange={(event) => setFilter("warehouseId", event.target.value)}>
+              <option value="">{t("table.warehouse")}</option>
               {warehouses.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.code} - {warehouse.name}
@@ -283,7 +283,7 @@ export function StockMovementPage() {
         resultLabel={resultLabel}
         search={(
           <FilterTextInput
-            aria-label="Search stock movements"
+            aria-label={t("module.stockCard.searchAria")}
             placeholder={t("module.stockCard.searchPlaceholder")}
             value={filters.search}
             onChange={(event) => setFilter("search", event.target.value)}
@@ -291,12 +291,12 @@ export function StockMovementPage() {
         )}
         secondaryActiveCount={filters.transactionType ? 1 : 0}
         secondaryFilters={(
-          <Field label="Transaction type">
+          <Field label={t("module.stockBalance.transactionType")}>
             <Select value={filters.transactionType} onChange={(event) => setFilter("transactionType", event.target.value)}>
-              <option value="">All transaction types</option>
-              <option value="PurchaseReceipt">Purchase receipt</option>
-              <option value="PurchaseReceiptReversal">Purchase receipt reversal</option>
-              <option value="ShortagePhysicalResolution">Shortage physical resolution</option>
+              <option value="">{t("module.stockBalance.allTransactionTypes")}</option>
+              <option value="PurchaseReceipt">{t("module.stockBalance.purchaseReceipt")}</option>
+              <option value="PurchaseReceiptReversal">{t("module.stockBalance.purchaseReceiptReversal")}</option>
+              <option value="ShortagePhysicalResolution">{t("module.stockBalance.shortagePhysicalResolution")}</option>
             </Select>
           </Field>
         )}
@@ -309,7 +309,7 @@ export function StockMovementPage() {
             description={error}
             action={
               <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)}>
-                Retry
+                {t("common.retry")}
               </Button>
             }
           />
@@ -332,12 +332,12 @@ export function StockMovementPage() {
           hasData={rows.length > 0}
           columns={
             <tr>
-              <th scope="col">Transaction date</th>
-              <th scope="col">Transaction type</th>
-              <th scope="col">Source document</th>
-              <th scope="col">Qty in</th>
-              <th scope="col">Qty out</th>
-              <th scope="col">Running balance</th>
+              <th scope="col">{t("table.transactionDate")}</th>
+              <th scope="col">{t("module.stockBalance.transactionType")}</th>
+              <th scope="col">{t("table.sourceDocument")}</th>
+              <th scope="col">{t("table.qtyIn")}</th>
+              <th scope="col">{t("table.qtyOut")}</th>
+              <th scope="col">{t("table.runningBalance")}</th>
             </tr>
           }
           rows={rows.map((row) => (

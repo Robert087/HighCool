@@ -7,19 +7,29 @@ import {
   useToast,
 } from "../components/ui";
 import { ItemsFilterToolbar, ItemsPageHeader, ItemsTable } from "../components/items";
-import { deactivateItem, listItems, type Item } from "../services/masterDataApi";
+import { deactivateItem, getActiveItemCategoriesCached, listItems, type Item, type ItemCategory } from "../services/masterDataApi";
 
 const PAGE_SIZE = 10;
 
 export function ItemsPage() {
   const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
+  const [categories, setCategories] = useState<ItemCategory[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   useEffect(() => {
     let active = true;
@@ -28,10 +38,16 @@ export function ItemsPage() {
       try {
         setLoading(true);
         setError("");
-        const result = await listItems(search, status);
+        const [result, categoryList] = await Promise.all([
+          listItems(debouncedSearch, status, page, PAGE_SIZE, "name", "Asc", { categoryId: categoryId || undefined }),
+          getActiveItemCategoriesCached(),
+        ]);
 
         if (active) {
-          setItems(result);
+          setItems(result.items);
+          setTotalCount(result.totalCount);
+          setTotalPages(result.totalPages);
+          setCategories(categoryList);
         }
       } catch (loadError) {
         if (active) {
@@ -49,11 +65,11 @@ export function ItemsPage() {
     return () => {
       active = false;
     };
-  }, [search, status, reloadKey]);
+  }, [debouncedSearch, status, categoryId, page, reloadKey]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, status]);
+  }, [debouncedSearch, status, categoryId]);
 
   async function handleDeactivate(id: string) {
     try {
@@ -65,13 +81,11 @@ export function ItemsPage() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const visibleItems = items.slice(pageStart, pageStart + PAGE_SIZE);
-  const hasFilters = Boolean(search.trim()) || status !== "all";
+  const safeTotalPages = Math.max(1, totalPages);
+  const safePage = Math.min(page, safeTotalPages);
+  const hasFilters = Boolean(search.trim()) || status !== "all" || Boolean(categoryId);
   const resultLabel =
-    items.length === 1 ? "1 item" : `${items.length} items`;
+    totalCount === 1 ? "1 item" : `${totalCount} items`;
 
   return (
     <section className="hc-list-page">
@@ -82,8 +96,11 @@ export function ItemsPage() {
         resultLabel={resultLabel}
         search={search}
         status={status}
+        categories={categories}
+        categoryId={categoryId}
         onSearchChange={setSearch}
         onStatusChange={setStatus}
+        onCategoryChange={setCategoryId}
       />
 
       {error ? (
@@ -114,11 +131,13 @@ export function ItemsPage() {
       {!loading && !error ? (
         <ItemsTable
           hasFilters={hasFilters}
-          items={visibleItems}
+          items={items}
           onDeactivate={handleDeactivate}
           onPageChange={setPage}
           safePage={safePage}
-          totalPages={totalPages}
+          pageSize={PAGE_SIZE}
+          totalCount={totalCount}
+          totalPages={safeTotalPages}
         />
       ) : null}
     </section>

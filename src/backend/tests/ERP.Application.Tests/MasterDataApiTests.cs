@@ -214,6 +214,44 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     }
 
     [Fact]
+    public async Task ItemCategoriesApi_ShouldCreateListAndDeactivateCategory()
+    {
+        await _factory.ResetDatabaseAsync();
+
+        var client = _factory.CreateClient();
+        var createResponse = await client.PostAsJsonAsync("/api/item-categories", new
+        {
+            code = "CAT-ERP-01",
+            name = "Cooling Parts",
+            description = "Inventory setup group",
+            isActive = true
+        });
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var created = await createResponse.Content.ReadFromJsonAsync<ItemCategoryResponse>();
+        Assert.NotNull(created);
+        Assert.Equal("CAT-ERP-01", created!.Code);
+
+        var listResponse = await client.GetAsync("/api/item-categories?search=Cooling&isActive=true");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var list = await listResponse.Content.ReadFromJsonAsync<PaginatedResponse<ItemCategoryResponse>>();
+        Assert.NotNull(list);
+        Assert.Single(list!.Items);
+        Assert.Equal(created.Id, list.Items[0].Id);
+
+        var deactivateResponse = await client.PostAsync($"/api/item-categories/{created.Id}/deactivate", null);
+        Assert.Equal(HttpStatusCode.NoContent, deactivateResponse.StatusCode);
+
+        var inactiveResponse = await client.GetAsync("/api/item-categories?isActive=false");
+        Assert.Equal(HttpStatusCode.OK, inactiveResponse.StatusCode);
+        var inactiveList = await inactiveResponse.Content.ReadFromJsonAsync<PaginatedResponse<ItemCategoryResponse>>();
+        Assert.NotNull(inactiveList);
+        Assert.Contains(inactiveList!.Items, row => row.Id == created.Id && !row.IsActive);
+    }
+
+    [Fact]
     public async Task UomConversionsApi_ShouldCreateAndListGlobalConversions()
     {
         await _factory.ResetDatabaseAsync();
@@ -258,11 +296,11 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
         var listResponse = await client.GetAsync("/api/uom-conversions");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
 
-        var rows = await listResponse.Content.ReadFromJsonAsync<List<UomConversionResponse>>();
+        var rows = await listResponse.Content.ReadFromJsonAsync<PaginatedResponse<UomConversionResponse>>();
         Assert.NotNull(rows);
-        Assert.Single(rows!);
-        Assert.Equal("BOX", rows[0].FromUomCode);
-        Assert.Equal("PCS", rows[0].ToUomCode);
+        Assert.Single(rows!.Items);
+        Assert.Equal("BOX", rows.Items[0].FromUomCode);
+        Assert.Equal("PCS", rows.Items[0].ToUomCode);
     }
 
     public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
@@ -316,6 +354,8 @@ public sealed class MasterDataApiTests : IClassFixture<MasterDataApiTests.ApiFac
     public sealed record ItemComponentResponse(Guid ComponentItemId, string UomCode, decimal Quantity);
 
     public sealed record UomConversionResponse(Guid Id, string FromUomCode, string ToUomCode, decimal Factor);
+
+    public sealed record ItemCategoryResponse(Guid Id, string Code, bool IsActive);
 
     public sealed record CustomerResponse(Guid Id, string Code, decimal CreditLimit, bool IsActive);
 

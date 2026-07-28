@@ -1,8 +1,10 @@
+using ERP.Application.Common.Pagination;
+
 namespace ERP.Application.MasterData.UomConversions;
 
 public interface IUomConversionService
 {
-    Task<IReadOnlyList<UomConversionDto>> ListAsync(UomConversionListQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<UomConversionDto>> ListAsync(UomConversionListQuery query, CancellationToken cancellationToken);
 
     Task<UomConversionDto?> GetAsync(Guid id, CancellationToken cancellationToken);
 

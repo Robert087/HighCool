@@ -4,33 +4,40 @@ import { RowActions } from "../patterns";
 import { type Item } from "../../services/masterDataApi";
 import { RoleTag } from "../masterData/RoleTag";
 import { StatusBadge } from "../masterData/StatusBadge";
+import { useI18n } from "../../i18n";
 
 interface ItemsTableProps {
   hasFilters: boolean;
   items: Item[];
+  pageSize: number;
   safePage: number;
+  totalCount: number;
   totalPages: number;
   onDeactivate: (id: string) => void;
   onPageChange: (page: number) => void;
 }
-
-const PAGE_SIZE = 10;
 
 export function ItemsTable({
   hasFilters,
   items,
   onDeactivate,
   onPageChange,
+  pageSize,
   safePage,
+  totalCount,
   totalPages,
 }: ItemsTableProps) {
+  const { formatQuantity, t } = useI18n();
+
   return (
     <DataTable
       hasData={items.length > 0}
       columns={
         <tr>
           <th scope="col">table.item</th>
+          <th scope="col">module.items.table.category</th>
           <th scope="col">table.baseUom</th>
+          <th scope="col">module.items.table.inventorySettings</th>
           <th scope="col">table.roles</th>
           <th scope="col">table.status</th>
           <th scope="col" className="hc-table__head-actions" aria-label="common.actions" />
@@ -46,8 +53,20 @@ export function ItemsTable({
           </td>
           <td>
             <div className="hc-table__cell-strong">
+              <span className="hc-table__title">{item.categoryName || "common.notSet"}</span>
+              <span className="hc-table__subtitle">{item.categoryCode || "module.items.table.noCategory"}</span>
+            </div>
+          </td>
+          <td>
+            <div className="hc-table__cell-strong">
               <span className="hc-table__title">{item.baseUomCode}</span>
-              <span className="hc-table__subtitle">Base unit: {item.baseUomName}</span>
+              <span className="hc-table__subtitle">{t("module.items.table.baseUnit", { value: item.baseUomName })}</span>
+            </div>
+          </td>
+          <td>
+            <div className="hc-table__cell-strong">
+              <span className="hc-table__title">{formatQuantity(item.minimumStockQuantity)}</span>
+              <span className="hc-table__subtitle">{item.defaultWarehouseCode || "module.items.table.noDefaultWarehouse"}</span>
             </div>
           </td>
           <td>
@@ -79,12 +98,12 @@ export function ItemsTable({
       ))}
       footer={
         <>
-          <p className="hc-table__footer-note">module.items.clientPaginationNote</p>
+          <p className="hc-table__footer-note">module.items.serverPaginationNote</p>
           <Pagination
             currentPage={safePage}
             onPageChange={onPageChange}
-            pageSize={PAGE_SIZE}
-            totalCount={items.length}
+            pageSize={pageSize}
+            totalCount={totalCount}
             totalPages={totalPages}
           />
         </>
