@@ -194,6 +194,65 @@ Behavior rules:
 * stock balance queries must derive on-hand stock from these rows only
 * no direct stock edit table exists or is allowed outside ledger-based posting flows
 
+## `inventory_transfers`
+
+Columns:
+
+* `id`
+* `transfer_no`
+* `transfer_date`
+* `source_warehouse_id`
+* `destination_warehouse_id`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* `version`
+* audit fields
+
+Constraints:
+
+* unique index on `(OrganizationId, transfer_no)`
+* index on `(OrganizationId, status, transfer_date)`
+* index on `(OrganizationId, source_warehouse_id, status, transfer_date)`
+* index on `(OrganizationId, destination_warehouse_id, status, transfer_date)`
+* foreign key to `warehouses(id)` on `source_warehouse_id`
+* foreign key to `warehouses(id)` on `destination_warehouse_id`
+
+Behavior rules:
+
+* draft transfer documents are editable
+* posted and canceled transfer documents are immutable
+* `version` is a concurrency token for post/cancel races
+
+## `inventory_transfer_lines`
+
+Columns:
+
+* `id`
+* `inventory_transfer_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `quantity`
+* `base_qty`
+* `notes`
+* audit fields
+
+Constraints:
+
+* unique index on `(inventory_transfer_id, line_no)`
+* foreign key to `inventory_transfers(id)` on `inventory_transfer_id`
+* foreign key to `items(id)` on `item_id`
+* foreign key to `uoms(id)` on `uom_id`
+* index on `item_id`
+* index on `uom_id`
+
+Behavior rules:
+
+* `base_qty` is calculated server-side from the line UOM to the item base UOM
+* posting creates one source `OUT` and one destination `IN` stock ledger row per line
+* cancellation creates one source `IN` and one destination `OUT` stock ledger row per line
+
 ## `shortage_reason_codes`
 
 Columns:

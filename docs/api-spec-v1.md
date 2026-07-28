@@ -541,7 +541,7 @@ Behavior:
 * stock movement history is read-only
 * source document references are returned for traceability
 * running balances come from ledger posting logic and are never edited directly
-* shortage physical resolution rows appear here alongside purchase receipt stock rows
+* shortage physical resolution, inventory adjustment, and inventory transfer rows appear here alongside purchase receipt stock rows
 
 ## Stock Balance
 
@@ -606,6 +606,95 @@ Behavior:
 * fully returned receipt lines must not appear in active return candidate lists
 * purchase return supplier statement rows use source type `PurchaseReturn` and effect type `PurchaseReturn`
 * if no valid referenced receipt financial basis exists, posting still succeeds but no zero-value supplier statement row is created
+
+## Inventory Transfer Addendum
+
+### `GET /api/inventory-transfers`
+
+Lists inventory transfers.
+
+Required permission: `inventory.stock_ledger.view`.
+
+Optional query parameters:
+
+* `search`
+* `transferNo`
+* `sourceWarehouseId`
+* `destinationWarehouseId`
+* `status`
+* `fromDate`
+* `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+### `GET /api/inventory-transfers/{id}`
+
+Returns one inventory transfer with nested lines.
+
+Required permission: `inventory.stock_ledger.view`.
+
+### `POST /api/inventory-transfers`
+
+Creates an inventory transfer draft. The transfer number is generated server-side.
+
+Required permission: `inventory.transfer.create`.
+
+Request body:
+
+```json
+{
+  "transferDate": "2026-07-28T00:00:00.000Z",
+  "sourceWarehouseId": "guid",
+  "destinationWarehouseId": "guid",
+  "notes": "Move stock to branch warehouse",
+  "lines": [
+    {
+      "lineNo": 1,
+      "itemId": "guid",
+      "uomId": "guid",
+      "quantity": 5.0,
+      "notes": "Transfer quantity"
+    }
+  ]
+}
+```
+
+### `PUT /api/inventory-transfers/{id}`
+
+Updates an inventory transfer draft. The transfer number remains immutable.
+
+Required permission: `inventory.transfer.create`.
+
+### `DELETE /api/inventory-transfers/{id}`
+
+Deletes an inventory transfer draft.
+
+Required permission: `inventory.transfer.create`.
+
+### `POST /api/inventory-transfers/{id}/post`
+
+Posts a draft transfer and creates one source warehouse `OUT` stock ledger row plus one destination warehouse `IN` stock ledger row per line.
+
+Required permission: `inventory.transfer.post`.
+
+### `POST /api/inventory-transfers/{id}/cancel`
+
+Cancels a posted transfer and creates reversing stock ledger rows.
+
+Required permission: `inventory.transfer.post`.
+
+Behavior:
+
+* source and destination warehouses must be active and different
+* line `baseQty` is calculated server-side from the item base UOM conversion
+* posting validates source warehouse stock and aggregates duplicate item/source lines in base UOM
+* destination warehouse availability is not validated during posting
+* cancellation validates destination warehouse stock and aggregates duplicate item/destination lines in base UOM
+* posted and canceled transfers are read-only
+* post and cancel are idempotent for already-final documents
+* all routes require the `inventory` and `inventory_transfers` feature gates
 
 ## Reversal Addendum
 

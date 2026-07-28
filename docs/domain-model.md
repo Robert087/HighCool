@@ -176,12 +176,53 @@ Rules:
 
 * append-only
 * purchase receipt posting writes stock `IN`
+* inventory transfer posting writes source warehouse `OUT` rows and destination warehouse `IN` rows
+* inventory transfer cancellation writes reversing source warehouse `IN` rows and destination warehouse `OUT` rows
 * `base_qty` is stored in item base UOM
 * `running_balance_qty` is derived per `(item_id, warehouse_id)`
 * stock balance is always derived from stock ledger rows only
 * stock ledger rows cannot be edited or deleted after they are written
 * direct stock quantity edits are not allowed anywhere in the system
 * corrections must be represented as reversing or adjustment ledger entries
+
+## Inventory Transfer
+
+Fields:
+
+* `id`
+* `transfer_no`
+* `transfer_date`
+* `source_warehouse_id`
+* `destination_warehouse_id`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* concurrency `version`
+* audit fields
+
+Line fields:
+
+* `id`
+* `inventory_transfer_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `quantity`
+* `base_qty`
+* `notes`
+* audit fields
+
+Rules:
+
+* inventory transfers start as `Draft`
+* only `Draft` transfers are editable or deletable
+* posted and canceled transfers are immutable
+* source and destination warehouses must be active and different
+* posting validates source warehouse stock only and aggregates duplicate item/source lines in base UOM
+* posting writes append-only stock ledger rows for both warehouses atomically
+* cancellation validates destination warehouse stock before writing destination `OUT` reversal rows unless negative stock is enabled
+* cancellation writes append-only reversing stock ledger rows atomically
+* duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
 
 ## Shortage Reason Code
 

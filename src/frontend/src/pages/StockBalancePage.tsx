@@ -245,6 +245,10 @@ export function StockBalancePage() {
                 <option value="InventoryAdjustmentIncrease">{t("module.stockBalance.transactionType.InventoryAdjustmentIncrease")}</option>
                 <option value="InventoryAdjustmentDecrease">{t("module.stockBalance.transactionType.InventoryAdjustmentDecrease")}</option>
                 <option value="InventoryAdjustmentCancellation">{t("module.stockBalance.transactionType.InventoryAdjustmentCancellation")}</option>
+                <option value="InventoryTransferOut">{t("module.stockBalance.transactionType.InventoryTransferOut")}</option>
+                <option value="InventoryTransferIn">{t("module.stockBalance.transactionType.InventoryTransferIn")}</option>
+                <option value="InventoryTransferCancellationIn">{t("module.stockBalance.transactionType.InventoryTransferCancellationIn")}</option>
+                <option value="InventoryTransferCancellationOut">{t("module.stockBalance.transactionType.InventoryTransferCancellationOut")}</option>
               </Select>
             </Field>
 
@@ -301,6 +305,10 @@ export function StockBalancePage() {
               <option value="InventoryAdjustmentIncrease">{t("module.stockBalance.transactionType.InventoryAdjustmentIncrease")}</option>
               <option value="InventoryAdjustmentDecrease">{t("module.stockBalance.transactionType.InventoryAdjustmentDecrease")}</option>
               <option value="InventoryAdjustmentCancellation">{t("module.stockBalance.transactionType.InventoryAdjustmentCancellation")}</option>
+              <option value="InventoryTransferOut">{t("module.stockBalance.transactionType.InventoryTransferOut")}</option>
+              <option value="InventoryTransferIn">{t("module.stockBalance.transactionType.InventoryTransferIn")}</option>
+              <option value="InventoryTransferCancellationIn">{t("module.stockBalance.transactionType.InventoryTransferCancellationIn")}</option>
+              <option value="InventoryTransferCancellationOut">{t("module.stockBalance.transactionType.InventoryTransferCancellationOut")}</option>
             </Select>
           </Field>
         )}

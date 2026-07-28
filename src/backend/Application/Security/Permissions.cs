@@ -36,6 +36,8 @@ public static class Permissions
     public const string InventoryStockLedgerView = "inventory.stock_ledger.view";
     public const string InventoryAdjustmentCreate = "inventory.adjustment.create";
     public const string InventoryAdjustmentPost = "inventory.adjustment.post";
+    public const string InventoryTransferCreate = "inventory.transfer.create";
+    public const string InventoryTransferPost = "inventory.transfer.post";
     public const string InventoryWarehouseManage = "inventory.warehouse.manage";
     public const string ShortageView = "inventory.shortage.view";
     public const string ShortageResolutionCreate = "inventory.shortage_resolution.create";
@@ -93,6 +95,8 @@ public static class Permissions
         InventoryStockLedgerView,
         InventoryAdjustmentCreate,
         InventoryAdjustmentPost,
+        InventoryTransferCreate,
+        InventoryTransferPost,
         InventoryWarehouseManage,
         ShortageView,
         ShortageResolutionCreate,

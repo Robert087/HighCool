@@ -8,7 +8,11 @@ export type StockTransactionType =
   | "ShortagePhysicalResolution"
   | "InventoryAdjustmentIncrease"
   | "InventoryAdjustmentDecrease"
-  | "InventoryAdjustmentCancellation";
+  | "InventoryAdjustmentCancellation"
+  | "InventoryTransferOut"
+  | "InventoryTransferIn"
+  | "InventoryTransferCancellationIn"
+  | "InventoryTransferCancellationOut";
 export type SourceDocumentType =
   | "PurchaseReceipt"
   | "PurchaseReceiptReversal"
@@ -16,7 +20,9 @@ export type SourceDocumentType =
   | "DocumentReversal"
   | "ShortageResolution"
   | "InventoryAdjustment"
-  | "InventoryAdjustmentCancellation";
+  | "InventoryAdjustmentCancellation"
+  | "InventoryTransfer"
+  | "InventoryTransferCancellation";
 
 export interface InventoryFilters {
   search: string;

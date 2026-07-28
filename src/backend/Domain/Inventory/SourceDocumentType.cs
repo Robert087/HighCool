@@ -8,5 +8,7 @@ public enum SourceDocumentType
     PurchaseReturn = 4,
     DocumentReversal = 5,
     InventoryAdjustment = 6,
-    InventoryAdjustmentCancellation = 7
+    InventoryAdjustmentCancellation = 7,
+    InventoryTransfer = 8,
+    InventoryTransferCancellation = 9
 }

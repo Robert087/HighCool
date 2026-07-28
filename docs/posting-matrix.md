@@ -241,6 +241,74 @@ Posting effects:
 * if no valid supplier financial basis is available, posting still succeeds but no zero-value supplier statement row is written
 * receipt traceability is preserved when provided
 
+## Inventory Transfer
+
+### Draft Save
+
+Actions:
+
+* `POST /api/inventory-transfers`
+* `PUT /api/inventory-transfers/{id}`
+
+Effects:
+
+* persists transfer header and lines
+* transfer number is generated server-side using the `TRF-` document sequence
+* line `base_qty` is calculated server-side from the line UOM to the item base UOM
+* no stock ledger effect
+* status remains `Draft`
+
+### Post
+
+Action:
+
+* `POST /api/inventory-transfers/{id}/post`
+
+Preconditions:
+
+* transfer exists
+* transfer status is `Draft`
+* source and destination warehouses are active and different
+* at least one line exists
+* all item and UOM references resolve
+* required global UOM conversions resolve
+* source warehouse stock is sufficient when negative stock is disabled
+* duplicate item/source warehouse lines are aggregated in base UOM before stock availability validation
+
+Posting effects:
+
+* status changes from `Draft` to `Posted`
+* each line writes one source warehouse `OUT` stock ledger row with transaction type `InventoryTransferOut`
+* each line writes one destination warehouse `IN` stock ledger row with transaction type `InventoryTransferIn`
+* no financial statement effect
+
+Idempotency:
+
+* reposting an already posted transfer returns the current posted document
+* duplicate transfer stock rows are guarded by document status, concurrency, and unique ledger operation keys
+
+### Cancel
+
+Action:
+
+* `POST /api/inventory-transfers/{id}/cancel`
+
+Preconditions:
+
+* transfer exists
+* transfer status is `Posted`
+* source and destination warehouses are active and different
+* destination warehouse stock is sufficient when negative stock is disabled
+* duplicate item/destination warehouse lines are aggregated in base UOM before stock availability validation
+
+Effects:
+
+* status changes from `Posted` to `Canceled`
+* each line writes one source warehouse `IN` reversal row with transaction type `InventoryTransferCancellationIn`
+* each line writes one destination warehouse `OUT` reversal row with transaction type `InventoryTransferCancellationOut`
+* original posted transfer ledger rows are never edited or deleted
+* duplicate cancellation is idempotent and returns the current canceled document
+
 ## Reversal Actions
 
 ### Purchase Receipt Reverse

@@ -4,6 +4,8 @@ export const Permissions = {
   InventoryStockLedgerView: "inventory.stock_ledger.view",
   InventoryAdjustmentCreate: "inventory.adjustment.create",
   InventoryAdjustmentPost: "inventory.adjustment.post",
+  InventoryTransferCreate: "inventory.transfer.create",
+  InventoryTransferPost: "inventory.transfer.post",
   InventoryWarehouseManage: "inventory.warehouse.manage",
   ItemsView: "items.view",
   ProcurementPurchaseOrderView: "procurement.purchase_order.view",

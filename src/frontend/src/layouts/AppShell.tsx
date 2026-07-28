@@ -30,6 +30,7 @@ const navigationGroups = [
       { label: "nav.stockCard", to: "/inventory/stock-ledger", icon: "ledger" },
       { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
       { label: "nav.inventoryAdjustments", to: "/inventory-adjustments", icon: "document" },
+      { label: "nav.inventoryTransfers", to: "/inventory-transfers", icon: "document" },
       { label: "nav.items", to: "/items", icon: "items" },
       { label: "nav.itemCategories", to: "/item-categories", icon: "items" },
       { label: "nav.warehouses", to: "/inventory/warehouses", icon: "warehouse" },

@@ -9,5 +9,9 @@ public enum StockTransactionType
     ShortageResolutionReversal = 5,
     InventoryAdjustmentIncrease = 6,
     InventoryAdjustmentDecrease = 7,
-    InventoryAdjustmentCancellation = 8
+    InventoryAdjustmentCancellation = 8,
+    InventoryTransferOut = 9,
+    InventoryTransferIn = 10,
+    InventoryTransferCancellationIn = 11,
+    InventoryTransferCancellationOut = 12
 }
