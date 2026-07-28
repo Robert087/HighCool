@@ -76,6 +76,7 @@ app.MapSupplierStatementEndpoints();
 app.MapStockLedgerEndpoints();
 app.MapInventoryAdjustmentEndpoints();
 app.MapInventoryTransferEndpoints();
+app.MapInventoryCountEndpoints();
 app.MapReversalEndpoints();
 app.MapLocalDatabaseEndpoints();
 app.MapDesktopEndpoints();

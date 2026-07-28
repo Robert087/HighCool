@@ -253,6 +253,69 @@ Behavior rules:
 * posting creates one source `OUT` and one destination `IN` stock ledger row per line
 * cancellation creates one source `IN` and one destination `OUT` stock ledger row per line
 
+## `inventory_counts`
+
+Columns:
+
+* `id`
+* `count_no`
+* `count_date`
+* `snapshot_at`
+* `warehouse_id`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* `version`
+* audit fields
+
+Constraints:
+
+* unique index on `(OrganizationId, count_no)`
+* index on `(OrganizationId, status, count_date)`
+* index on `(OrganizationId, warehouse_id, status, count_date)`
+* foreign key to `warehouses(id)` on `warehouse_id`
+
+Behavior rules:
+
+* draft count documents are editable
+* posted and canceled count documents are immutable
+* `version` is a concurrency token for post/cancel races
+* `snapshot_at` records the time system quantities were refreshed or posted
+
+## `inventory_count_lines`
+
+Columns:
+
+* `id`
+* `inventory_count_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `system_qty`
+* `counted_qty`
+* `variance_qty`
+* `base_system_qty`
+* `base_counted_qty`
+* `base_variance_qty`
+* `notes`
+* audit fields
+
+Constraints:
+
+* unique index on `(inventory_count_id, line_no)`
+* unique index on `(inventory_count_id, item_id)`
+* foreign key to `inventory_counts(id)` on `inventory_count_id`
+* foreign key to `items(id)` on `item_id`
+* foreign key to `uoms(id)` on `uom_id`
+* index on `item_id`
+* index on `uom_id`
+
+Behavior rules:
+
+* counted quantities are client-entered but validated and converted server-side
+* system, counted, and variance quantities are persisted from the posting-time calculation
+* zero variance lines do not create stock ledger rows
+
 ## `shortage_reason_codes`
 
 Columns:

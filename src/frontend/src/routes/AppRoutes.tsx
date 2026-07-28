@@ -10,6 +10,8 @@ import { CustomersPage } from "../pages/CustomersPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { InventoryAdjustmentFormPage } from "../pages/InventoryAdjustmentFormPage";
 import { InventoryAdjustmentsPage } from "../pages/InventoryAdjustmentsPage";
+import { InventoryCountFormPage } from "../pages/InventoryCountFormPage";
+import { InventoryCountsPage } from "../pages/InventoryCountsPage";
 import { InventoryTransferFormPage } from "../pages/InventoryTransferFormPage";
 import { InventoryTransfersPage } from "../pages/InventoryTransfersPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
@@ -108,6 +110,10 @@ export function AppRoutes() {
       <Route path="/inventory-transfers/new" element={guard(<InventoryTransferFormPage />, Permissions.InventoryTransferCreate, "inventoryTransfersEnabled")} />
       <Route path="/inventory-transfers/:inventoryTransferId" element={guard(<InventoryTransferFormPage />, Permissions.InventoryStockLedgerView, "inventoryTransfersEnabled")} />
       <Route path="/inventory-transfers/:inventoryTransferId/edit" element={guard(<InventoryTransferFormPage />, Permissions.InventoryTransferCreate, "inventoryTransfersEnabled")} />
+      <Route path="/inventory-counts" element={guard(<InventoryCountsPage />, Permissions.InventoryCountView, "inventoryCountsEnabled")} />
+      <Route path="/inventory-counts/new" element={guard(<InventoryCountFormPage />, Permissions.InventoryCountCreate, "inventoryCountsEnabled")} />
+      <Route path="/inventory-counts/:inventoryCountId" element={guard(<InventoryCountFormPage />, Permissions.InventoryCountView, "inventoryCountsEnabled")} />
+      <Route path="/inventory-counts/:inventoryCountId/edit" element={guard(<InventoryCountFormPage />, Permissions.InventoryCountCreate, "inventoryCountsEnabled")} />
       <Route path="/items" element={guard(<ItemsPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/new" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/:itemId/edit" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />

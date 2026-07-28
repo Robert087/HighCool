@@ -311,6 +311,87 @@ Effects:
 
 ## Reversal Actions
 
+## Inventory Count
+
+### Draft Save
+
+Actions:
+
+* `POST /api/inventory-counts`
+* `PUT /api/inventory-counts/{id}`
+* `POST /api/inventory-counts/{id}/refresh-system-quantities`
+
+Effects:
+
+* persists count header and lines
+* count number is generated server-side using the `CNT-` document sequence
+* one count applies to one active warehouse
+* the same item cannot appear more than once in one count document
+* counted quantity must be zero or positive
+* draft system quantities may be refreshed from current stock ledger balances
+* no stock ledger effect
+* status remains `Draft`
+
+### Post
+
+Action:
+
+* `POST /api/inventory-counts/{id}/post`
+
+Preconditions:
+
+* count exists
+* count status is `Draft`
+* warehouse is active
+* at least one line exists
+* all item and UOM references resolve and are active
+* required global UOM conversions resolve
+* counted quantities are non-negative
+* item references are unique inside the count
+
+Posting effects:
+
+* posting runs in one transaction
+* current system stock is re-read from the stock ledger at posting time
+* line system, counted, and variance quantities are persisted from the posting-time calculation
+* variance is `counted quantity - system quantity`
+* positive variance writes one `InventoryCountIncrease` stock ledger `IN` row
+* negative variance writes one `InventoryCountDecrease` stock ledger `OUT` row
+* zero variance writes no stock ledger row
+* final stock after posting equals the counted base quantity for each line
+* status changes from `Draft` to `Posted`
+* no financial statement effect
+
+Idempotency:
+
+* reposting an already posted count returns the current posted document
+* duplicate count stock rows are guarded by document status, concurrency, and unique ledger operation keys
+* the posting transaction re-reads the latest committed stock but does not freeze unrelated item or warehouse postings; strict physical-count cutoffs require a future stock-freeze or reservation flow
+
+### Cancel
+
+Action:
+
+* `POST /api/inventory-counts/{id}/cancel`
+
+Preconditions:
+
+* count exists
+* count status is `Posted`
+* warehouse is active
+* cancellation of count increases validates current stock when negative stock is disabled
+* cancellation of count decreases adds stock and does not need availability validation
+
+Effects:
+
+* status changes from `Posted` to `Canceled`
+* original posted system, counted, and variance quantities are preserved
+* `InventoryCountIncrease` rows are reversed with `InventoryCountCancellationOut`
+* `InventoryCountDecrease` rows are reversed with `InventoryCountCancellationIn`
+* zero-variance lines create no original or reversal ledger rows
+* original posted count ledger rows are never edited or deleted
+* duplicate cancellation is idempotent and returns the current canceled document
+
 ### Purchase Receipt Reverse
 
 Action:

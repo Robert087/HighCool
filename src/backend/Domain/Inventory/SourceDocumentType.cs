@@ -10,5 +10,7 @@ public enum SourceDocumentType
     InventoryAdjustment = 6,
     InventoryAdjustmentCancellation = 7,
     InventoryTransfer = 8,
-    InventoryTransferCancellation = 9
+    InventoryTransferCancellation = 9,
+    InventoryCount = 10,
+    InventoryCountCancellation = 11
 }

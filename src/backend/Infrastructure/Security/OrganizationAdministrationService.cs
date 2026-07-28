@@ -1651,9 +1651,9 @@ public sealed class OrganizationAdministrationService(
             }),
             MatrixRow("inventory", "settings.permissions.rows.inventory", new Dictionary<string, IReadOnlyList<string>>
             {
-                ["view"] = [Permissions.InventoryStockLedgerView],
-                ["create"] = [Permissions.InventoryAdjustmentCreate],
-                ["post"] = [Permissions.InventoryAdjustmentPost],
+                ["view"] = [Permissions.InventoryStockLedgerView, Permissions.InventoryCountView],
+                ["create"] = [Permissions.InventoryAdjustmentCreate, Permissions.InventoryTransferCreate, Permissions.InventoryCountCreate],
+                ["post"] = [Permissions.InventoryAdjustmentPost, Permissions.InventoryTransferPost, Permissions.InventoryCountPost],
                 ["manage"] = [Permissions.InventoryWarehouseManage]
             }),
             MatrixRow("shortages", "settings.permissions.rows.shortages", new Dictionary<string, IReadOnlyList<string>>

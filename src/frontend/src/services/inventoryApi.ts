@@ -12,7 +12,11 @@ export type StockTransactionType =
   | "InventoryTransferOut"
   | "InventoryTransferIn"
   | "InventoryTransferCancellationIn"
-  | "InventoryTransferCancellationOut";
+  | "InventoryTransferCancellationOut"
+  | "InventoryCountIncrease"
+  | "InventoryCountDecrease"
+  | "InventoryCountCancellationOut"
+  | "InventoryCountCancellationIn";
 export type SourceDocumentType =
   | "PurchaseReceipt"
   | "PurchaseReceiptReversal"
@@ -22,7 +26,9 @@ export type SourceDocumentType =
   | "InventoryAdjustment"
   | "InventoryAdjustmentCancellation"
   | "InventoryTransfer"
-  | "InventoryTransferCancellation";
+  | "InventoryTransferCancellation"
+  | "InventoryCount"
+  | "InventoryCountCancellation";
 
 export interface InventoryFilters {
   search: string;

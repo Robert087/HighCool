@@ -249,6 +249,10 @@ export function StockBalancePage() {
                 <option value="InventoryTransferIn">{t("module.stockBalance.transactionType.InventoryTransferIn")}</option>
                 <option value="InventoryTransferCancellationIn">{t("module.stockBalance.transactionType.InventoryTransferCancellationIn")}</option>
                 <option value="InventoryTransferCancellationOut">{t("module.stockBalance.transactionType.InventoryTransferCancellationOut")}</option>
+                <option value="InventoryCountIncrease">{t("module.stockBalance.transactionType.InventoryCountIncrease")}</option>
+                <option value="InventoryCountDecrease">{t("module.stockBalance.transactionType.InventoryCountDecrease")}</option>
+                <option value="InventoryCountCancellationOut">{t("module.stockBalance.transactionType.InventoryCountCancellationOut")}</option>
+                <option value="InventoryCountCancellationIn">{t("module.stockBalance.transactionType.InventoryCountCancellationIn")}</option>
               </Select>
             </Field>
 
@@ -309,6 +313,10 @@ export function StockBalancePage() {
               <option value="InventoryTransferIn">{t("module.stockBalance.transactionType.InventoryTransferIn")}</option>
               <option value="InventoryTransferCancellationIn">{t("module.stockBalance.transactionType.InventoryTransferCancellationIn")}</option>
               <option value="InventoryTransferCancellationOut">{t("module.stockBalance.transactionType.InventoryTransferCancellationOut")}</option>
+              <option value="InventoryCountIncrease">{t("module.stockBalance.transactionType.InventoryCountIncrease")}</option>
+              <option value="InventoryCountDecrease">{t("module.stockBalance.transactionType.InventoryCountDecrease")}</option>
+              <option value="InventoryCountCancellationOut">{t("module.stockBalance.transactionType.InventoryCountCancellationOut")}</option>
+              <option value="InventoryCountCancellationIn">{t("module.stockBalance.transactionType.InventoryCountCancellationIn")}</option>
             </Select>
           </Field>
         )}

@@ -98,6 +98,10 @@ public sealed class AppDbContext(
 
     public DbSet<InventoryTransferLine> InventoryTransferLines => Set<InventoryTransferLine>();
 
+    public DbSet<InventoryCount> InventoryCounts => Set<InventoryCount>();
+
+    public DbSet<InventoryCountLine> InventoryCountLines => Set<InventoryCountLine>();
+
     public DbSet<ShortageReasonCode> ShortageReasonCodes => Set<ShortageReasonCode>();
 
     public DbSet<ShortageLedgerEntry> ShortageLedgerEntries => Set<ShortageLedgerEntry>();

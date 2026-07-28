@@ -698,6 +698,104 @@ Behavior:
 
 ## Reversal Addendum
 
+## Inventory Count Addendum
+
+### `GET /api/inventory-counts`
+
+Lists inventory counts.
+
+Required permission: `inventory.count.view`.
+
+Optional query parameters:
+
+* `search`
+* `countNo`
+* `warehouseId`
+* `status`
+* `fromDate`
+* `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+### `GET /api/inventory-counts/{id}`
+
+Returns one inventory count with nested lines.
+
+Required permission: `inventory.count.view`.
+
+### `POST /api/inventory-counts`
+
+Creates an inventory count draft. The count number is generated server-side.
+
+Required permission: `inventory.count.create`.
+
+Request body:
+
+```json
+{
+  "countDate": "2026-07-28T00:00:00.000Z",
+  "warehouseId": "guid",
+  "notes": "Cycle count",
+  "lines": [
+    {
+      "lineNo": 1,
+      "itemId": "guid",
+      "uomId": "guid",
+      "countedQty": 12.0,
+      "notes": "Shelf A"
+    }
+  ]
+}
+```
+
+### `PUT /api/inventory-counts/{id}`
+
+Updates an inventory count draft. The count number remains immutable.
+
+Required permission: `inventory.count.create`.
+
+### `DELETE /api/inventory-counts/{id}`
+
+Deletes an inventory count draft.
+
+Required permission: `inventory.count.create`.
+
+### `POST /api/inventory-counts/{id}/refresh-system-quantities`
+
+Refreshes draft system quantities from current stock ledger balances.
+
+Required permission: `inventory.count.create`.
+
+### `POST /api/inventory-counts/{id}/post`
+
+Posts a draft count. The server re-reads current ledger stock inside the posting transaction, persists the system/count/variance values used for audit, and creates stock ledger rows only for non-zero variance lines.
+
+The posting transaction uses the latest committed stock visible at posting time but does not freeze unrelated stock postings for the same item and warehouse. A stricter physical-count cutoff requires a future stock-freeze or reservation flow.
+
+Required permission: `inventory.count.post`.
+
+### `POST /api/inventory-counts/{id}/cancel`
+
+Cancels a posted count and creates reversing stock ledger rows only for rows created by count posting.
+
+Required permission: `inventory.count.post`.
+
+Behavior:
+
+* one count applies to one active warehouse
+* the same item cannot appear more than once in one count document
+* counted quantity must be zero or positive
+* system quantity and base quantity fields are server-calculated and must not be trusted from the client
+* positive variance writes `InventoryCountIncrease`
+* negative variance writes `InventoryCountDecrease`
+* zero variance writes no stock ledger row
+* posting a legitimate decrease is allowed because the final stock equals the non-negative counted quantity
+* cancellation of a count increase validates current stock when negative stock is disabled
+* post and cancel are idempotent for already-final documents
+* all routes require the `inventory` and `inventory_counts` feature gates
+
 ### `POST /api/purchase-receipts/{id}/reverse`
 
 Reverses a posted purchase receipt.

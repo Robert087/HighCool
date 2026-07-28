@@ -31,6 +31,7 @@ const navigationGroups = [
       { label: "nav.stockBalance", to: "/stock-balances", icon: "balance" },
       { label: "nav.inventoryAdjustments", to: "/inventory-adjustments", icon: "document" },
       { label: "nav.inventoryTransfers", to: "/inventory-transfers", icon: "document" },
+      { label: "nav.inventoryCounts", to: "/inventory-counts", icon: "document" },
       { label: "nav.items", to: "/items", icon: "items" },
       { label: "nav.itemCategories", to: "/item-categories", icon: "items" },
       { label: "nav.warehouses", to: "/inventory/warehouses", icon: "warehouse" },
@@ -326,7 +327,7 @@ function getGroupForPath(pathname: string) {
   if (pathname.startsWith("/open-shortages") || pathname.startsWith("/shortage-resolutions")) {
     return "shortages";
   }
-  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/inventory-adjustments") || pathname.startsWith("/items") || pathname.startsWith("/item-categories") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
+  if (pathname.startsWith("/stock-balances") || pathname.startsWith("/stock-movements") || pathname.startsWith("/inventory-adjustments") || pathname.startsWith("/inventory-counts") || pathname.startsWith("/items") || pathname.startsWith("/item-categories") || pathname.startsWith("/warehouses") || pathname.startsWith("/uoms") || pathname.startsWith("/uom-conversions")) {
     return "inventory";
   }
   if (pathname.startsWith("/inventory/")) {
@@ -914,6 +915,7 @@ const navigationPermissions: Record<string, string | undefined> = {
   "/procurement/purchase-returns": Permissions.ProcurementPurchaseReturnView,
   "/inventory/stock-ledger": Permissions.InventoryStockLedgerView,
   "/inventory-adjustments": Permissions.InventoryStockLedgerView,
+  "/inventory-counts": Permissions.InventoryCountView,
   "/inventory/warehouses": Permissions.InventoryWarehouseManage,
   "/supplier-financials": Permissions.SupplierFinancialsPayablesView,
   "/supplier-financials/payments": Permissions.SupplierFinancialsPayablesView,
@@ -946,6 +948,7 @@ const navigationFeatures: Record<string, FeatureFlagKey | undefined> = {
   "/procurement/purchase-returns": "purchaseReceiptsEnabled",
   "/inventory/stock-ledger": "inventoryEnabled",
   "/inventory-adjustments": "inventoryAdjustmentsEnabled",
+  "/inventory-counts": "inventoryCountsEnabled",
   "/inventory/warehouses": "warehousesEnabled",
   "/supplier-financials": "supplierFinancialsEnabled",
   "/supplier-financials/payments": "supplierFinancialsEnabled",

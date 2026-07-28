@@ -224,6 +224,54 @@ Rules:
 * cancellation writes append-only reversing stock ledger rows atomically
 * duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
 
+## Inventory Count
+
+Fields:
+
+* `id`
+* `count_no`
+* `count_date`
+* `snapshot_at`
+* `warehouse_id`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* concurrency `version`
+* audit fields
+
+Line fields:
+
+* `id`
+* `inventory_count_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `system_qty`
+* `counted_qty`
+* `variance_qty`
+* `base_system_qty`
+* `base_counted_qty`
+* `base_variance_qty`
+* `notes`
+* audit fields
+
+Rules:
+
+* inventory counts start as `Draft`
+* only `Draft` counts are editable or deletable
+* posted and canceled counts are immutable
+* one count applies to one active warehouse
+* counted quantities must be zero or positive
+* the same item cannot appear more than once in one count document
+* draft system quantities may be refreshed from the current stock ledger
+* posting re-reads current ledger stock inside the posting transaction and persists the quantities used for audit
+* variance is `counted quantity - system quantity`
+* positive variance writes append-only stock `IN`; negative variance writes append-only stock `OUT`; zero variance writes no stock row
+* count decreases are legitimate corrections to a non-negative physical count and are not blocked by ordinary stock-out validation
+* cancellation reverses only the ledger rows created by the count posting
+* cancellation validates stock before reversing count increases unless negative stock is enabled
+* duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
+
 ## Shortage Reason Code
 
 Fields:
