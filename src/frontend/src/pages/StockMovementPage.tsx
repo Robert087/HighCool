@@ -251,6 +251,8 @@ export function StockMovementPage() {
                 <option value="InventoryCountDecrease">{t("module.stockBalance.transactionType.InventoryCountDecrease")}</option>
                 <option value="InventoryCountCancellationOut">{t("module.stockBalance.transactionType.InventoryCountCancellationOut")}</option>
                 <option value="InventoryCountCancellationIn">{t("module.stockBalance.transactionType.InventoryCountCancellationIn")}</option>
+                <option value="InventoryIssue">{t("module.stockBalance.transactionType.InventoryIssue")}</option>
+                <option value="InventoryIssueCancellation">{t("module.stockBalance.transactionType.InventoryIssueCancellation")}</option>
               </Select>
             </Field>
 
@@ -315,6 +317,8 @@ export function StockMovementPage() {
               <option value="InventoryCountDecrease">{t("module.stockBalance.transactionType.InventoryCountDecrease")}</option>
               <option value="InventoryCountCancellationOut">{t("module.stockBalance.transactionType.InventoryCountCancellationOut")}</option>
               <option value="InventoryCountCancellationIn">{t("module.stockBalance.transactionType.InventoryCountCancellationIn")}</option>
+              <option value="InventoryIssue">{t("module.stockBalance.transactionType.InventoryIssue")}</option>
+              <option value="InventoryIssueCancellation">{t("module.stockBalance.transactionType.InventoryIssueCancellation")}</option>
             </Select>
           </Field>
         )}

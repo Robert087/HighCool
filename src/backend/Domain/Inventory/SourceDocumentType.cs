@@ -12,5 +12,7 @@ public enum SourceDocumentType
     InventoryTransfer = 8,
     InventoryTransferCancellation = 9,
     InventoryCount = 10,
-    InventoryCountCancellation = 11
+    InventoryCountCancellation = 11,
+    InventoryIssue = 12,
+    InventoryIssueCancellation = 13
 }

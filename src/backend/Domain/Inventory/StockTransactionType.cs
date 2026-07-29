@@ -17,5 +17,7 @@ public enum StockTransactionType
     InventoryCountIncrease = 13,
     InventoryCountDecrease = 14,
     InventoryCountCancellationOut = 15,
-    InventoryCountCancellationIn = 16
+    InventoryCountCancellationIn = 16,
+    InventoryIssue = 17,
+    InventoryIssueCancellation = 18
 }

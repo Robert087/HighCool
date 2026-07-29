@@ -178,6 +178,8 @@ Rules:
 * purchase receipt posting writes stock `IN`
 * inventory transfer posting writes source warehouse `OUT` rows and destination warehouse `IN` rows
 * inventory transfer cancellation writes reversing source warehouse `IN` rows and destination warehouse `OUT` rows
+* inventory issue posting writes warehouse `OUT` rows
+* inventory issue cancellation writes reversing warehouse `IN` rows
 * `base_qty` is stored in item base UOM
 * `running_balance_qty` is derived per `(item_id, warehouse_id)`
 * stock balance is always derived from stock ledger rows only
@@ -270,6 +272,50 @@ Rules:
 * count decreases are legitimate corrections to a non-negative physical count and are not blocked by ordinary stock-out validation
 * cancellation reverses only the ledger rows created by the count posting
 * cancellation validates stock before reversing count increases unless negative stock is enabled
+* duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
+
+## Inventory Issue
+
+Fields:
+
+* `id`
+* `issue_no`
+* `issue_date`
+* `warehouse_id`
+* `reason`
+* `reference_no`
+* `requested_by`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* concurrency `version`
+* audit fields
+
+Line fields:
+
+* `id`
+* `inventory_issue_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `quantity`
+* `base_qty`
+* `notes`
+* audit fields
+
+Rules:
+
+* inventory issues start as `Draft`
+* only `Draft` issues are editable or deletable
+* posted and canceled issues are immutable
+* one issue applies to one active warehouse
+* a valid issue reason is required
+* issue quantities must be positive
+* the same item cannot appear more than once in one issue document
+* `base_qty` is always calculated server-side from the line UOM to the item base UOM
+* posting validates current warehouse stock unless negative stock is enabled
+* posting writes append-only stock `OUT` rows atomically
+* cancellation writes append-only stock `IN` reversal rows atomically and does not require stock availability validation
 * duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
 
 ## Shortage Reason Code

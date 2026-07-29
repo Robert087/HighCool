@@ -796,6 +796,101 @@ Behavior:
 * post and cancel are idempotent for already-final documents
 * all routes require the `inventory` and `inventory_counts` feature gates
 
+## Inventory Issue Addendum
+
+### `GET /api/inventory-issues`
+
+Lists inventory issues.
+
+Required permission: `inventory.issue.view`.
+
+Optional query parameters:
+
+* `search`
+* `issueNo`
+* `warehouseId`
+* `reason`
+* `status`
+* `fromDate`
+* `toDate`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+### `GET /api/inventory-issues/{id}`
+
+Returns one inventory issue with nested lines.
+
+Required permission: `inventory.issue.view`.
+
+### `POST /api/inventory-issues`
+
+Creates an inventory issue draft. The issue number is generated server-side.
+
+Required permission: `inventory.issue.create`.
+
+Request body:
+
+```json
+{
+  "issueDate": "2026-07-29T00:00:00.000Z",
+  "warehouseId": "guid",
+  "reason": "InternalConsumption",
+  "referenceNo": "REQ-1001",
+  "requestedBy": "Maintenance Team",
+  "notes": "Internal consumption issue",
+  "lines": [
+    {
+      "lineNo": 1,
+      "itemId": "guid",
+      "uomId": "guid",
+      "quantity": 5.0,
+      "notes": "Consumed by production support"
+    }
+  ]
+}
+```
+
+### `PUT /api/inventory-issues/{id}`
+
+Updates an inventory issue draft. The issue number remains immutable.
+
+Required permission: `inventory.issue.create`.
+
+### `DELETE /api/inventory-issues/{id}`
+
+Deletes an inventory issue draft.
+
+Required permission: `inventory.issue.create`.
+
+### `POST /api/inventory-issues/{id}/post`
+
+Posts a draft issue and creates one warehouse `OUT` stock ledger row per line.
+
+Required permission: `inventory.issue.post`.
+
+### `POST /api/inventory-issues/{id}/cancel`
+
+Cancels a posted issue and creates reversing warehouse `IN` stock ledger rows.
+
+Required permission: `inventory.issue.post`.
+
+Behavior:
+
+* one issue applies to one active warehouse
+* `reason` must be one of `InternalConsumption`, `Damage`, `Scrap`, `Sample`, `Maintenance`, `BranchUse`, or `Other`
+* the same item cannot appear more than once in one issue document
+* issue quantity must be positive
+* line `baseQty` is calculated server-side from the item base UOM conversion
+* posting validates warehouse stock and aggregates issue lines by item and warehouse in base UOM
+* `baseQty` and document number fields must not be trusted from the client
+* posting writes `InventoryIssue` transaction/source document rows
+* cancellation writes `InventoryIssueCancellation` transaction/source document rows
+* posted and canceled issues are read-only
+* post and cancel are idempotent for already-final documents
+* all routes require the `inventory` and `inventory_issues` feature gates
+
 ### `POST /api/purchase-receipts/{id}/reverse`
 
 Reverses a posted purchase receipt.

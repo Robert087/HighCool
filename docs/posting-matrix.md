@@ -392,6 +392,80 @@ Effects:
 * original posted count ledger rows are never edited or deleted
 * duplicate cancellation is idempotent and returns the current canceled document
 
+## Inventory Issue
+
+### Draft Save
+
+Actions:
+
+* `POST /api/inventory-issues`
+* `PUT /api/inventory-issues/{id}`
+
+Effects:
+
+* persists issue header and lines
+* issue number is generated server-side using the `ISS-` document sequence
+* one issue removes stock from one active warehouse for a controlled reason
+* line `base_qty` is calculated server-side from the line UOM to the item base UOM
+* the same item cannot appear more than once in one issue document
+* no stock ledger effect
+* status remains `Draft`
+
+### Post
+
+Action:
+
+* `POST /api/inventory-issues/{id}/post`
+
+Preconditions:
+
+* issue exists
+* issue status is `Draft`
+* warehouse is active
+* reason is a valid `InventoryIssueReason`
+* at least one line exists
+* all item and UOM references resolve and are active
+* required global UOM conversions resolve
+* quantities are positive
+* item references are unique inside the issue
+* warehouse stock is sufficient when negative stock is disabled
+* stock availability validation aggregates issue lines by item and warehouse in base UOM
+
+Posting effects:
+
+* posting runs in one transaction
+* line `base_qty` is recalculated server-side at posting time
+* each line writes one warehouse `OUT` stock ledger row with transaction type `InventoryIssue`
+* source document type is `InventoryIssue`
+* status changes from `Draft` to `Posted`
+* no financial statement effect
+
+Idempotency:
+
+* reposting an already posted issue returns the current posted document
+* duplicate issue stock rows are guarded by document status, concurrency, and unique ledger operation keys
+
+### Cancel
+
+Action:
+
+* `POST /api/inventory-issues/{id}/cancel`
+
+Preconditions:
+
+* issue exists
+* issue status is `Posted`
+* original warehouse, item, and UOM references still resolve
+
+Effects:
+
+* status changes from `Posted` to `Canceled`
+* each original issue line writes one warehouse `IN` reversal row with transaction type `InventoryIssueCancellation`
+* source document type is `InventoryIssueCancellation`
+* original posted issue ledger rows are never edited or deleted
+* cancellation adds stock back and does not require stock availability validation
+* duplicate cancellation is idempotent and returns the current canceled document
+
 ### Purchase Receipt Reverse
 
 Action:

@@ -316,6 +316,69 @@ Behavior rules:
 * system, counted, and variance quantities are persisted from the posting-time calculation
 * zero variance lines do not create stock ledger rows
 
+## `inventory_issues`
+
+Columns:
+
+* `id`
+* `issue_no`
+* `issue_date`
+* `warehouse_id`
+* `reason`
+* `reference_no`
+* `requested_by`
+* `notes`
+* `status`
+* posting and cancellation audit fields
+* `version`
+* audit fields
+
+Constraints:
+
+* unique index on `(OrganizationId, issue_no)`
+* index on `(OrganizationId, status, issue_date)`
+* index on `(OrganizationId, warehouse_id, status, issue_date)`
+* index on `(OrganizationId, reason, issue_date)`
+* foreign key to `warehouses(id)` on `warehouse_id`
+
+Behavior rules:
+
+* draft issue documents are editable
+* posted and canceled issue documents are immutable
+* `version` is a concurrency token for post/cancel races
+* `reason` is stored as a string enum value
+
+## `inventory_issue_lines`
+
+Columns:
+
+* `id`
+* `inventory_issue_id`
+* `line_no`
+* `item_id`
+* `uom_id`
+* `quantity`
+* `base_qty`
+* `notes`
+* audit fields
+
+Constraints:
+
+* unique index on `(inventory_issue_id, line_no)`
+* unique index on `(inventory_issue_id, item_id)`
+* foreign key to `inventory_issues(id)` on `inventory_issue_id`
+* foreign key to `items(id)` on `item_id`
+* foreign key to `uoms(id)` on `uom_id`
+* index on `item_id`
+* index on `uom_id`
+
+Behavior rules:
+
+* issue quantities are client-entered but validated and converted server-side
+* `base_qty` is calculated server-side from the line UOM to the item base UOM
+* posting creates one warehouse `OUT` stock ledger row per line
+* cancellation creates one warehouse `IN` reversal stock ledger row per line
+
 ## `shortage_reason_codes`
 
 Columns:
