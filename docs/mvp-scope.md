@@ -13,6 +13,7 @@ Current MVP scope includes:
 * purchase receipts with optional PO linkage
 * stock ledger entries from receipt posting
 * shortage ledger entries from receipt posting
+* inventory monitoring with item reorder settings and ledger-derived stock health
 
 ## Out of Scope For This Slice
 

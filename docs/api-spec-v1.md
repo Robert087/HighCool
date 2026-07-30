@@ -891,6 +891,88 @@ Behavior:
 * post and cancel are idempotent for already-final documents
 * all routes require the `inventory` and `inventory_issues` feature gates
 
+## Inventory Monitoring Addendum
+
+### `GET /api/inventory/monitor/dashboard`
+
+Returns stock-health totals for monitored item and active warehouse combinations.
+
+Required permission: `inventory.monitor.view`.
+
+Response body:
+
+```json
+{
+  "totalMonitoredItems": 3,
+  "healthyItems": 1,
+  "lowStockItems": 1,
+  "outOfStockItems": 1
+}
+```
+
+### `GET /api/inventory/monitor/items`
+
+Lists item and warehouse stock-health rows using server-side filtering, sorting, and pagination.
+
+Required permission: `inventory.monitor.view`.
+
+Optional query parameters:
+
+* `search`
+* `warehouseId`
+* `categoryId`
+* `status`
+* `onlyMonitored`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+Supported `status` values are `NotMonitored`, `Healthy`, `LowStock`, and `OutOfStock`.
+
+Supported `sortBy` values are `itemName`, `itemCode`, `warehouseCode`, `currentStock`, `minimumStock`, `reorderPoint`, `maximumStock`, `suggestedReorderQuantity`, and `status`.
+
+### `GET /api/inventory/monitor/filter-options`
+
+Returns active warehouse and item category options for the monitoring filters.
+
+Required permission: `inventory.monitor.view`.
+
+### `GET /api/inventory/items/{id}/reorder-settings`
+
+Returns persisted reorder settings for one item.
+
+Required permission: `inventory.monitor.view`.
+
+### `PUT /api/inventory/items/{id}/reorder-settings`
+
+Updates persisted reorder settings for one item.
+
+Required permission: `inventory.monitor.manage`.
+
+Request body:
+
+```json
+{
+  "enableMonitoring": true,
+  "minimumStock": 10.0,
+  "reorderPoint": 25.0,
+  "maximumStock": 100.0,
+  "reorderQuantity": 50.0,
+  "safetyStock": 5.0,
+  "leadTimeDays": 7
+}
+```
+
+Behavior:
+
+* all routes require the `inventory` and `low_stock_alerts` feature gates
+* persisted data is limited to item reorder settings
+* current stock is derived from stock ledger entries only
+* stock status, suggested reorder quantity, and dashboard totals are calculated dynamically and are not stored
+* validation requires `minimumStock >= 0`, `maximumStock > 0`, `reorderPoint >= minimumStock`, `maximumStock >= reorderPoint`, `reorderQuantity > 0`, optional `safetyStock >= 0`, and optional `leadTimeDays >= 0`
+* no purchase orders, sales orders, reservations, approvals, notifications, price lists, stock ledger rows, or financial postings are created by inventory monitoring
+
 ### `POST /api/purchase-receipts/{id}/reverse`
 
 Reverses a posted purchase receipt.

@@ -12,6 +12,8 @@ export const Permissions = {
   InventoryIssueView: "inventory.issue.view",
   InventoryIssueCreate: "inventory.issue.create",
   InventoryIssuePost: "inventory.issue.post",
+  InventoryMonitorView: "inventory.monitor.view",
+  InventoryMonitorManage: "inventory.monitor.manage",
   InventoryWarehouseManage: "inventory.warehouse.manage",
   ItemsView: "items.view",
   ProcurementPurchaseOrderView: "procurement.purchase_order.view",

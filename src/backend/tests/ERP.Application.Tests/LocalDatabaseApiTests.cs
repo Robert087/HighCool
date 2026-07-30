@@ -360,6 +360,12 @@ public sealed class LocalDatabaseApiTests
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
                 services.AddDbContext<AppDbContext>(options => options.UseSqlite(SqliteTestDatabase.CreateConnectionString(_databasePath)));
+                if (_restorePreflightLifetimeSeconds.HasValue)
+                {
+                    services.Configure<RestorePreflightOperationOptions>(options =>
+                        options.LifetimeSeconds = _restorePreflightLifetimeSeconds.Value);
+                }
+
                 AuthenticatedApiTestSupport.ConfigureServices(services);
             });
         }

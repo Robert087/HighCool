@@ -44,6 +44,8 @@ public static class Permissions
     public const string InventoryIssueView = "inventory.issue.view";
     public const string InventoryIssueCreate = "inventory.issue.create";
     public const string InventoryIssuePost = "inventory.issue.post";
+    public const string InventoryMonitorView = "inventory.monitor.view";
+    public const string InventoryMonitorManage = "inventory.monitor.manage";
     public const string InventoryWarehouseManage = "inventory.warehouse.manage";
     public const string ShortageView = "inventory.shortage.view";
     public const string ShortageResolutionCreate = "inventory.shortage_resolution.create";
@@ -109,6 +111,8 @@ public static class Permissions
         InventoryIssueView,
         InventoryIssueCreate,
         InventoryIssuePost,
+        InventoryMonitorView,
+        InventoryMonitorManage,
         InventoryWarehouseManage,
         ShortageView,
         ShortageResolutionCreate,

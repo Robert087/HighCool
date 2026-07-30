@@ -37,6 +37,34 @@ Constraints:
 * unique index on `code`
 * index on `name`
 
+## `items`
+
+Phase 8 inventory monitoring stores reorder settings directly on the organization-scoped item master record.
+
+Monitoring columns:
+
+* `enable_inventory_monitoring`
+* `minimum_stock_quantity`
+* `reorder_point_quantity`
+* `maximum_stock_quantity`
+* `reorder_quantity`
+* `safety_stock_quantity`
+* `lead_time_days`
+
+Monitoring indexes:
+
+* `(OrganizationId, enable_inventory_monitoring, category_id)`
+* `(OrganizationId, enable_inventory_monitoring, reorder_point_quantity)`
+
+Behavior rules:
+
+* only reorder settings are persisted
+* current stock is never persisted on `items`
+* stock status is never persisted
+* suggested reorder quantity is never persisted
+* stock health queries derive current stock from `stock_ledger_entries`
+* existing `minimum_stock_quantity` is the Phase 8 minimum stock setting
+
 ## `purchase_orders`
 
 Columns:

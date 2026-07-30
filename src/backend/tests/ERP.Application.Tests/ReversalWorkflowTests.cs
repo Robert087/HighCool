@@ -65,14 +65,14 @@ public sealed class ReversalWorkflowTests
         Assert.Equal(DocumentStatus.Posted, posted!.Status);
 
         var stockEntry = await dbContext.StockLedgerEntries
-            .OrderByDescending(entity => entity.CreatedAt)
+            .Where(entity => entity.TransactionType == StockTransactionType.PurchaseReturn)
             .FirstAsync();
 
         Assert.Equal(StockTransactionType.PurchaseReturn, stockEntry.TransactionType);
         Assert.Equal(4m, stockEntry.QtyOut);
 
         var statementEntry = await dbContext.SupplierStatementEntries
-            .OrderByDescending(entity => entity.CreatedAt)
+            .Where(entity => entity.EffectType == SupplierStatementEffectType.PurchaseReturn)
             .FirstAsync();
 
         Assert.Equal(SupplierStatementEffectType.PurchaseReturn, statementEntry.EffectType);

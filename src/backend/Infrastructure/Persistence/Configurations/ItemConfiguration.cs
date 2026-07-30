@@ -36,6 +36,29 @@ public sealed class ItemConfiguration : AuditableEntityConfigurationBase<Item>
             .HasColumnType("decimal(18,6)")
             .IsRequired();
 
+        builder.Property(entity => entity.EnableInventoryMonitoring)
+            .HasColumnName("enable_inventory_monitoring")
+            .IsRequired();
+
+        builder.Property(entity => entity.ReorderPointQuantity)
+            .HasColumnName("reorder_point_quantity")
+            .HasColumnType("decimal(18,6)");
+
+        builder.Property(entity => entity.MaximumStockQuantity)
+            .HasColumnName("maximum_stock_quantity")
+            .HasColumnType("decimal(18,6)");
+
+        builder.Property(entity => entity.ReorderQuantity)
+            .HasColumnName("reorder_quantity")
+            .HasColumnType("decimal(18,6)");
+
+        builder.Property(entity => entity.SafetyStockQuantity)
+            .HasColumnName("safety_stock_quantity")
+            .HasColumnType("decimal(18,6)");
+
+        builder.Property(entity => entity.LeadTimeDays)
+            .HasColumnName("lead_time_days");
+
         builder.Property(entity => entity.IsActive)
             .HasColumnName("is_active")
             .IsRequired();
@@ -76,5 +99,7 @@ public sealed class ItemConfiguration : AuditableEntityConfigurationBase<Item>
         builder.HasIndex(entity => new { entity.OrganizationId, entity.CategoryId });
         builder.HasIndex(entity => new { entity.OrganizationId, entity.BaseUomId });
         builder.HasIndex(entity => new { entity.OrganizationId, entity.DefaultWarehouseId });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.EnableInventoryMonitoring, entity.CategoryId });
+        builder.HasIndex(entity => new { entity.OrganizationId, entity.EnableInventoryMonitoring, entity.ReorderPointQuantity });
     }
 }

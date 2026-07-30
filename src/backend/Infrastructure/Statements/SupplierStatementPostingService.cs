@@ -515,13 +515,19 @@ public sealed class SupplierStatementPostingService(AppDbContext dbContext) : IS
 
     private async Task<decimal> GetLatestRunningBalanceAsync(Guid supplierId, CancellationToken cancellationToken)
     {
-        return await dbContext.SupplierStatementEntries
+        if (dbContext.Database.IsSqlite())
+        {
+            var sqliteBalance = await dbContext.SupplierStatementEntries
+                .Where(entity => entity.SupplierId == supplierId)
+                .SumAsync(entity => (double)entity.Credit - (double)entity.Debit, cancellationToken);
+            return Round((decimal)sqliteBalance);
+        }
+
+        var balance = await dbContext.SupplierStatementEntries
             .Where(entity => entity.SupplierId == supplierId)
-            .OrderByDescending(entity => entity.EntryDate)
-            .ThenByDescending(entity => entity.CreatedAt)
-            .ThenByDescending(entity => entity.Id)
-            .Select(entity => entity.RunningBalance)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Select(entity => (decimal?)(entity.Credit - entity.Debit))
+            .SumAsync(cancellationToken);
+        return Round(balance ?? 0m);
     }
 
     private static decimal Round(decimal value)

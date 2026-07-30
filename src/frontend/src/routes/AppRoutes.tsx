@@ -14,6 +14,8 @@ import { InventoryCountFormPage } from "../pages/InventoryCountFormPage";
 import { InventoryCountsPage } from "../pages/InventoryCountsPage";
 import { InventoryIssueFormPage } from "../pages/InventoryIssueFormPage";
 import { InventoryIssuesPage } from "../pages/InventoryIssuesPage";
+import { InventoryMonitoringPage } from "../pages/InventoryMonitoringPage";
+import { InventoryReorderSettingsPage } from "../pages/InventoryReorderSettingsPage";
 import { InventoryTransferFormPage } from "../pages/InventoryTransferFormPage";
 import { InventoryTransfersPage } from "../pages/InventoryTransfersPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
@@ -120,6 +122,8 @@ export function AppRoutes() {
       <Route path="/inventory-issues/new" element={guard(<InventoryIssueFormPage />, Permissions.InventoryIssueCreate, "inventoryIssuesEnabled")} />
       <Route path="/inventory-issues/:inventoryIssueId" element={guard(<InventoryIssueFormPage />, Permissions.InventoryIssueView, "inventoryIssuesEnabled")} />
       <Route path="/inventory-issues/:inventoryIssueId/edit" element={guard(<InventoryIssueFormPage />, Permissions.InventoryIssueCreate, "inventoryIssuesEnabled")} />
+      <Route path="/inventory-monitoring" element={guard(<InventoryMonitoringPage />, Permissions.InventoryMonitorView, "lowStockAlertsEnabled")} />
+      <Route path="/inventory-monitoring/items/:itemId/settings" element={guard(<InventoryReorderSettingsPage />, Permissions.InventoryMonitorView, "lowStockAlertsEnabled")} />
       <Route path="/items" element={guard(<ItemsPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/new" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/:itemId/edit" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />

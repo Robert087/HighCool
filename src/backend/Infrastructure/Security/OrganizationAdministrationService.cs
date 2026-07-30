@@ -1000,7 +1000,7 @@ public sealed class OrganizationAdministrationService(
 
         if (request.EnableLowStockAlerts && !request.EnableInventory)
         {
-            throw new InvalidOperationException("Low Stock Alerts requires Inventory.");
+            throw new InvalidOperationException("Inventory Monitoring requires Inventory.");
         }
 
         if (request.EnableUomConversion && !request.EnableUom)
@@ -1088,7 +1088,7 @@ public sealed class OrganizationAdministrationService(
 
         if (request.EnableLowStockAlerts && !request.EnableInventory)
         {
-            throw new InvalidOperationException("Low Stock Alerts requires Inventory.");
+            throw new InvalidOperationException("Inventory Monitoring requires Inventory.");
         }
 
         if (request.EnableStockTransfers && !request.EnableInventory)
@@ -1651,10 +1651,10 @@ public sealed class OrganizationAdministrationService(
             }),
             MatrixRow("inventory", "settings.permissions.rows.inventory", new Dictionary<string, IReadOnlyList<string>>
             {
-                ["view"] = [Permissions.InventoryStockLedgerView, Permissions.InventoryCountView, Permissions.InventoryIssueView],
+                ["view"] = [Permissions.InventoryStockLedgerView, Permissions.InventoryCountView, Permissions.InventoryIssueView, Permissions.InventoryMonitorView],
                 ["create"] = [Permissions.InventoryAdjustmentCreate, Permissions.InventoryTransferCreate, Permissions.InventoryCountCreate, Permissions.InventoryIssueCreate],
                 ["post"] = [Permissions.InventoryAdjustmentPost, Permissions.InventoryTransferPost, Permissions.InventoryCountPost, Permissions.InventoryIssuePost],
-                ["manage"] = [Permissions.InventoryWarehouseManage]
+                ["manage"] = [Permissions.InventoryWarehouseManage, Permissions.InventoryMonitorManage]
             }),
             MatrixRow("shortages", "settings.permissions.rows.shortages", new Dictionary<string, IReadOnlyList<string>>
             {

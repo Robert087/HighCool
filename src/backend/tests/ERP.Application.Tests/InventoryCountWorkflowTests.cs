@@ -543,24 +543,18 @@ public sealed class InventoryCountWorkflowTests
 
     private static async Task<decimal> CurrentBalanceAsync(AppDbContext dbContext, Guid itemId, Guid warehouseId)
     {
-        return await dbContext.StockLedgerEntries
+        var balance = await dbContext.StockLedgerEntries
             .Where(entry => entry.ItemId == itemId && entry.WarehouseId == warehouseId)
-            .OrderByDescending(entry => entry.TransactionDate)
-            .ThenByDescending(entry => entry.CreatedAt)
-            .ThenByDescending(entry => entry.Id)
-            .Select(entry => (decimal?)entry.RunningBalanceQty)
-            .FirstOrDefaultAsync() ?? 0m;
+            .SumAsync(entry => entry.QtyIn > 0m ? (double)entry.BaseQty : -(double)entry.BaseQty);
+        return decimal.Round((decimal)balance, 6, MidpointRounding.AwayFromZero);
     }
 
     private static async Task<decimal> LatestBalanceAsync(AppDbContext dbContext, Guid itemId, Guid warehouseId)
     {
-        return await dbContext.StockLedgerEntries
+        var balance = await dbContext.StockLedgerEntries
             .Where(entry => entry.ItemId == itemId && entry.WarehouseId == warehouseId)
-            .OrderByDescending(entry => entry.TransactionDate)
-            .ThenByDescending(entry => entry.CreatedAt)
-            .ThenByDescending(entry => entry.Id)
-            .Select(entry => entry.RunningBalanceQty)
-            .FirstAsync();
+            .SumAsync(entry => entry.QtyIn > 0m ? (double)entry.BaseQty : -(double)entry.BaseQty);
+        return decimal.Round((decimal)balance, 6, MidpointRounding.AwayFromZero);
     }
 
     private static UpsertInventoryCountRequest Request(

@@ -318,6 +318,29 @@ Rules:
 * cancellation writes append-only stock `IN` reversal rows atomically and does not require stock availability validation
 * duplicate post and cancel requests are idempotent through document status, concurrency, and ledger operation keys
 
+## Inventory Monitoring
+
+Fields on Item:
+
+* `enable_inventory_monitoring`
+* `minimum_stock_quantity`
+* `reorder_point_quantity`
+* `maximum_stock_quantity`
+* `reorder_quantity`
+* `safety_stock_quantity`
+* `lead_time_days`
+
+Rules:
+
+* inventory monitoring is configured per item and evaluated per active warehouse
+* current stock is derived from append-only stock ledger entries only
+* the system does not persist stock health status, current stock, suggested reorder quantity, or dashboard totals
+* status is derived dynamically as `OutOfStock` when current stock is zero or below, `LowStock` when current stock is positive and less than or equal to the reorder point, and `Healthy` when current stock is above the reorder point
+* unmonitored items are reported as `NotMonitored` only when the list request includes unmonitored items
+* suggested reorder quantity is `maximum stock - current stock`, floored at zero
+* setting updates must keep `minimum stock >= 0`, `maximum stock > 0`, `reorder point >= minimum stock`, `maximum stock >= reorder point`, `reorder quantity > 0`, optional `safety stock >= 0`, and optional `lead time days >= 0`
+* inventory monitoring does not create purchase orders, reservations, approvals, notifications, price lists, stock ledger rows, or financial postings
+
 ## Shortage Reason Code
 
 Fields:

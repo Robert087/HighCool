@@ -49,7 +49,7 @@ const featureGroups: Array<{ title: string; description: string; features: Array
       { key: "enableStockAdjustments", label: "settings.features.fields.inventoryAdjustments", description: "settings.features.descriptions.inventoryAdjustments", inactive: true },
       { key: "enableInventoryCounts", label: "settings.features.fields.inventoryCounts", description: "settings.features.descriptions.inventoryCounts" },
       { key: "enableInventoryIssues", label: "settings.features.fields.inventoryIssues", description: "settings.features.descriptions.inventoryIssues" },
-      { key: "enableLowStockAlerts", label: "settings.features.fields.lowStockAlerts", description: "settings.features.descriptions.lowStockAlerts", inactive: true },
+      { key: "enableLowStockAlerts", label: "settings.features.fields.inventoryMonitoring", description: "settings.features.descriptions.inventoryMonitoring" },
     ],
   },
 ];

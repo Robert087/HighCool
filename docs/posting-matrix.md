@@ -309,6 +309,37 @@ Effects:
 * original posted transfer ledger rows are never edited or deleted
 * duplicate cancellation is idempotent and returns the current canceled document
 
+## Inventory Monitoring
+
+### Reorder Settings Save
+
+Actions:
+
+* `PUT /api/inventory/items/{id}/reorder-settings`
+
+Effects:
+
+* persists only item-level reorder settings
+* no stock ledger effect
+* no financial statement effect
+* no shortage ledger effect
+* no purchase order, reservation, approval, or notification effect
+
+### Dashboard and List
+
+Actions:
+
+* `GET /api/inventory/monitor/dashboard`
+* `GET /api/inventory/monitor/items`
+* `GET /api/inventory/monitor/filter-options`
+* `GET /api/inventory/items/{id}/reorder-settings`
+
+Effects:
+
+* reads current stock from append-only stock ledger entries
+* calculates health status and suggested reorder quantity dynamically
+* does not persist stock balances, stock health status, suggested reorder quantity, or dashboard totals
+
 ## Reversal Actions
 
 ## Inventory Count
