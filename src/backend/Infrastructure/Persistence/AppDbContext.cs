@@ -3,6 +3,7 @@ using ERP.Domain.Identity;
 using ERP.Domain.Inventory;
 using ERP.Domain.MasterData;
 using ERP.Domain.Payments;
+using ERP.Domain.Pricing;
 using ERP.Domain.Purchasing;
 using ERP.Domain.Reversals;
 using ERP.Domain.Shortages;
@@ -73,6 +74,10 @@ public sealed class AppDbContext(
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
 
     public DbSet<Uom> Uoms => Set<Uom>();
+
+    public DbSet<PriceList> PriceLists => Set<PriceList>();
+
+    public DbSet<ItemPrice> ItemPrices => Set<ItemPrice>();
 
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
 

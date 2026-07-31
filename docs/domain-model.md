@@ -608,3 +608,59 @@ Rules:
 * supplier statement reversal rows must keep explicit reversal source typing and opposite debit/credit values relative to the original financial rows
 * the original posted document remains visible and auditable
 * one active reversal is allowed for each supported posted document
+
+## Price List
+
+Fields:
+
+* `id`
+* `code`
+* `name`
+* `type`
+* `currency`
+* `is_default`
+* `is_active`
+* `description`
+* `version`
+* audit fields
+
+Rules:
+
+* price list type is `Selling` or `Buying`
+* `code` is required, normalized to uppercase, and unique per organization
+* `currency` is a three-letter uppercase code
+* inactive price lists cannot be default
+* setting a default price list clears the previous default for the same organization and type
+* deactivating a default price list clears the default flag
+* optimistic concurrency is enforced through `version`
+
+## Item Price
+
+Fields:
+
+* `id`
+* `price_list_id`
+* `item_id`
+* `uom_id`
+* `currency`
+* `rate`
+* `minimum_quantity`
+* `valid_from`
+* `valid_to`
+* `is_active`
+* `notes`
+* `version`
+* audit fields
+
+Rules:
+
+* currency is derived from the price list and cannot be overridden to a different value
+* active rows require active price list, active item, active UOM, and a valid item/UOM relationship
+* valid pricing UOMs are the item's base UOM or an active conversion `from` UOM that converts to the item's base UOM
+* `rate > 0`
+* `minimum_quantity > 0`
+* `valid_to` is optional and must be on or after `valid_from`
+* active date ranges cannot overlap for the same organization, price list, item, UOM, and minimum quantity
+* adjacent ranges are allowed
+* price resolution chooses the active row with the highest eligible minimum quantity, then the latest valid-from date
+* pricing is master data only in Phase 9 and does not post inventory, supplier statements, payments, tax, discounts, or accounting

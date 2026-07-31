@@ -24,6 +24,8 @@ internal static class RoleTemplateCatalog
                 Permissions.SuppliersView,
                 Permissions.CustomersView,
                 Permissions.ItemsView,
+                Permissions.PricingPriceListView,
+                Permissions.PricingItemPriceView,
                 Permissions.SupplierFinancialsPayablesView
             ]),
         new(

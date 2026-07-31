@@ -14,6 +14,8 @@ Current MVP scope includes:
 * stock ledger entries from receipt posting
 * shortage ledger entries from receipt posting
 * inventory monitoring with item reorder settings and ledger-derived stock health
+* price lists and item prices for selling/buying price books
+* authenticated price resolution preview by price list, item, UOM, quantity, and effective date
 
 ## Out of Scope For This Slice
 
@@ -23,6 +25,8 @@ Not implemented in this slice:
 * PO financial effects
 * receipt cancellation and stock reversal documents
 * full shortage resolution workflow
+* automatic price selection inside purchase or sales transactions
+* customer/supplier-specific pricing, discounts, promotions, tax, currency conversion, pricing approvals
 * offline posting
 
 ## Procurement Scope Boundary

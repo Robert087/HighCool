@@ -18,6 +18,8 @@ import { InventoryMonitoringPage } from "../pages/InventoryMonitoringPage";
 import { InventoryReorderSettingsPage } from "../pages/InventoryReorderSettingsPage";
 import { InventoryTransferFormPage } from "../pages/InventoryTransferFormPage";
 import { InventoryTransfersPage } from "../pages/InventoryTransfersPage";
+import { ItemPriceFormPage } from "../pages/ItemPriceFormPage";
+import { ItemPricesPage } from "../pages/ItemPricesPage";
 import { ItemFormPage } from "../pages/ItemFormPage";
 import { ItemCategoriesPage } from "../pages/ItemCategoriesPage";
 import { ItemCategoryFormPage } from "../pages/ItemCategoryFormPage";
@@ -33,6 +35,8 @@ import { PurchaseReturnsPage } from "../pages/PurchaseReturnsPage";
 import { OpenShortagesPage } from "../pages/OpenShortagesPage";
 import { PaymentFormPage } from "../pages/PaymentFormPage";
 import { PaymentsPage } from "../pages/PaymentsPage";
+import { PriceListFormPage } from "../pages/PriceListFormPage";
+import { PriceListsPage } from "../pages/PriceListsPage";
 import { ShortageResolutionFormPage } from "../pages/ShortageResolutionFormPage";
 import { ShortageResolutionsPage } from "../pages/ShortageResolutionsPage";
 import { SupplierFormPage } from "../pages/SupplierFormPage";
@@ -124,6 +128,14 @@ export function AppRoutes() {
       <Route path="/inventory-issues/:inventoryIssueId/edit" element={guard(<InventoryIssueFormPage />, Permissions.InventoryIssueCreate, "inventoryIssuesEnabled")} />
       <Route path="/inventory-monitoring" element={guard(<InventoryMonitoringPage />, Permissions.InventoryMonitorView, "lowStockAlertsEnabled")} />
       <Route path="/inventory-monitoring/items/:itemId/settings" element={guard(<InventoryReorderSettingsPage />, Permissions.InventoryMonitorView, "lowStockAlertsEnabled")} />
+      <Route path="/price-lists" element={guard(<PriceListsPage />, Permissions.PricingPriceListView, "priceListsEnabled")} />
+      <Route path="/price-lists/new" element={guard(<PriceListFormPage />, Permissions.PricingPriceListView, "priceListsEnabled")} />
+      <Route path="/price-lists/:priceListId" element={guard(<PriceListFormPage />, Permissions.PricingPriceListView, "priceListsEnabled")} />
+      <Route path="/price-lists/:priceListId/edit" element={guard(<PriceListFormPage />, Permissions.PricingPriceListView, "priceListsEnabled")} />
+      <Route path="/item-prices" element={guard(<ItemPricesPage />, Permissions.PricingItemPriceView, "priceListsEnabled")} />
+      <Route path="/item-prices/new" element={guard(<ItemPriceFormPage />, Permissions.PricingItemPriceView, "priceListsEnabled")} />
+      <Route path="/item-prices/:itemPriceId" element={guard(<ItemPriceFormPage />, Permissions.PricingItemPriceView, "priceListsEnabled")} />
+      <Route path="/item-prices/:itemPriceId/edit" element={guard(<ItemPriceFormPage />, Permissions.PricingItemPriceView, "priceListsEnabled")} />
       <Route path="/items" element={guard(<ItemsPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/new" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />
       <Route path="/items/:itemId/edit" element={guard(<ItemFormPage />, Permissions.ItemsView, "inventoryEnabled")} />

@@ -88,6 +88,7 @@ internal static class AuthenticatedApiTestSupport
             EnableExpiryTracking = false,
             EnableStockTransfers = true,
             EnableStockAdjustments = true,
+            EnablePriceLists = true,
             CreatedBy = "seed"
         };
 

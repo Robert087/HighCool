@@ -704,3 +704,72 @@ Behavior rules:
 * open amount is derived from the active source document amount minus posted payment allocations
 * purchase receipt target amount is reduced by posted, non-reversed purchase returns before payment open amount is calculated
 * current supplier payment targets are `PurchaseReceipt` and `ShortageResolution`
+
+## `price_lists`
+
+Columns:
+
+* `id`
+* `code`
+* `name`
+* `type`
+* `currency`
+* `is_default`
+* `is_active`
+* `description`
+* `version`
+* organization and audit fields
+
+Constraints and indexes:
+
+* unique index on `(OrganizationId, code)`
+* index on `(OrganizationId, type, is_default, is_active)`
+* index on `(OrganizationId, currency)`
+* `version` is the optimistic concurrency token
+
+Behavior rules:
+
+* price list type is `Selling` or `Buying`
+* one active default is allowed per organization and type; application logic clears the previous default transactionally
+* deactivating a default list clears `is_default`
+* price lists referenced by item prices are deactivated instead of deleted
+
+## `item_prices`
+
+Columns:
+
+* `id`
+* `price_list_id`
+* `item_id`
+* `uom_id`
+* `currency`
+* `rate`
+* `minimum_quantity`
+* `valid_from`
+* `valid_to`
+* `is_active`
+* `notes`
+* `version`
+* organization and audit fields
+
+Constraints and indexes:
+
+* foreign key to `price_lists(id)` on `price_list_id`
+* foreign key to `items(id)` on `item_id`
+* foreign key to `uoms(id)` on `uom_id`
+* index on `(OrganizationId, price_list_id, item_id, uom_id, minimum_quantity, is_active)`
+* index on `(OrganizationId, price_list_id, item_id, uom_id, valid_from, valid_to)`
+* index on `(OrganizationId, currency)`
+* index on `(OrganizationId, is_active, valid_from, valid_to)`
+* `version` is the optimistic concurrency token
+
+Behavior rules:
+
+* `currency` is copied from the selected price list
+* `uom_id` must be the item's base UOM or an active conversion `from` UOM that converts to the item's base UOM for active prices
+* `rate > 0`
+* `minimum_quantity > 0`
+* `valid_to` is optional but cannot be before `valid_from`
+* active date-range overlap is blocked in application validation for the same organization, price list, item, UOM, and minimum quantity
+* adjacent date ranges are allowed
+* pricing has no stock, financial, payment, or accounting posting effect

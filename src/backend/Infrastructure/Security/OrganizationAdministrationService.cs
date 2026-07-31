@@ -1003,6 +1003,11 @@ public sealed class OrganizationAdministrationService(
             throw new InvalidOperationException("Inventory Monitoring requires Inventory.");
         }
 
+        if (request.EnablePriceLists && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Price Lists requires Inventory.");
+        }
+
         if (request.EnableUomConversion && !request.EnableUom)
         {
             throw new InvalidOperationException("UOM Conversion requires UOM.");
@@ -1089,6 +1094,11 @@ public sealed class OrganizationAdministrationService(
         if (request.EnableLowStockAlerts && !request.EnableInventory)
         {
             throw new InvalidOperationException("Inventory Monitoring requires Inventory.");
+        }
+
+        if (request.EnablePriceLists && !request.EnableInventory)
+        {
+            throw new InvalidOperationException("Price Lists requires Inventory.");
         }
 
         if (request.EnableStockTransfers && !request.EnableInventory)
@@ -1697,7 +1707,7 @@ public sealed class OrganizationAdministrationService(
         AddModuleState(OrganizationFeatureKeys.Expenses, organization.EnableExpenses, enabledModules, disabledModules);
         AddModuleState(OrganizationFeatureKeys.Reports, organization.EnableReports, enabledModules, disabledModules);
         AddModuleState(OrganizationFeatureKeys.Notifications, organization.EnableNotifications, enabledModules, disabledModules);
-        AddModuleState(OrganizationFeatureKeys.PriceLists, organization.EnablePriceLists, enabledModules, disabledModules);
+        AddModuleState(OrganizationFeatureKeys.PriceLists, organization.EnableInventory && organization.EnablePriceLists, enabledModules, disabledModules);
 
         return new FeatureConfigurationDto(
             WorkspaceEnabled: true,
@@ -1710,7 +1720,7 @@ public sealed class OrganizationAdministrationService(
             ExpensesEnabled: organization.EnableExpenses,
             ReportsEnabled: organization.EnableReports,
             NotificationsEnabled: organization.EnableNotifications,
-            PriceListsEnabled: organization.EnablePriceLists,
+            PriceListsEnabled: organization.EnableInventory && organization.EnablePriceLists,
             PurchaseOrdersEnabled: organization.EnableProcurement && organization.EnablePurchaseOrders,
             PurchaseReceiptsEnabled: organization.EnableProcurement && organization.EnablePurchaseReceipts,
             WarehousesEnabled: organization.EnableInventory && organization.EnableWarehouses,

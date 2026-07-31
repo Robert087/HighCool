@@ -1160,3 +1160,184 @@ Behavior:
 * returns selected backup ID and safety backup ID when available
 
 All `/api/local-database/*` endpoints are available only in the Desktop host environment. Automated tests may enable the explicit Testing-only `LocalDatabase:EnableEndpointCapability` flag to exercise these endpoints without running the desktop host.
+
+## Pricing Addendum
+
+All pricing endpoints require completed organization setup, the Inventory feature, and the Price Lists feature.
+
+Price list permissions:
+
+* view: `pricing.price_list.view`
+* manage: `pricing.price_list.manage`
+
+Item price permissions:
+
+* view: `pricing.item_price.view`
+* manage: `pricing.item_price.manage`
+
+### `GET /api/pricing/price-lists`
+
+Lists price lists with server-side pagination, filtering, and sorting.
+
+Optional query parameters:
+
+* `search`
+* `type` (`Selling` or `Buying`)
+* `currency`
+* `isActive`
+* `isDefault`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+### `GET /api/pricing/price-lists/{id}`
+
+Returns one price list including code, name, type, currency, default flag, active flag, description, item price count, version, and audit fields.
+
+### `POST /api/pricing/price-lists`
+
+Creates a price list.
+
+Request body:
+
+```json
+{
+  "code": "SELL-EGP",
+  "name": "Default Selling EGP",
+  "type": "Selling",
+  "currency": "EGP",
+  "isDefault": true,
+  "isActive": true,
+  "description": "Default selling list"
+}
+```
+
+Behavior:
+
+* `code` and `currency` are normalized to uppercase
+* inactive lists cannot be default
+* setting an active default clears any previous active default for the same organization and type inside the same transaction
+
+### `PUT /api/pricing/price-lists/{id}`
+
+Updates a price list and requires `version`.
+
+### `POST /api/pricing/price-lists/{id}/activate`
+
+Activates a price list and requires `version`.
+
+### `POST /api/pricing/price-lists/{id}/deactivate`
+
+Deactivates a price list and requires `version`. Deactivating a default price list clears its default flag.
+
+### `DELETE /api/pricing/price-lists/{id}?version={version}`
+
+Deletes a price list only when no item prices reference it. Lists with prices should be deactivated instead.
+
+### `GET /api/pricing/item-prices`
+
+Lists item prices with server-side pagination, filtering, and sorting.
+
+Optional query parameters:
+
+* `search`
+* `priceListId`
+* `priceListType`
+* `itemId`
+* `categoryId`
+* `uomId`
+* `currency`
+* `isActive`
+* `effectiveOn`
+* `validFrom`
+* `validTo`
+* `page`
+* `pageSize`
+* `sortBy`
+* `sortDirection`
+
+### `GET /api/pricing/item-prices/{id}`
+
+Returns one item price including price-list, item, category, UOM, currency, rate, minimum quantity, validity, active/current flags, notes, version, and audit fields.
+
+### `POST /api/pricing/item-prices`
+
+Creates an item price.
+
+Request body:
+
+```json
+{
+  "priceListId": "guid",
+  "itemId": "guid",
+  "uomId": "guid",
+  "currency": "EGP",
+  "rate": 125.0,
+  "minimumQuantity": 1.0,
+  "validFrom": "2026-07-30",
+  "validTo": null,
+  "isActive": true,
+  "notes": "Base rate"
+}
+```
+
+Behavior:
+
+* item price currency is derived from the selected price list
+* a supplied currency is accepted only when it matches the price list currency
+* active item prices require an active price list, active item, active UOM, and valid item/UOM relationship
+* active date ranges cannot overlap for the same organization, price list, item, UOM, and minimum quantity
+* adjacent ranges are allowed
+
+### `PUT /api/pricing/item-prices/{id}`
+
+Updates an item price and requires `version`.
+
+### `POST /api/pricing/item-prices/{id}/activate`
+
+Activates an item price and requires `version`.
+
+### `POST /api/pricing/item-prices/{id}/deactivate`
+
+Deactivates an item price and requires `version`.
+
+### `DELETE /api/pricing/item-prices/{id}?version={version}`
+
+Deletes an item price.
+
+### `GET /api/pricing/resolve`
+
+Resolves the effective item price for a price list, item, UOM, quantity, and optional effective date.
+
+Required query parameters:
+
+* `priceListId`
+* `itemId`
+* `uomId`
+* `quantity`
+
+Optional query parameters:
+
+* `effectiveDate`
+
+Behavior:
+
+* only active price lists and active item prices are considered
+* `validFrom <= effectiveDate <= validTo` where open-ended `validTo` remains valid
+* `minimumQuantity <= quantity`
+* when multiple rows match, the highest minimum quantity wins; ties use the latest valid-from date
+* returns `404` when no matching active price exists
+
+### `GET /api/pricing/filter-options`
+
+Returns active price lists, items, UOMs, categories, and known currencies for pricing screens. Price list options include their currency so item-price forms can display the derived currency before save.
+
+### `GET /api/pricing/items/{itemId}/uoms`
+
+Returns active UOMs valid for pricing the selected item. The result includes the item's base UOM and active conversion `from` UOMs that convert to the item's base UOM. Returns `404` when the item is inaccessible to the active organization.
+
+Phase 9 boundary:
+
+* no sales orders, sales invoices, purchase orders, supplier quotations, discounts, promotions, tax, currency conversion, pricing approvals, or automatic transaction price selection are implemented by these endpoints
+* no stock ledger, supplier statement, payment, or accounting posting is created by pricing

@@ -85,6 +85,7 @@ internal static class TestOrganizationContext
             EnableExpiryTracking = false,
             EnableStockTransfers = true,
             EnableStockAdjustments = true,
+            EnablePriceLists = true,
             CreatedBy = "seed"
         };
 

@@ -536,3 +536,21 @@ Effects:
 * physical allocations write stock ledger `OUT` rows
 * financial allocations write opposite supplier statement rows using source type `ShortageResolutionReversal` and effect type `ShortageResolutionReversal`
 * shortage open quantity and status are restored
+
+## Pricing
+
+Documents and master data:
+
+* `PriceList`
+* `ItemPrice`
+
+Posting effects:
+
+* none
+
+Rules:
+
+* pricing is maintained as organization-scoped master data
+* price resolution is read-only and does not create stock ledger, supplier statement, payment, shortage, commission, tax, or accounting rows
+* Phase 9 does not automatically copy resolved prices into purchase orders, sales documents, invoices, receipts, or returns
+* future transaction pricing must call the server-side resolver and persist the selected price on the transaction document at creation time

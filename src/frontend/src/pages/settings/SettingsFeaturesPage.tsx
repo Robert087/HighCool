@@ -20,7 +20,7 @@ const featureGroups: Array<{ title: string; description: string; features: Array
       { key: "enableInventory", label: "settings.features.fields.inventory", description: "settings.features.descriptions.inventory" },
       { key: "enableProcurement", label: "settings.features.fields.purchasing", description: "settings.features.descriptions.purchasing" },
       { key: "enableSales", label: "settings.features.fields.sales", description: "settings.features.descriptions.sales", inactive: true },
-      { key: "enablePriceLists", label: "settings.features.fields.priceLists", description: "settings.features.descriptions.priceLists", inactive: true },
+      { key: "enablePriceLists", label: "settings.features.fields.priceLists", description: "settings.features.descriptions.priceLists" },
     ],
   },
   {
@@ -176,5 +176,6 @@ function isInventoryChild(key: FeatureKey) {
     key === "enableStockAdjustments" ||
     key === "enableInventoryCounts" ||
     key === "enableInventoryIssues" ||
-    key === "enableLowStockAlerts";
+    key === "enableLowStockAlerts" ||
+    key === "enablePriceLists";
 }
